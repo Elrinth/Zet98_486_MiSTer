@@ -9,7 +9,8 @@ LIBRARY	IEEE,work;
 entity Zet98MiSTer is
 generic(
 	SYSFREQ		:integer	:=20000;		--CPU clock(kHz)
-	SND			:integer	:=2			--0:No sound 1:OPN(-26) 2:OPNA(-73)
+	SND			:integer	:=2;			--0:No sound 1:OPN(-26) 2:OPNA(-73)
+	CPU486      :integer :=0           -- opt-in ao486 bring-up build
 );
 port(
 	ramclk	:in std_logic;
@@ -125,6 +126,22 @@ component SPI_IF
 		clk		:in std_logic;
 		rstn	:in std_logic
 	);
+end component;
+
+component pc98_ao486
+port(
+    clk, reset :in std_logic;
+    interrupt_do :in std_logic;
+    interrupt_vector :in std_logic_vector(7 downto 0);
+    interrupt_done :out std_logic;
+    bus_address :out std_logic_vector(19 downto 1);
+    bus_select :out std_logic_vector(1 downto 0);
+    bus_writedata :out std_logic_vector(15 downto 0);
+    bus_write, bus_strobe, bus_io :out std_logic;
+    bus_readdata :in std_logic_vector(15 downto 0);
+    bus_ack :in std_logic;
+    unmapped_access :out std_logic
+);
 end component;
 
 component zet
@@ -1810,6 +1827,7 @@ signal	bussel	:std_logic_vector(1 downto 0);
 
 --io port
 signal	ioaddr	:std_logic_vector(15 downto 0);
+signal ioaddr_even, ioaddr_odd :std_logic_vector(15 downto 0);
 signal	iord	:std_logic;
 signal	iowr	:std_logic;
 signal	iowaitn	:std_logic;
@@ -2307,6 +2325,7 @@ begin
 
 	tgc<=INTM;
 	
+    zet_cpu: if CPU486=0 generate
 	cpu	:zet port map(
 		wb_clk_i	=>cpuclk,
 		wb_rst_i	=>not srstn,
@@ -2325,10 +2344,24 @@ begin
 		nmia		=>nmia,
 		pc			=>monpc
 	);
+    end generate;
+
+    ao486_cpu: if CPU486/=0 generate
+        cpu: pc98_ao486 port map(
+            clk=>cpuclk, reset=>not srstn,
+            interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
+            bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
+            bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
+            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open
+        );
+        cyc<=stb;
+        nmia<='0';
+        monpc<=(others=>'0');
+    end generate;
 
 	cpu_dbus<=	
-		x"00" & INTM_ODAT				when INTM_OE='1' else
-		x"00" & INTS_ODAT				when INTS_OE='1' else
+		x"00" & INTM_ODAT				when INTM_OE='1' and tgca='1' else
+		x"00" & INTS_ODAT				when INTS_OE='1' and tgca='1' else
 		dbus;
 	
 	dbus(15 downto 8)<=
@@ -2346,7 +2379,7 @@ begin
 		PTC_ODAT				when PTC_DOE='1' else
 		MOUS_ODAT				when MOUS_DOE='1' else
 		IO439_ODAT				when IO439_DOE='1' else
-		x"04"					when ioaddr=x"043b" and iord='1' else
+		x"04"					when ioaddr_odd=x"043b" and iord='1' else
 		KNJ0_ODAT				when KNJ0_DOE='1' else
 		KNJ1_ODAT				when KNJ1_DOE='1' else
 		KNJ2_ODAT				when KNJ2_DOE='1' else
@@ -2358,6 +2391,8 @@ begin
 	dbus(7 downto 0)<=
 		LDR_WDAT				when LDR_OE='1' else
 		cpuod(7 downto 0)		when cpuoe='1' and cpusel(0)='1' and DMAen='0'  else
+        INTM_ODAT           when INTM_OE='1' and tgca='0' else
+        INTS_ODAT           when INTS_OE='1' and tgca='0' else
 		GCG_ODAT(7 downto 0)	when GCG_DOE='1' else
 		DBIO_ODAT(7 downto 0)	when DBIO_DOE='1' else
 		CB_RDAT0(7 downto 0)	when CB_RD1='1' and bussel(0)='1' else
@@ -2430,6 +2465,10 @@ begin
 	iord<=	cpu_iord when DMAen='0' else DMA_IORD;
 	iowr<=	cpu_iowr when DMAen='0' else DMA_IOWR;
 	
+    -- Independent byte-lane addresses: an aligned word can select both the
+    -- even/low and odd/high peripheral at once. FFFF selects no mapped device.
+    ioaddr_even<=cpuaddr(15 downto 1) & '0' when cpusel(0)='1' and DMAen='0' else x"ffff";
+    ioaddr_odd<=cpuaddr(15 downto 1) & '1' when cpusel(1)='1' and DMAen='0' else x"ffff";
 	ioaddr<=(others=>'1') when DMAen='1' else
 			cpuaddr(15 downto 1) & '0' when cpusel(0)='1' else
 			cpuaddr(15 downto 1) & '1';
@@ -2442,7 +2481,7 @@ begin
 	CB_ADDR<=	RAM_BIOS(21 downto 0) + ("000" & LDR_ADDR(19 downto 1))	when LDR_OE='1' else
 				MADDR;
 	
-	DMA_CS<='1' when ioaddr(15 downto 5)=(x"00" & "000") and ioaddr(0)='1' else '0';
+	DMA_CS<='1' when ioaddr_odd(15 downto 5)=(x"00" & "000") and ioaddr_odd(0)='1' else '0';
 
 	DMA_REQ(1 downto 0)<=(others=>'0');
 	
@@ -2513,8 +2552,8 @@ begin
 	
 	cpuack<=ack when DMAen='0' else '0';
 	
-	DMAU_CS<='1' when ioaddr(15 downto 3)=(x"002" & "0") and ioaddr(0)='1' else '0';
-	DMAUM_CS<='1' when ioaddr=x"0029" else '0';
+	DMAU_CS<='1' when ioaddr_odd(15 downto 3)=(x"002" & "0") and ioaddr_odd(0)='1' else '0';
+	DMAUM_CS<='1' when ioaddr_odd=x"0029" else '0';
 	
 	DMAU	:DMAUADDR port map(
 		CS		=>DMAU_CS,
@@ -2600,7 +2639,7 @@ DBIO_ODAT<=(others=>'1');
 
 	DBIO_DOE<=	MRD when DBIO_CS='1' else '0';
 	
-	GCG_IOCS<=	'1' when ioaddr(15 downto 2)=(x"007" & "11") and ioaddr(0)='0' else '0';
+	GCG_IOCS<=	'1' when ioaddr_even(15 downto 2)=(x"007" & "11") and ioaddr_even(0)='0' else '0';
 	gcg	:grcg port map(
 		iocs		=>GCG_IOCS,
 		ioaddr		=>ioaddr(1),
@@ -2636,9 +2675,9 @@ DBIO_ODAT<=(others=>'1');
 	);	
 	
 	IN00f0_ODAT<="11101011";
-	IN00f0_DOE<='1' when ioaddr=x"00f0" and iord='1' else '0';
+	IN00f0_DOE<='1' when ioaddr_even=x"00f0" and iord='1' else '0';
 	
-	IO043F_CS<='1' when ioaddr=x"043f" else '0';
+	IO043F_CS<='1' when ioaddr_odd=x"043f" else '0';
 	
 	IO43F	:IO043F port map(
 		CS		=>IO043F_CS,
@@ -2656,7 +2695,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 
 	IO053D	:IO_RW generic map(x"053d",x"00") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
 		DATIN	=>dbus(15 downto 8),
@@ -2678,7 +2717,7 @@ DBIO_ODAT<=(others=>'1');
 	
 	
 	RWIN8	:IO_RW generic map(x"0461",x"08") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
 		DATIN	=>dbus(15 downto 8),
@@ -2699,7 +2738,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	RWINA	:IO_RW generic map(x"0463",x"0a") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
 		DATIN	=>dbus(15 downto 8),
@@ -2719,7 +2758,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 	
-	INTM_CS<='1' when ioaddr(15 downto 2)="00000000000000" and ioaddr(0)='0' else '0';
+	INTM_CS<='1' when ioaddr_even(15 downto 2)="00000000000000" and ioaddr_even(0)='0' else '0';
 	INT_M	:z8259 port map(
 		CS		=>INTM_CS,
 		ADDR	=>ioaddr(1),
@@ -2756,7 +2795,7 @@ DBIO_ODAT<=(others=>'1');
 	IR12<= not OPN_INTn;
 	IR13<=MOUS_INTp and MOUS_INTe;
 	
-	INTS_CS<='1' when ioaddr(15 downto 2)="00000000000010" and ioaddr(0)='0' else '0';
+	INTS_CS<='1' when ioaddr_even(15 downto 2)="00000000000010" and ioaddr_even(0)='0' else '0';
 	INT_S	:z8259 port map(
 		CS		=>INTS_CS,
 		ADDR	=>ioaddr(1),
@@ -2878,7 +2917,7 @@ DBIO_ODAT<=(others=>'1');
 		LDR_WR		=>LDR_WR,
 		LDR_WDAT		=>LDR_WDAT,
 		
-		ioaddr		=>ioaddr,
+		ioaddr		=>ioaddr_odd,
 		iowr		=>iowr,
 		iord		=>iord,
 		wrdat		=>dbus(15 downto 8),
@@ -2952,11 +2991,11 @@ DBIO_ODAT<=(others=>'1');
 	vadat<=vadatw(7 downto 0);
 
 	
-	prncsn<='0' when ioaddr(15 downto 3)="0000000001000" and ioaddr(0)='0' else '1';
+	prncsn<='0' when ioaddr_even(15 downto 3)="0000000001000" and ioaddr_even(0)='0' else '1';
 	dat42<="100" & pDip1 & "100";
 	prnppi	:ppi8255 port map(prncsn,not iord,not iowr,ioaddr(2 downto 1),dbus(7 downto 0),prnod,prnoe,(others=>'0'),open,open,dat42,open,open,(others=>'0'),open,open,(others=>'0'),open,open,cpuclk,srstn);
 	
-	tGDCcs<='1' when ioaddr(15 downto 4)="000000000110" and ioaddr(0)='0' else '0';
+	tGDCcs<='1' when ioaddr_even(15 downto 4)="000000000110" and ioaddr_even(0)='0' else '0';
 
 	textgdc	:TXTGDC port map(
 		CS		=>tGDCcs,
@@ -3008,7 +3047,7 @@ DBIO_ODAT<=(others=>'1');
 	tGDC_iCURUPPER<=conv_integer(tGDC_CURUPPER);
 	tGDC_iCURLOWER<=conv_integer(tGDC_CURLOWER);
 	
-	gGDCcs<='1' when ioaddr(15 downto 3)="0000000010100" and ioaddr(0)='0' else '0';
+	gGDCcs<='1' when ioaddr_even(15 downto 3)="0000000010100" and ioaddr_even(0)='0' else '0';
 	graphgdc	:GRAGDC port map(
 		CS		=>gGDCcs,
 		ADDR	=>ioaddr(2 downto 1),
@@ -3089,7 +3128,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn		=>srstn
 	);	
 
-	GPAL_CS<='1' when ioaddr(15 downto 3)="0000000010101" and ioaddr(0)='0' else '0';
+	GPAL_CS<='1' when ioaddr_even(15 downto 3)="0000000010101" and ioaddr_even(0)='0' else '0';
 	pal	:grpal port map(
 		CS			=>GPAL_CS,
 		ADDR		=>ioaddr(2 downto 1),
@@ -3109,7 +3148,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn		=>srstn
 	);
 	
-	ITFswcs<='1' when ioaddr=x"043d" else '0';
+	ITFswcs<='1' when ioaddr_odd=x"043d" else '0';
 	ITFs	:ITFSW port map(ITFswcs,iowr,dbus(15 downto 8),ITFen,cpuclk,srstn);
 	
 	nv	:nvram98 port map(
@@ -3142,7 +3181,7 @@ DBIO_ODAT<=(others=>'1');
 	pPs2Clkout<=KBCLKOUT;
 	pPs2Datout<=KBDATOUT;
 
-	KBCS<='1' when ioaddr(15 downto 2)="00000000010000" and ioaddr(0)='1' else '0';
+	KBCS<='1' when ioaddr_odd(15 downto 2)="00000000010000" and ioaddr_odd(0)='1' else '0';
 
 	KB		:KBCONV generic map(SYSFREQ,400,0) port map(
 		CS		=>KBCS,
@@ -3169,7 +3208,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn		=>srstn
 	);
 	
-	SYSP_CS<='1' when ioaddr(15 downto 3)=(x"003" & '0') and ioaddr(0)='1' else '0';
+	SYSP_CS<='1' when ioaddr_odd(15 downto 3)=(x"003" & '0') and ioaddr_odd(0)='1' else '0';
 	
 	SYSP	:e8255 generic map('1') port map(
 		CSn		=>not SYSP_CS,
@@ -3203,7 +3242,7 @@ DBIO_ODAT<=(others=>'1');
 	BEEPON<=not SYSP_PCO(3);
 	
 	WR20	:IO_WR generic map(x"0020") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_even,
 		WR		=>iowr,
 		DAT		=>dbus(7 downto 0),
 		
@@ -3236,7 +3275,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 
 	O439	:IO_WR generic map(x"0439") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_odd,
 		WR		=>iowr,
 		DAT		=>dbus(15 downto 8),
 		
@@ -3254,7 +3293,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	I439	:IO_RD generic map(x"0439") port map(
-		ADR		=>ioaddr,
+		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		DATOUT	=>IO439_ODAT,
 		DATOE	=>IO439_DOE,
@@ -3272,8 +3311,8 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 	
-	FDCH_CS<=	'1' when (ioaddr(15 downto 2)="00000000100100" and ioaddr(0)='0')else '0';
-	FDCD_CS<=	'1' when (ioaddr(15 downto 2)="00000000110010" and ioaddr(0)='0')else '0';
+	FDCH_CS<=	'1' when (ioaddr_even(15 downto 2)="00000000100100" and ioaddr_even(0)='0')else '0';
+	FDCD_CS<=	'1' when (ioaddr_even(15 downto 2)="00000000110010" and ioaddr_even(0)='0')else '0';
 	FDC_CSn<=	not FDCH_CS when FDCIF_H_Dn='1' else
 					not FDCD_CS;
 --	FDC_CSn<=not(FDCH_CS or FDCD_CS);
@@ -3354,8 +3393,8 @@ DBIO_ODAT<=(others=>'1');
 	);
 
 	
-	FDCNT_CS<=	'1' when (ioaddr=x"0094" and FDCIF_H_Dn='1') else
-					'1' when (ioaddr=x"00cc" and FDCIF_H_Dn='0') else 
+	FDCNT_CS<=	'1' when (ioaddr_even=x"0094" and FDCIF_H_Dn='1') else
+					'1' when (ioaddr_even=x"00cc" and FDCIF_H_Dn='0') else
 					'0';
 	
 	FDC_USELbn<=	"1110" when FDC_USEL="00" else
@@ -3513,7 +3552,7 @@ DBIO_ODAT<=(others=>'1');
 	FDC_DMAE<='1';
 	
 	fdcifsr	:IO_RD generic map(x"00be") port map(
-		ADR	=>ioaddr,
+		ADR	=>ioaddr_even,
 		RD		=>iord,
 		DATOUT=>FDCIFS_ODAT,
 		DATOE	=>FDCIFS_DOE,
@@ -3532,7 +3571,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	fdcifsw	:IO_WR generic map(x"00be") port map(
-		ADR	=>ioaddr,
+		ADR	=>ioaddr_even,
 		WR		=>iowr,
 		DAT	=>dbus(7 downto 0),
 		
@@ -3560,7 +3599,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 	
-	FDIBM_CS<='1' when ioaddr=x"04be" else '0';
+	FDIBM_CS<='1' when ioaddr_even=x"04be" else '0';
 	FDIBM_DSn(0)<='0' when FDC_USEL="00" else '1';
 	FDIBM_DSn(1)<='0' when FDC_USEL="01" else '1';
 	
@@ -3580,7 +3619,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 	
-	COM_CS<='1' when (ioaddr(15 downto 2)=x"003" & "00") and ioaddr(0)='0' else '0';
+	COM_CS<='1' when (ioaddr_even(15 downto 2)=x"003" & "00") and ioaddr_even(0)='0' else '0';
 	
 --	IDE	:pseudoide port map(
 --		ioaddr	=>ioaddr,
@@ -3660,8 +3699,8 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 
-	PTC_CS<='1' when ioaddr(15 downto 3)=(x"007" & '0') and ioaddr(0)='1' else
-			'1' when ioaddr(15 downto 3)=(x"3fd" & '1') and ioaddr(0)='1' else
+	PTC_CS<='1' when ioaddr_odd(15 downto 3)=(x"007" & '0') and ioaddr_odd(0)='1' else
+			'1' when ioaddr_odd(15 downto 3)=(x"3fd" & '1') and ioaddr_odd(0)='1' else
 			'0';
 	
 	PTCCLK	:SFTCLK generic map(SYSFREQ,2458,1) port map(
@@ -3703,7 +3742,7 @@ DBIO_ODAT<=(others=>'1');
 	end process;
 	
 	
-	MOUS_CS<='1' when ioaddr(15 downto 3)=(x"7fd" & '1') and ioaddr(0)='1' else '0';
+	MOUS_CS<='1' when ioaddr_odd(15 downto 3)=(x"7fd" & '1') and ioaddr_odd(0)='1' else '0';
 	
 	MOUSP	:e8255 port map(
 		CSn		=>not MOUS_CS,
@@ -3753,7 +3792,7 @@ DBIO_ODAT<=(others=>'1');
 		rstn		=>srstn
 	);
 	
-	MOUINT_CS<=	'1' when ioaddr=x"bfdb" else '0';
+	MOUINT_CS<=	'1' when ioaddr_odd=x"bfdb" else '0';
 	MOUSI	:mouseint generic map(SYSFREQ) port map(
 		cs		=>MOUINT_CS,
 		wr		=>iowr,
@@ -3789,10 +3828,10 @@ DBIO_ODAT<=(others=>'1');
 	-- The baseline enables OPNA at 10 MHz (20 MHz / 2). Scale the divisor
 	-- with the system clock so a CPU speed experiment does not speed up music.
 	OPNS	:sftgen generic map(SYSFREQ/10000) port map(SYSFREQ/10000,OPN_sft,cpuclk,srstn);
-	SNDID_CS<='1' when ioaddr=x"a460" else '0';
+	SNDID_CS<='1' when ioaddr_even=x"a460" else '0';
 
 	C2	:if SND=2 generate
-		OPN_CS<=	'1' when ioaddr(15 downto 3)="0000000110001" and ioaddr(0)='0' else '0';
+		OPN_CS<=	'1' when ioaddr_even(15 downto 3)="0000000110001" and ioaddr_even(0)='0' else '0';
 		
 		FMS	:OPNA generic map(16) port map(
 			DIN		=>dbus(7 downto 0),
@@ -3837,7 +3876,7 @@ DBIO_ODAT<=(others=>'1');
 	end generate;
 	
 	c1	:if SND=1 generate
-		OPN_CS<=	'1' when ioaddr(15 downto 2)="00000001100010" and ioaddr(0)='0' else '0';
+		OPN_CS<=	'1' when ioaddr_even(15 downto 2)="00000001100010" and ioaddr_even(0)='0' else '0';
 		
 		FMS	:OPN generic map(16) port map(
 			DIN		=>dbus(7 downto 0),

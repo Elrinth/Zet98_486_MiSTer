@@ -197,6 +197,11 @@ localparam integer SYS_CLK_KHZ = 40000;
 `else
 localparam integer SYS_CLK_KHZ = 20000;
 `endif
+`ifdef ZET98_AO486
+localparam integer CPU486_ENABLED = 1;
+`else
+localparam integer CPU486_ENABLED = 0;
+`endif
 
 pll pll
 (
@@ -348,7 +353,7 @@ assign AUDIO_S = 1;
 
 wire disk_led;
 
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ)) Zet98_top
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),

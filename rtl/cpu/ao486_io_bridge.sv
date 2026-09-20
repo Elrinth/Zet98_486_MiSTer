@@ -9,7 +9,7 @@
 // The peripheral fabric must honour BOTH byte selects independently; its
 // even/odd device decoders must not derive A0 from only the low-byte select.
 // Aligned word cycles remain single transfers for 16-bit device registers.
-// This adapter is not yet connected to the production Zet98 top level.
+// Used by the opt-in ao486 build; the default CPU remains Zet.
 // All ports use clk. Clock-domain crossing belongs outside this module.
 module ao486_io_bridge (
     input  wire        clk,

@@ -3,6 +3,8 @@ param(
     [string]$DockerContext = 'desktop-linux',
     [ValidateSet(20, 40)]
     [int]$SystemClockMHz = 20,
+    [ValidateSet('Zet', 'ao486')]
+    [string]$Cpu = 'Zet',
     [switch]$PrepareOnly
 )
 
@@ -31,6 +33,18 @@ try {
     git rev-parse HEAD | Set-Content -LiteralPath (Join-Path $buildRoot 'source-commit.txt')
     git diff --stat | Set-Content -LiteralPath (Join-Path $buildRoot 'source-changes.txt')
     $SystemClockMHz | Set-Content -LiteralPath (Join-Path $buildRoot 'system-clock-mhz.txt')
+    $Cpu | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu.txt')
+    if ($Cpu -eq 'ao486') {
+        $projectSettings = Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf'
+        # The two CPU sources have incompatible headers both named defines.v.
+        # Compile only the selected CPU, preserving the default Zet project.
+        $assignments = Get-Content -LiteralPath $projectSettings | Where-Object { $_ -notmatch 'zet-1\.3\.1' }
+        $assignments | Set-Content -LiteralPath $projectSettings
+        Add-Content -LiteralPath $projectSettings -Value @(
+            'set_global_assignment -name VERILOG_MACRO ZET98_AO486=1',
+            'set_global_assignment -name QIP_FILE ../../rtl/cpu/ao486_pc98.qip'
+        )
+    }
     if ($SystemClockMHz -eq 40) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO40=1"

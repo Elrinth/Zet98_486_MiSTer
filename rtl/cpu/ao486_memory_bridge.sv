@@ -15,7 +15,7 @@
 // memory writes before allowing a later I/O command to reach the peripherals.
 // ACK must fall between legacy transfers. All ports share clk; this module
 // does not provide CDC, arbitration, cache/DMA coherence or address mapping.
-// Not yet connected to the production Zet98 top level.
+// Used by the opt-in ao486 build; the default CPU remains Zet.
 module ao486_memory_bridge (
     input  wire        clk,
     input  wire        reset,

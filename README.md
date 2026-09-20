@@ -5,8 +5,8 @@ acceptance target is smoother **Rusty** gameplay on MiSTer-compatible hardware,
 initially a SuperStation One with SuperDock. A faster CPU must preserve game,
 video, timer, sound and disk timing.
 
-**This is currently a Zet-based development baseline, not a working 486 core.**
-The name describes the intended upgrade. No DX4-100 performance claim is made.
+**The default build uses Zet; the optional ao486 integration is experimental.**
+No PC-98 BIOS boot, Rusty speedup or DX4-100 performance claim is made yet.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -70,13 +70,22 @@ system-clock Fmax estimate of `27.03 MHz` for same-clock paths. Increasing the
 clock alone is therefore not a reliable 40 MHz solution. The 486 integration
 remains the performance path; these measurements are not Rusty benchmarks.
 
-The ao486 I/O and burst-memory adapters and their shared-bus arbitration now
-pass simulation, including a test using ao486's actual memory request generator.
-They are not yet connected to the full PC-98 machine. CPU integration still
-requires interrupt handling, address mapping, DMA/cache coherence and changes
-to the existing even/odd I/O decoders before BIOS boot testing.
+Use `./scripts/build.ps1 -Cpu ao486` for the optional full CPU integration at
+20 MHz. Its memory and I/O bridges now connect to the PC-98 fabric, with
+independent even/odd I/O decoding and a separate interrupt-vector path. CPU-only
+simulation passes 486 `BSWAP`, unaligned DWORD memory and I/O, `REP MOVSD`, A20
+switching, reset-ROM aliases, interrupt/IRET, and software CPU reset. The existing
+PC-98 PICs separately pass master/slave vector, masking and EOI tests.
 
-For CPU adapter simulation, see [tests/README.md](tests/README.md).
+This first integration deliberately retains the existing low-1-MB memory map.
+Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
+CPU control ports F0/F2/F6 implement reset and A20 controls, using
+[NP2kai's CPU I/O implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/io/cpuio.c)
+as a behavioral reference. Extended RAM, NMI, external DMA/cache coherence,
+independent CPU clocking and machine-level boot remain work in progress. Cache
+is forced off during initial integration; this is not a performance release.
+
+Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
 
 ## Credits and provenance
 
@@ -86,7 +95,7 @@ For CPU adapter simulation, see [tests/README.md](tests/README.md).
 - **Zeus Gómez Marmolejo and the Zet contributors** — original Zet CPU.
 - **Alexey Melnikov / Sorgelig and MiSTer contributors** — MiSTer infrastructure.
 - **Aleksander Osman and ao486/MiSTer contributors** —
-  [ao486](https://github.com/MiSTer-devel/ao486_MiSTer), the planned CPU foundation.
+  [ao486](https://github.com/MiSTer-devel/ao486_MiSTer), the replacement CPU.
 - [X68000 for MiSTer](https://github.com/MiSTer-devel/X68000_MiSTer) and
   [MidiLink](https://github.com/MiSTer-devel/MidiLink_MiSTer) are storage/MIDI
   integration references; referenced features are not automatically implemented here.
