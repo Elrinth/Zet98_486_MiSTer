@@ -12,6 +12,9 @@ it later affected Console Mode too and cleared after a full power cycle.
 PC-98 text is now stable, but the logo appears white and the Opening disk is
 unavailable through DOS drive B in the isolated reference test. There is
 no Rusty speedup or DX4-100 performance claim yet.
+The source now fixes a truncated HPS disk acknowledgement that prevented
+slots 1–3 from completing transfers. The regression reproduces the old failure
+and passes with the fix; a new FPGA build and hardware retest are pending.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities

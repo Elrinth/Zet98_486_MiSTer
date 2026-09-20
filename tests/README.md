@@ -68,6 +68,16 @@ after the startup interval must not mute later speaker audio. Clock and duration
 generics are reduced for simulation; the core uses its system clock frequency
 and a 10,000 ms interval.
 
+`run-disk-interface.sh` drives real HPS commands through the core's actual
+SystemVerilog wrapper and `hps_io`. It transfers 512-byte reads and writes on
+each of four image slots and checks per-slot/shared ACK lifetime, LBA, the
+single-block request size, buffer payload/address and mount metadata. The
+machine and Intel clock primitives are stubs; the bench does not exercise the
+VHDL floppy controller or real disks. Unrelated PS/2 and configuration-ROM
+logic is disabled in the bench. A temporary `hps_io` copy supplies parameter
+defaults required by Icarus; both values are overridden by the actual instances.
+This catches the previous scalar ACK connection, which discarded slots 1–3.
+
 `hardware/disk_probe.asm` is a small DOS shell for real-hardware disk diagnosis.
 It is assembled with NASM `-f bin` and inserted into a new copy of a user-supplied
 system D88 using `scripts/d88_file.py`; see `HARDWARE_TESTING.md`. No BIOS, DOS

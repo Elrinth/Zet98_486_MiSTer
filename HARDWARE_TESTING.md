@@ -159,6 +159,28 @@ Quartus Analysis & Elaboration also passed for the ao486 source snapshot
 been loaded on the device. The device was left in Console Mode after the noisy
 disk-order trial.
 
+### Per-drive HPS acknowledgement fix
+
+Source inspection found that `hps_io` returns four acknowledgement bits, but
+the wrapper connected them to a scalar wire. Only slot 0 reached the disk
+engine; slots 1–3 could never complete their host transfers. The disk engine
+serializes image operations, so a stalled Opening-disk load can also prevent
+later System-disk writes. This explains the observed missing B drive and is
+consistent with the mount-order stall; hardware confirmation is still pending.
+
+The wrapper now retains all four bits and ORs them for the serialized legacy
+engine. All slots explicitly request one 512-byte block. Mount read-only
+metadata is also passed at its actual scalar width and replicated for the
+legacy input; this does not add enforcement of host read-only state in the
+disk engine.
+
+The real wrapper/HPS regression passes reads and writes on all four slots
+(4,096 bytes total), ACK lifetime, LBA, block count, and mount metadata. A
+negative control restoring only the scalar ACK fails at slot 1, as expected.
+The existing adapter, peripheral, video and startup-mute tests also pass.
+The next ao486 build snapshot is `build/quartus-20260921-013307-8d60fc/source`.
+Its compilation and hardware checks are pending.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the

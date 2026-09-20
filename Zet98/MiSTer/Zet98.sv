@@ -271,14 +271,25 @@ wire  [31:0] sd_lba;
 wire   [3:0] sd_rd;
 wire   [3:0] sd_wr;
 
-wire        sd_ack;
+wire  [3:0] sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din;
+wire [31:0] sd_slot_lba [4];
+wire  [5:0] sd_slot_blk_cnt [4];
+wire  [7:0] sd_slot_buff_din [4];
+genvar slot;
+generate
+for (slot = 0; slot < 4; slot = slot + 1) begin : disk_slots
+	assign sd_slot_lba[slot] = sd_lba;
+	assign sd_slot_blk_cnt[slot] = 6'd0; // One 512-byte block per diskemu request.
+	assign sd_slot_buff_din[slot] = sd_buff_din;
+end
+endgenerate
 wire        sd_buff_wr;
 wire [15:0] sd_req_type = 0;
 wire  [3:0] img_mounted;
-wire  [3:0] img_readonly;
+wire        img_readonly;
 wire [63:0] img_size;
 
 wire [65:0] ps2_key;
@@ -294,13 +305,14 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * (SYS_CLK_KHZ / 20000)), .PS2WE(1), 
 	
 	.TIMESTAMP(TIMESTAMP),
 
-	.sd_lba('{sd_lba,sd_lba,sd_lba,sd_lba}),
+	.sd_lba(sd_slot_lba),
+	.sd_blk_cnt(sd_slot_blk_cnt),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
 	.sd_ack(sd_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din('{sd_buff_din,sd_buff_din,sd_buff_din,sd_buff_din}),
+	.sd_buff_din(sd_slot_buff_din),
 	.sd_buff_wr(sd_buff_wr),
 
 	.img_mounted(img_mounted),
@@ -412,13 +424,15 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 	.pFDEJECT(fdeject),
 
 	.mist_mounted(img_mounted),
-	.mist_readonly(img_readonly),
+	.mist_readonly({4{img_readonly}}),
 	.mist_imgsize(img_size),
 
 	.mist_lba(sd_lba),
 	.mist_rd(sd_rd),
 	.mist_wr(sd_wr),
-	.mist_ack(sd_ack),
+	// diskemu serializes all four image slots onto one buffer/acknowledgement.
+	// hps_io returns a one-hot ACK: narrowing it to one bit loses slots 1..3.
+	.mist_ack(|sd_ack),
 
 	.mist_buffaddr(sd_buff_addr),
 	.mist_buffdout(sd_buff_dout),
