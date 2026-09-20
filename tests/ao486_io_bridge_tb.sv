@@ -8,7 +8,7 @@ module ao486_io_bridge_tb;
     reg [2:0] io_read_length = 1, io_write_length = 1;
     reg [31:0] io_write_data = 0;
     wire [31:0] io_read_data;
-    wire io_read_done, io_write_done;
+    wire io_read_done, io_write_done, busy;
     wire [15:1] bus_address;
     wire [1:0] bus_select;
     wire [15:0] bus_writedata;

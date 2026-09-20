@@ -42,6 +42,10 @@ The script uses the locally installed `theypsilon/quartus-lite-c5:17.0` image
 by default. Override `-Image` and `-DockerContext` if needed. It compiles an
 isolated source snapshot under `build/`, retaining the log and Quartus reports.
 Compilation alone does not establish working hardware or acceptable timing.
+After compilation, the script records the reported slack in `timing-results.json`
+and exits with an error if any timing check reports negative slack. The RBF and
+reports are retained for investigation. Missing timing results also fail the
+build; nonnegative slack still requires constraint-coverage review.
 
 The imported 20 MHz baseline completed Quartus compilation on 2026-09-20, using
 49% of the FPGA ALMs, but **failed timing** (worst reported setup slack
@@ -59,6 +63,18 @@ It needs timing closure and hardware checks for boot, floppy access, music
 pitch/tempo and Rusty gameplay before it can be recommended. A doubled clock
 does not imply doubled frame rate. `-PrepareOnly` creates the source snapshot
 without running Quartus.
+
+The first 40 MHz experiment compiled on 2026-09-20 but **failed timing**. Its
+CPU-only setup path has `-11.991 ns` slack at the slow 100 C corner, with a
+system-clock Fmax estimate of `27.03 MHz` for same-clock paths. Increasing the
+clock alone is therefore not a reliable 40 MHz solution. The 486 integration
+remains the performance path; these measurements are not Rusty benchmarks.
+
+The ao486 I/O and burst-memory adapters and their shared-bus arbitration now
+pass simulation, including a test using ao486's actual memory request generator.
+They are not yet connected to the full PC-98 machine. CPU integration still
+requires interrupt handling, address mapping, DMA/cache coherence and changes
+to the existing even/odd I/O decoders before BIOS boot testing.
 
 For CPU adapter simulation, see [tests/README.md](tests/README.md).
 

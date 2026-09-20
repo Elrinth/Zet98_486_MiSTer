@@ -24,6 +24,7 @@ module ao486_io_bridge (
     input  wire [2:0]  io_write_length,
     input  wire [31:0] io_write_data,
     output reg         io_write_done,
+    output wire        busy,
 
     output wire [15:1] bus_address,
     output wire [1:0]  bus_select,
@@ -48,6 +49,7 @@ module ao486_io_bridge (
                                             {8'b0, bus_readdata[7:0]};
 
     assign bus_address = address[15:1];
+    assign busy = state != IDLE;
     assign bus_select = !bus_strobe ? 2'b00 :
                         address[0] ? 2'b10 : word_cycle ? 2'b11 : 2'b01;
     assign bus_writedata = address[0] ? {write_data[7:0], 8'b0} : write_data[15:0];

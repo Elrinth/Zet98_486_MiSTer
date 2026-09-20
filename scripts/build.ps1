@@ -50,6 +50,13 @@ try {
         Tee-Object -FilePath (Join-Path $buildRoot 'quartus.log')
     if ($LASTEXITCODE -ne 0) { throw "Quartus failed. See $buildRoot/quartus.log" }
     Write-Host "RBF and reports: $sourceRoot/Zet98/v17/output_files"
+    $timing = & (Join-Path $PSScriptRoot 'read-timing.ps1') -SummaryPath `
+        (Join-Path $sourceRoot 'Zet98/v17/output_files/release-Zet98MiSTer.sta.summary')
+    $timing | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $buildRoot 'timing-results.json')
+    if ($timing.ReportedTimingViolations -gt 0) {
+        throw "RBF generated, but timing FAILED: $($timing.ReportedTimingViolations) checks with negative slack; worst $($timing.WorstSlackNs) ns. This is not a verified release. See $buildRoot/timing-results.json"
+    }
+    Write-Host 'No negative slack reported. Constraint coverage and hardware verification are still required.'
 } finally {
     Pop-Location
 }

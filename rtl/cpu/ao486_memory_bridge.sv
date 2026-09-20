@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+`timescale 1ns/1ps
+// ao486 memory master to a single-transfer, 16-bit memory fabric.
+//
+// Interface contract: MiSTer ao486 9d888c485bcf2e781824b303588668529a02015e.
+// avm_address is DWORD addressed, bus_address is WORD addressed. Retain all
+// physical address bits here; PC-98 address decoding/BIOS aliases belong outside.
+// ao486 emits read bursts of 1..8 DWORDs and only SINGLE-beat writes. On writes
+// burstcount can reflect a pending read, so it must be ignored. Its code
+// fetch byte enables are not reliable, so reads always return complete DWORDs.
+// Writes honour every byte enable, including skipping empty halfwords.
+//
+// One command is outstanding at a time. Writes are accepted into this module
+// before the legacy transfer completes. Integration must drain outstanding
+// memory writes before allowing a later I/O command to reach the peripherals.
+// ACK must fall between legacy transfers. All ports share clk; this module
+// does not provide CDC, arbitration, cache/DMA coherence or address mapping.
+// Not yet connected to the production Zet98 top level.
+module ao486_memory_bridge (
+    input  wire        clk,
+    input  wire        reset,
+    input  wire [29:0] avm_address,
+    input  wire [31:0] avm_writedata,
+    input  wire [3:0]  avm_byteenable,
+    input  wire [3:0]  avm_burstcount,
+    input  wire        avm_write,
+    input  wire        avm_read,
+    output wire        avm_waitrequest,
+    output reg         avm_readdatavalid,
+    output reg  [31:0] avm_readdata,
+    output wire        busy,
+
+    output wire [31:1] bus_address,
+    output wire [1:0]  bus_select,
+    output wire [15:0] bus_writedata,
+    output wire        bus_write,
+    output wire        bus_strobe,
+    input  wire [15:0] bus_readdata,
+    input  wire        bus_ack
+);
+    localparam IDLE = 2'd0, TRANSFER = 2'd1, RELEASE = 2'd2;
+    reg [1:0] state;
+    reg [29:0] address;
+    reg [31:0] write_data;
+    reg [3:0] byte_enable;
+    reg [3:0] remaining;
+    reg write_request;
+    reg high_half;
+    reg [15:0] read_low;
+    wire [1:0] half_select = high_half ? byte_enable[3:2] : byte_enable[1:0];
+    wire skip_half = write_request && (half_select == 0);
+
+    assign busy = state != IDLE;
+    assign avm_waitrequest = reset || busy || bus_ack;
+    assign bus_address = {address, high_half};
+    assign bus_strobe = state == TRANSFER && !skip_half && !reset;
+    assign bus_select = !bus_strobe ? 2'b00 : write_request ? half_select : 2'b11;
+    assign bus_writedata = high_half ? write_data[31:16] : write_data[15:0];
+    assign bus_write = write_request;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            state <= IDLE;
+            address <= 0;
+            write_data <= 0;
+            byte_enable <= 0;
+            remaining <= 0;
+            write_request <= 0;
+            high_half <= 0;
+            read_low <= 0;
+            avm_readdata <= 0;
+            avm_readdatavalid <= 0;
+        end else begin
+            avm_readdatavalid <= 0;
+            case (state)
+                IDLE: if ((avm_read || avm_write) && !avm_waitrequest) begin
+                    address <= avm_address;
+                    write_data <= avm_writedata;
+                    byte_enable <= avm_byteenable;
+                    remaining <= avm_write ? 4'd1 : avm_burstcount;
+                    write_request <= avm_write;
+                    high_half <= 0;
+                    state <= TRANSFER;
+                end
+                TRANSFER: if (skip_half || bus_ack) begin
+                    if (!write_request) begin
+                        if (!high_half) read_low <= bus_readdata;
+                        else begin
+                            avm_readdata <= {bus_readdata, read_low};
+                            avm_readdatavalid <= 1;
+                        end
+                    end
+                    high_half <= !high_half;
+                    if (high_half) begin
+                        remaining <= remaining - 1'b1;
+                        address <= address + 1'b1;
+                    end
+                    state <= RELEASE;
+                end
+                RELEASE: if (!bus_ack)
+                    state <= remaining == 0 ? IDLE : TRANSFER;
+                default: state <= IDLE;
+            endcase
+        end
+    end
+
+    // synthesis translate_off
+    always @(posedge clk) if (!avm_waitrequest && (avm_read || avm_write)) begin
+        if (avm_read && avm_write) $fatal(1, "simultaneous memory read/write");
+        if (avm_read && (avm_burstcount == 0 || avm_burstcount > 8))
+            $fatal(1, "ao486 read burst must contain 1..8 DWORDs");
+    end
+    // synthesis translate_on
+endmodule
