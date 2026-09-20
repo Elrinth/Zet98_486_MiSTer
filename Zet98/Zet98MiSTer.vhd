@@ -93,6 +93,7 @@ port(
 
 	pSndL			: out		std_logic_vector(15 downto 0);  -- Sound-L
 	pSndR			: out		std_logic_vector(15 downto 0);  -- Sound-R
+	pStartupBeeps : in std_logic := '0'; -- Bypass the default startup-only speaker mute.
 
 	rstn		:in std_logic
 );
@@ -2110,6 +2111,7 @@ signal	RTC_CSTB	:std_logic;
 --BEEP
 signal	BEEPON	:std_logic;
 signal	BEEP_snd	:std_logic_vector(15 downto 0);
+signal	startup_muted :std_logic;
 
 --COM
 signal	COM_CS		:std_logic;
@@ -3806,7 +3808,11 @@ DBIO_ODAT<=(others=>'1');
 	
 	MOUS_INTe<=not MOUS_PCHOUT(0);
 	
-	BEEP_snd<=	(others=>'0') when BEEPON='0' else
+	startup_sound : entity work.startup_mute
+		generic map(CLOCK_KHZ => SYSFREQ)
+		port map(clk => cpuclk, rstn => srstn, bypass => pStartupBeeps, muted => startup_muted);
+
+	BEEP_snd<=	(others=>'0') when BEEPON='0' or startup_muted='1' else
 				x"1fff" when PTC_CNTOUT(1)='1' else
 				x"e000" when PTC_CNTOUT(1)='0';
 	

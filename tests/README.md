@@ -62,6 +62,18 @@ An integration test with the original `VTIMING` generator also checks row
 alignment for 1,247,400 pixels across 16-, 20- and 32-scanline text modes,
 after its initial partial scanline on reset.
 
+The startup-speaker mute test verifies exact expiry, automatic restoration,
+timer saturation, reset rearming and the menu bypass. Changing the bypass
+after the startup interval must not mute later speaker audio. Clock and duration
+generics are reduced for simulation; the core uses its system clock frequency
+and a 10,000 ms interval.
+
+`hardware/disk_probe.asm` is a small DOS shell for real-hardware disk diagnosis.
+It is assembled with NASM `-f bin` and inserted into a new copy of a user-supplied
+system D88 using `scripts/d88_file.py`; see `HARDWARE_TESTING.md`. No BIOS, DOS
+or game data is included in the tests. A DOS-reported successful log write is
+not proof that the core has persisted it to the host D88.
+
 The full CPU test is `tests/run-cpu.sh`. It assembles `ao486_smoke.asm` with NASM
 and runs the unmodified ao486 CPU/cache sources with the PC-98 CPU wrapper and
 Intel RAM models. It checks a 486-only instruction (`BSWAP`), unaligned DWORD

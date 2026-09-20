@@ -9,8 +9,9 @@ video, timer, sound and disk timing.
 The first ao486 hardware test reaches DOS, Rusty's sound-driver loading and
 the C-Lab logo with the user's BIOS/disks. Severe video corruption was observed;
 it later affected Console Mode too and cleared after a full power cycle.
-PC-98 stability after that restart still needs confirmation, and
-there is no Rusty speedup or DX4-100 performance claim yet.
+PC-98 text is now stable, but the logo appears white and the Opening disk is
+unavailable through DOS drive B in the isolated reference test. There is
+no Rusty speedup or DX4-100 performance claim yet.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -101,6 +102,13 @@ is forced off during initial integration; this is not a performance release.
 Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
 Hardware observations and the isolated test setup are recorded in
 [HARDWARE_TESTING.md](HARDWARE_TESTING.md).
+
+`Startup mute: 10s / Off` defaults to **10s** (status bit 4 clear). It silences
+the PC-98 speaker for ten seconds after core start/reset, then restores it
+automatically. FM/PSG audio paths and mixer gain are preserved. Select **Off**
+to hear startup beeps immediately. This is a fixed timer, not BIOS-completion
+detection; early software speaker tones within those ten seconds are also
+muted. This option is not present in the existing test RBFs.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

@@ -157,6 +157,7 @@ parameter CONF_STR = {
 	"-;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
 	"O3,Video test,Off,Color bars;",
+	"O4,Startup mute,10s,Off;",
 	"-;",
 	"R6,Reset;",
 	"-;",
@@ -440,6 +441,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 
 	.pSndL(AUDIO_L),
 	.pSndR(AUDIO_R),
+	.pStartupBeeps(status[4]),
 
 	.rstn(reset_n & ~reset)
 );

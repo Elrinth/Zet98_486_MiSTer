@@ -94,8 +94,9 @@ Console Mode running, no mounted test disks, and the preserved GDC 2.5 MHz
 configuration. The unchanged upstream 2022 reference was then reloaded with
 the same ROM and System/Opening disks, confirmed open through SSH. A screenshot
 file could be saved again, but contains only black pixels; this remains
-insufficient evidence about the TV picture. Physical-display confirmation of
-PC-98 stability after the power cycle is pending.
+insufficient evidence about the TV picture. The user then confirmed stable
+positioning, with a readable file-not-found prompt. The startup sound was heard,
+but the logo interval appeared white, so graphics correctness is unresolved.
 
 First retest the already-deployed PC-98 images against the recovered control.
 Record whether corruption begins when entering PC-98 and whether it persists
@@ -112,6 +113,51 @@ It runs without waiting for the PC-98 BIOS. Full-screen scaling is also present
 in that source. Hardware results are pending; deployment was held after the
 power-cycle recovery so the existing images can be compared first.
 The first video-test snapshot is `build/quartus-20260921-004058-4b8287/source`.
+Compilation finished with 20,358 / 41,910 ALMs (49%), 380 / 553 RAM blocks,
+and 61 / 112 DSP blocks. Timing failed: 11 negative-slack checks, worst
+`-25.828 ns`. The detailed report's worst path crosses from the Zet CPU to
+SDRAM write data; CPU-register setup paths alone pass with `8.148 ns` slack.
+This RBF has not been deployed and is not a verified release.
+
+### DOS disk probe
+
+`tests/hardware/disk_probe.asm` is an 8086-compatible DOS shell diagnostic.
+Assemble it with NASM `-f bin`, then use `scripts/d88_file.py` to replace
+`BOOT.COM` in a **new copy** of the supplied system D88. The replacement must
+fit the old file length. The tool preserves the FAT, directory entry, sector
+metadata and all unrelated payloads, and refuses to overwrite an output file.
+No supplied disk or BIOS is distributed with this program.
+
+The first probe ran on the unchanged 2022 reference with System on FDD0 and
+Opening on FDD1. The user supplied a clear, stable photograph showing:
+
+- Default DOS drive A; `A:\SYS_DISK` opens and reads `0D 0A 1A`.
+- `A:\OP_DISK` and `A:\MGXLOAD.BIN` return DOS error `0002` (file not found),
+  expected for the System disk.
+- All three corresponding paths on B return `0003` (path not found).
+- The probe reports completing its log write, but the retrieved D88 contains
+  no log file. Host-image write persistence is not established.
+
+Version 2 adds the BIOS drive mask at `0000:055C`, DOS drive count, and a B:
+free-space query. A trial launcher mounted Opening first, waited eight seconds,
+mounted System, then waited another eight seconds before reset. The user
+reported a black screen and constant beep rather than diagnostic output.
+The test was immediately stopped by returning to Console Mode. This trial
+changed both the probe and mount order, so it does not isolate which caused
+the failure. Use the earlier System-first order for subsequent probe comparisons.
+
+### Startup speaker mute
+
+The user requested quiet startup while retaining later PC-speaker sound.
+`Startup mute: 10s / Off` now defaults to ten seconds after core start/reset.
+Only the beeper input to the audio mixer is gated; FM/PSG paths and PIT operation
+are unchanged. The timer continues while bypassed and saturates after expiry,
+so later menu changes do not restart it. Simulation passed exact duration,
+automatic restoration, reset, bypass, and saturation checks.
+Quartus Analysis & Elaboration also passed for the ao486 source snapshot
+`build/quartus-20260921-011511-1dccf1/source` (0 errors). No RBF with this feature has yet
+been loaded on the device. The device was left in Console Mode after the noisy
+disk-order trial.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
