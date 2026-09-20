@@ -52,6 +52,16 @@ The VHDL bench also compares OPNA/PIT enable rates and the VFO interrupt pulse
 width at 20 and 40 MHz. These tests do not verify complete machine integration, BIOS boot,
 complete peripheral timing, or Rusty performance.
 
+Video regressions check the replacement text row counter against the original
+absolute-line modulo formula over 33,600 scanlines (all 32 character heights,
+two full frames each). The registered video-output test checks native RGB/sync
+alignment and hold behavior, plus the diagnostic raster's 800x525 total size,
+640x480 active area, sync pulse widths, blanking and divide-by-three pixel
+enable. These are logic tests; they do not establish hardware video stability.
+An integration test with the original `VTIMING` generator also checks row
+alignment for 1,247,400 pixels across 16-, 20- and 32-scanline text modes,
+after its initial partial scanline on reset.
+
 The full CPU test is `tests/run-cpu.sh`. It assembles `ao486_smoke.asm` with NASM
 and runs the unmodified ao486 CPU/cache sources with the PC-98 CPU wrapper and
 Intel RAM models. It checks a 486-only instruction (`BSWAP`), unaligned DWORD

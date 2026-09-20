@@ -21,3 +21,11 @@ ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb --assert-level=
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/z8259.vhd tests/pc98_pic_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" pc98_pic_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" pc98_pic_tb --assert-level=error
+ghdl -a --std=08 --workdir="$out" VIDEO/text_row_counter.vhd tests/text_row_counter_tb.vhd
+ghdl -e --std=08 --workdir="$out" text_row_counter_tb
+ghdl -r --std=08 --workdir="$out" text_row_counter_tb --assert-level=error
+ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/VTIMING.vhd tests/video_line_timing_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" video_line_timing_tb
+ghdl -r --std=08 -fsynopsys --workdir="$out" video_line_timing_tb --assert-level=error
+iverilog -g2012 -Wall -s video_output_tb -o "$out/video.vvp" rtl/video_output.sv tests/video_output_tb.sv
+vvp "$out/video.vvp"

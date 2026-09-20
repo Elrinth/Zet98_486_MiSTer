@@ -167,7 +167,11 @@ begin
 	
 	FONTBYTE<=	FROMDAT;
 
-	C_LIN<=0 when VCOUNT<VIV else (VCOUNT-VIV)mod CHRLINES;
+	-- Avoid a variable integer modulo in the font-address path. The video
+	-- counters advance sequentially, and character height is fixed per frame.
+	row_index : entity work.text_row_counter
+		generic map(FIRST_VISIBLE_LINE=>VIV, TOTAL_LINES=>VWIDTH)
+		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn);
 	C_COL<=0 when HUCOUNT<HIV else HUCOUNT-HIV;
 
 	CBLINKINT<=conv_integer(BLINKRATE);

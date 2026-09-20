@@ -146,14 +146,17 @@ assign LED_DISK  = {disk_led, sd_act};
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
  
-assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
-assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
+// MiSTer treats a zero ratio as full-screen scaling. Keep bit 1's existing
+// 4:3/16:9 meanings so saved settings remain compatible.
+assign VIDEO_ARX = status[2] ? 8'd0 : (status[1] ? 8'd16 : 8'd4);
+assign VIDEO_ARY = status[2] ? 8'd0 : (status[1] ? 8'd9  : 8'd3);
 
 `include "build_id.v" 
 parameter CONF_STR = {
 	"Zet98;;",
 	"-;",
-	"O1,Aspect ratio,4:3,16:9;",
+	"O12,Aspect ratio,4:3,16:9,Full Screen;",
+	"O3,Video test,Off,Color bars;",
 	"-;",
 	"R6,Reset;",
 	"-;",
@@ -352,6 +355,16 @@ assign CLK_VIDEO = clk_vid;
 assign AUDIO_S = 1;
 
 wire disk_led;
+wire native_ce, native_hs, native_vs, native_de;
+wire [7:0] native_r, native_g, native_b;
+
+video_output video_out (
+	.clk(clk_vid), .reset(!pll_locked), .test_pattern(status[3]),
+	.native_ce(native_ce), .native_r(native_r), .native_g(native_g), .native_b(native_b),
+	.native_hs(native_hs), .native_vs(native_vs), .native_de(native_de),
+	.ce(CE_PIXEL), .r(VGA_R), .g(VGA_G), .b(VGA_B),
+	.hs(VGA_HS), .vs(VGA_VS), .de(VGA_DE)
+);
 
 Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 (
@@ -417,13 +430,13 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 	.pSramld(sramld),
 	.pSramst(sramst),
 
-	.pVideoR(VGA_R),
-	.pVideoG(VGA_G),
-	.pVideoB(VGA_B),
-	.pVideoHS(VGA_HS),
-	.pVideoVS(VGA_VS),
-	.pVideoEN(VGA_DE),
-	.pVideoClk(CE_PIXEL),
+	.pVideoR(native_r),
+	.pVideoG(native_g),
+	.pVideoB(native_b),
+	.pVideoHS(native_hs),
+	.pVideoVS(native_vs),
+	.pVideoEN(native_de),
+	.pVideoClk(native_ce),
 
 	.pSndL(AUDIO_L),
 	.pSndR(AUDIO_R),

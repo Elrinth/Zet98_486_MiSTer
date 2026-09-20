@@ -480,6 +480,8 @@ set_global_assignment -name VHDL_FILE ../../VIDEO/font/fontrom.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/textscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/VTIMING.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/synccont2.vhd
+set_global_assignment -name VHDL_FILE ../../VIDEO/text_row_counter.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/video_output.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/CRTC98.vhd

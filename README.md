@@ -6,13 +6,15 @@ initially a SuperStation One with SuperDock. A faster CPU must preserve game,
 video, timer, sound and disk timing.
 
 **The default build uses Zet; the optional ao486 integration is experimental.**
-No PC-98 BIOS boot, Rusty speedup or DX4-100 performance claim is made yet.
+The first ao486 hardware test reaches DOS, Rusty's sound-driver loading and
+the C-Lab logo with the user's BIOS/disks. Severe video corruption remains;
+there is no Rusty speedup or DX4-100 performance claim yet.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
 
-1. Reproduce the original build and measure Rusty slowdowns with the same BIOS,
-   disk image and gameplay scene on real hardware.
+1. Fix the video corruption observed in DOS and Rusty on both original and
+   experimental cores, then measure the same Rusty gameplay scene on hardware.
 2. Integrate the ao486 CPU with PC-98 I/O byte lanes, memory transfers, interrupts,
    DMA, reset behavior and BIOS mapping; retain a baseline for comparison.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with
@@ -77,15 +79,38 @@ simulation passes 486 `BSWAP`, unaligned DWORD memory and I/O, `REP MOVSD`, A20
 switching, reset-ROM aliases, interrupt/IRET, and software CPU reset. The existing
 PC-98 PICs separately pass master/slave vector, masking and EOI tests.
 
+The first complete ao486 build finished on 2026-09-21 (local time). It fits
+with 32,397 / 41,910 ALMs (77%), 395 / 553 RAM blocks (71%), and 63 / 112 DSP
+blocks (56%). CPU-register setup paths pass at 20 MHz with `20.482 ns` slack,
+but the **complete design still fails timing**: 13 negative-slack checks,
+worst `-22.188 ns`, including crossings between the system, SDRAM and video
+clocks. Passing the CPU paths does not make this a timing-clean core or
+establish a higher usable clock. The test RBF is for boot investigation only.
+
 This first integration deliberately retains the existing low-1-MB memory map.
 Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
 CPU control ports F0/F2/F6 implement reset and A20 controls, using
 [NP2kai's CPU I/O implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/io/cpuio.c)
 as a behavioral reference. Extended RAM, NMI, external DMA/cache coherence,
-independent CPU clocking and machine-level boot remain work in progress. Cache
+independent CPU clocking and complete game compatibility remain work in progress. Cache
 is forced off during initial integration; this is not a performance release.
 
 Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
+Hardware observations and the isolated test setup are recorded in
+[HARDWARE_TESTING.md](HARDWARE_TESTING.md).
+
+The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
+The existing 4:3 and 16:9 setting values are preserved. This affects scaling,
+not video synchronization; it does not claim to fix the observed frame glitches.
+This option was added after the first ao486 test RBF and is not in that image.
+
+The next video test build registers pixel data, blanking and sync together
+with the MiSTer pixel enable. It also replaces the variable modulo in the text
+font-address path with a scanline counter, verified for all 32 character heights.
+`Video test: Color bars` supplies an independent 640x480 raster through the
+same scaler/HDMI path (status bit 3). This helps distinguish PC-98 graphics
+generation from output-path faults. These changes pass simulation; the hardware
+glitch is not claimed fixed until retested.
 
 ## Credits and provenance
 
