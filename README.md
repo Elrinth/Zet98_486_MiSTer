@@ -7,14 +7,17 @@ video, timer, sound and disk timing.
 
 **The default build uses Zet; the optional ao486 integration is experimental.**
 The first ao486 hardware test reaches DOS, Rusty's sound-driver loading and
-the C-Lab logo with the user's BIOS/disks. Severe video corruption remains;
+the C-Lab logo with the user's BIOS/disks. Severe video corruption was observed;
+it later affected Console Mode too and cleared after a full power cycle.
+PC-98 stability after that restart still needs confirmation, and
 there is no Rusty speedup or DX4-100 performance claim yet.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
 
-1. Fix the video corruption observed in DOS and Rusty on both original and
-   experimental cores, then measure the same Rusty gameplay scene on hardware.
+1. Establish stable video from a cold start and isolate the corruption observed
+   in original cores, experimental cores and subsequently Console Mode. Then
+   measure the same Rusty gameplay scene on hardware.
 2. Integrate the ao486 CPU with PC-98 I/O byte lanes, memory transfers, interrupts,
    DMA, reset behavior and BIOS mapping; retain a baseline for comparison.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with

@@ -2,9 +2,10 @@
 
 Test device: SuperStation One with SuperDock and 128 MB SDRAM. The initial
 test system uses ConsoleMode's MiSTer executable (ConsoleMode 1.1.4.2).
-The TV is connected by HDMI through a switch box. The user reports stable
-Console Mode output with HDR; keep that connection as the control during core
-video debugging. The inspected profiles use `direct_video=0`, `video_mode=0`
+The TV is connected by HDMI through a switch box. Console Mode output with HDR
+was initially stable, later also glitched, and recovered after the user powered
+the equipment fully off and on. Keep the recovered display as the control
+during core video debugging. The inspected profiles use `direct_video=0`, `video_mode=0`
 and `vsync_adjust=0`; the main profile has `hdr=1`.
 No credentials, machine BIOS, game images or private screenshots belong in Git.
 
@@ -81,13 +82,35 @@ boot milestone. Severe horizontal corruption and white frames persisted.
 The loader subsequently showed a file-not-found prompt asking for System and
 Opening disks despite both files being open in MiSTer; that remains unresolved.
 
-The user's immediate priority is now fixing video corruption in the core.
-The next diagnostic build uses Zet to isolate video changes. It includes a
+### Power-cycle recovery
+
+The user subsequently reported that corruption persisted after returning to
+Console Mode. Fully powering the equipment off and on restored the display.
+This demonstrates recovery without deploying a new RBF, but does not identify
+which device retained the bad state or which operation triggered it. Previous
+warm-load comparisons alone cannot establish a PC-98 rendering defect.
+Read-only SSH inspection after this report confirmed a fresh system uptime,
+Console Mode running, no mounted test disks, and the preserved GDC 2.5 MHz
+configuration. The unchanged upstream 2022 reference was then reloaded with
+the same ROM and System/Opening disks, confirmed open through SSH. A screenshot
+file could be saved again, but contains only black pixels; this remains
+insufficient evidence about the TV picture. Physical-display confirmation of
+PC-98 stability after the power cycle is pending.
+
+First retest the already-deployed PC-98 images against the recovered control.
+Record whether corruption begins when entering PC-98 and whether it persists
+after returning to Console Mode. Do not attribute the recovery to source
+changes that have not been loaded.
+
+### Optional video diagnostic
+
+The prepared diagnostic build uses Zet to isolate video changes. It includes a
 registered video-output stage, a cheaper text scanline calculation, and OSD
 `Video test: Color bars` (status bit 3). The pattern bypasses PC-98 text,
 graphics and SDRAM fetches, but uses the same video PLL, scaler and HDMI path.
 It runs without waiting for the PC-98 BIOS. Full-screen scaling is also present
-in that source. Hardware results are pending.
+in that source. Hardware results are pending; deployment was held after the
+power-cycle recovery so the existing images can be compared first.
 The first video-test snapshot is `build/quartus-20260921-004058-4b8287/source`.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
