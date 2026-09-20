@@ -9,6 +9,7 @@
 /.idea/
 /references/
 /PC98_MiSTer/
+__pycache__/
 
 # User-provided machine firmware and disk images.
 /test-assets/

@@ -202,6 +202,31 @@ The separate timing-comparison snapshot is
 `build/quartus-20260921-014115-47680a/source` (ao486, 20 MHz). Its fitted timing
 is pending. It includes the disk ACK fix and startup mute; the earlier disk-fix
 snapshot remains a comparison point without this bus change.
+Both snapshots have passed Quartus Analysis & Synthesis. The bus rewrite does
+not add registers (both report 27,077 registers); placement/routing is pending.
+
+### Pixel-clock constraint audit
+
+The inherited SDC does not constrain the `VTIMING.clk3sft[2]` clock, which
+drives text/graphics logic and SDRAM video requests. It rotates `001` at
+75 MHz, producing a 25 MHz clock with one-third duty cycle. Its reset permits
+three phases relative to the other PLL clocks.
+
+`scripts/report-pixel-timing.tcl` adds all three possible generated-clock phases
+to a completed timing netlist for investigation. It does not change the saved
+project constraints or RBF. Running this audit on the completed Zet video-test
+fit exposed setup failures from text addressing into the font RAM clocked at
+75 MHz (`-5.082 ns`) and from the system-clock text GDC into pixel logic
+(`-4.291 ns`). These paths were previously unconstrained. The audit adds no
+data-path exceptions; inherited constraints remain in force. The three mutually
+exclusive phases are excluded only from timing against each other.
+The saved audit script reproduces these setup results and also reports hold
+failures from/to the pixel clock (`-0.277 ns` / `-2.621 ns`).
+
+These are additional outstanding timing issues, not evidence that the bus fix
+failed or that the user's display symptoms have one established cause. The
+audit still needs repeating on the newer fits, and full production constraint
+coverage remains unfinished.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
