@@ -1,0 +1,6 @@
+# Keep scripts and new RTL portable between Windows and the Linux containers.
+/scripts/*.ps1 text eol=lf
+/tests/*.sh text eol=lf
+/tests/*.sv text eol=lf
+/tests/Dockerfile text eol=lf
+/rtl/cpu/*.sv text eol=lf

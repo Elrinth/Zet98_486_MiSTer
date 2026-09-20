@@ -1,0 +1,17 @@
+# Quartus products (source-controlled IP files and ROM tables are retained).
+**/db/
+**/incremental_db/
+**/output_files/
+*.qws
+*.log
+/build/
+/.idea/
+/references/
+/PC98_MiSTer/
+
+# User-provided machine firmware and disk images.
+/test-assets/
+Zet98/BIOS/*.ROM
+Zet98/BIOS/*.rom
+Zet98/BIOS/*.bin
+Zet98/BIOS/x??
