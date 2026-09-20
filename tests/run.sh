@@ -30,6 +30,7 @@ ghdl -r --std=08 -fsynopsys --workdir="$out" video_line_timing_tb --assert-level
 iverilog -g2012 -Wall -s video_output_tb -o "$out/video.vvp" rtl/video_output.sv tests/video_output_tb.sv
 vvp "$out/video.vvp"
 bash tests/run-disk-interface.sh
+bash tests/run-data-bus.sh
 ghdl -a --std=08 --workdir="$out" rtl/startup_mute.vhd tests/startup_mute_tb.vhd
 ghdl -e --std=08 --workdir="$out" startup_mute_tb
 ghdl -r --std=08 --workdir="$out" startup_mute_tb --assert-level=error

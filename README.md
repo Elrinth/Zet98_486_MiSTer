@@ -94,6 +94,12 @@ worst `-22.188 ns`, including crossings between the system, SDRAM and video
 clocks. Passing the CPU paths does not make this a timing-clean core or
 establish a higher usable clock. The test RBF is for boot investigation only.
 
+The source now removes a combinational feedback loop between the two PC-98
+data-bus byte lanes. Device selection is resolved before DMA byte routing,
+preserving the old priorities without routing final outputs back into each
+other. Simulation matches the historical mux over 57,748 cases. The fitted
+timing comparison is pending; this is not yet a clock-rate or speedup result.
+
 This first integration deliberately retains the existing low-1-MB memory map.
 Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
 CPU control ports F0/F2/F6 implement reset and A20 controls, using

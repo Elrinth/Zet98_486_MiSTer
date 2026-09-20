@@ -1824,6 +1824,7 @@ signal	DMAUM_CS:std_logic;
 --general bus
 signal	abus	:std_logic_vector(19 downto 1);
 signal	dbus	:std_logic_vector(15 downto 0);
+signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
 signal	bussel	:std_logic_vector(1 downto 0);
 
 --io port
@@ -2366,57 +2367,62 @@ begin
 		x"00" & INTS_ODAT				when INTS_OE='1' and tgca='1' else
 		dbus;
 	
-	dbus(15 downto 8)<=
-		LDR_WDAT				when LDR_OE='1' else
-		cpuod(15 downto 8)		when cpuoe='1' and cpusel(1)='1' and DMAen='0' else
-		DMA_ODAT				when DMA_DOE='1' else
-		GCG_ODAT(15 downto 8)	when GCG_DOE='1' else
-		DBIO_ODAT(15 downto 8)	when DBIO_DOE='1' else
-		CB_RDAT0(15 downto 8)	when CB_RD1='1' and bussel(1)='1' else
-		tramdo(15 downto 8)		when tramdoe(1)='1' else
-		BNK89_ODAT				when BNK89_DOE='1' else
-		BNKAB_ODAT				when BNKAB_DOE='1' else
-		KBod					when KBoe='1' else
-		SYSP_RDAT				when SYSP_DOE='1' else
-		PTC_ODAT				when PTC_DOE='1' else
-		MOUS_ODAT				when MOUS_DOE='1' else
-		IO439_ODAT				when IO439_DOE='1' else
-		x"04"					when ioaddr_odd=x"043b" and iord='1' else
-		KNJ0_ODAT				when KNJ0_DOE='1' else
-		KNJ1_ODAT				when KNJ1_DOE='1' else
-		KNJ2_ODAT				when KNJ2_DOE='1' else
-		IDE_ODAT(15 downto 8)	when IDE_DOE='1' else
-		TSTMP_ODAT(15 downto 8)	when TSTMP_DOE='1' else
-		dbus(7 downto 0)		when DMA_L2H='1' else
-		x"ff";
-		
-	dbus(7 downto 0)<=
-		LDR_WDAT				when LDR_OE='1' else
-		cpuod(7 downto 0)		when cpuoe='1' and cpusel(0)='1' and DMAen='0'  else
-        INTM_ODAT           when INTM_OE='1' and tgca='0' else
-        INTS_ODAT           when INTS_OE='1' and tgca='0' else
-		GCG_ODAT(7 downto 0)	when GCG_DOE='1' else
-		DBIO_ODAT(7 downto 0)	when DBIO_DOE='1' else
-		CB_RDAT0(7 downto 0)	when CB_RD1='1' and bussel(0)='1' else
-		tramdo(7 downto 0)		when tramdoe(0)='1' else
-		aramdo(7 downto 0)		when aramdoe(0)='1' else
-		NVR_ODAT				when NVR_DOE='1' else
-		prnod					when prnoe='1' else
-		COM_ODAT				when COM_DOE='1' else
-		tGDCod					when tGDCoe='1' else
-		gGDCod					when gGDCoe='1' else
-		GPAL_ODAT				when GPAL_DOE='1' else
-		IN00f0_ODAT				when IN00f0_DOE='1' else
-		FDC_ODAT				when FDC_DOE='1' else
-		FDCNT_ODAT				when FDCNT_DOE='1' else
-		FDCIFS_ODAT				when FDCIFS_DOE='1' else
-		FDIBM_ODAT				when FDIBM_DOE='1' else
-		OPN_ODAT				when OPN_DOE='1' else
-		SNDID_ODAT			when SNDID_OE='1' else
-		IDE_ODAT(7 downto 0)	when IDE_DOE='1' else
-		TSTMP_ODAT(7 downto 0)	when TSTMP_DOE='1' else
-		dbus(15 downto 8)		when DMA_H2L='1' else
-		x"ff";
+	-- BEGIN PC98 DATA BUS
+	-- Bit 8 marks a driven lane. Resolve devices before DMA byte routing so
+	-- neither final byte feeds back into the other byte's priority mux.
+	dbus_high<=
+		'1' & LDR_WDAT				when LDR_OE='1' else
+		'1' & cpuod(15 downto 8)		when cpuoe='1' and cpusel(1)='1' and DMAen='0' else
+		'1' & DMA_ODAT				when DMA_DOE='1' else
+		'1' & GCG_ODAT(15 downto 8)	when GCG_DOE='1' else
+		'1' & DBIO_ODAT(15 downto 8)	when DBIO_DOE='1' else
+		'1' & CB_RDAT0(15 downto 8)	when CB_RD1='1' and bussel(1)='1' else
+		'1' & tramdo(15 downto 8)		when tramdoe(1)='1' else
+		'1' & BNK89_ODAT				when BNK89_DOE='1' else
+		'1' & BNKAB_ODAT				when BNKAB_DOE='1' else
+		'1' & KBod					when KBoe='1' else
+		'1' & SYSP_RDAT				when SYSP_DOE='1' else
+		'1' & PTC_ODAT				when PTC_DOE='1' else
+		'1' & MOUS_ODAT				when MOUS_DOE='1' else
+		'1' & IO439_ODAT				when IO439_DOE='1' else
+		'1' & x"04"					when ioaddr_odd=x"043b" and iord='1' else
+		'1' & KNJ0_ODAT				when KNJ0_DOE='1' else
+		'1' & KNJ1_ODAT				when KNJ1_DOE='1' else
+		'1' & KNJ2_ODAT				when KNJ2_DOE='1' else
+		'1' & IDE_ODAT(15 downto 8)	when IDE_DOE='1' else
+		'1' & TSTMP_ODAT(15 downto 8)	when TSTMP_DOE='1' else
+		'0' & x"ff";
+
+	dbus_low<=
+		'1' & LDR_WDAT				when LDR_OE='1' else
+		'1' & cpuod(7 downto 0)		when cpuoe='1' and cpusel(0)='1' and DMAen='0' else
+		'1' & INTM_ODAT				when INTM_OE='1' and tgca='0' else
+		'1' & INTS_ODAT				when INTS_OE='1' and tgca='0' else
+		'1' & GCG_ODAT(7 downto 0)	when GCG_DOE='1' else
+		'1' & DBIO_ODAT(7 downto 0)	when DBIO_DOE='1' else
+		'1' & CB_RDAT0(7 downto 0)	when CB_RD1='1' and bussel(0)='1' else
+		'1' & tramdo(7 downto 0)		when tramdoe(0)='1' else
+		'1' & aramdo(7 downto 0)		when aramdoe(0)='1' else
+		'1' & NVR_ODAT				when NVR_DOE='1' else
+		'1' & prnod					when prnoe='1' else
+		'1' & COM_ODAT				when COM_DOE='1' else
+		'1' & tGDCod					when tGDCoe='1' else
+		'1' & gGDCod					when gGDCoe='1' else
+		'1' & GPAL_ODAT				when GPAL_DOE='1' else
+		'1' & IN00f0_ODAT				when IN00f0_DOE='1' else
+		'1' & FDC_ODAT				when FDC_DOE='1' else
+		'1' & FDCNT_ODAT				when FDCNT_DOE='1' else
+		'1' & FDCIFS_ODAT				when FDCIFS_DOE='1' else
+		'1' & FDIBM_ODAT				when FDIBM_DOE='1' else
+		'1' & OPN_ODAT				when OPN_DOE='1' else
+		'1' & SNDID_ODAT				when SNDID_OE='1' else
+		'1' & IDE_ODAT(7 downto 0)	when IDE_DOE='1' else
+		'1' & TSTMP_ODAT(7 downto 0)	when TSTMP_DOE='1' else
+		'0' & x"ff";
+
+	dbus(15 downto 8)<=dbus_high(7 downto 0) when dbus_high(8)='1' or DMA_L2H='0' else dbus_low(7 downto 0);
+	dbus(7 downto 0)<=dbus_low(7 downto 0) when dbus_low(8)='1' or DMA_H2L='0' else dbus_high(7 downto 0);
+	-- END PC98 DATA BUS
 		
 	CB_WR1<=
 		LDR_WR	when LDR_OE='1' else

@@ -78,6 +78,14 @@ logic is disabled in the bench. A temporary `hps_io` copy supplies parameter
 defaults required by Icarus; both values are overridden by the actual instances.
 This catches the previous scalar ACK connection, which discarded slots 1–3.
 
+`run-data-bus.sh` compiles the marked data-bus expressions directly from the
+machine top level. Its reference is the historical mux before DMA feedback
+removal, preserved under `reference/`. It compares 57,748 cases: every pair
+of device enables, all byte-lane masks, CPU/DMA ownership, interrupt-acknowledge
+gating, sparse random selections, and both DMA byte-routing directions.
+Directed FDC-to-memory and memory-to-FDC cases check even/odd byte placement.
+This verifies mux behavior; it does not simulate the complete DMA controller.
+
 `hardware/disk_probe.asm` is a small DOS shell for real-hardware disk diagnosis.
 It is assembled with NASM `-f bin` and inserted into a new copy of a user-supplied
 system D88 using `scripts/d88_file.py`; see `HARDWARE_TESTING.md`. No BIOS, DOS

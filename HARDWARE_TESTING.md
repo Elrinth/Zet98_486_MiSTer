@@ -181,6 +181,28 @@ The existing adapter, peripheral, video and startup-mute tests also pass.
 The next ao486 build snapshot is `build/quartus-20260921-013307-8d60fc/source`.
 Its compilation and hardware checks are pending.
 
+### DMA byte-lane feedback removal
+
+The detailed baseline timing report explicitly includes a combinational loop
+through `dbus`: the high-byte fallback reads the final low byte, and vice versa.
+In the 20 MHz Zet video-test fit this contributes 22.254 ns of a 34.838 ns
+data path, against a 10 ns system-to-SDRAM clock relationship. The first ao486
+fit also reports the bus loop on its failing CPU-to-SDRAM paths.
+
+The revised source resolves each lane's normal device priority into a data byte
+and a driven flag. DMA then copies the selected source byte only when the
+destination lane has no primary driver. There is no cross-coupling of final
+outputs. The actual top-level expressions match the historical bus in 57,748
+simulation cases, including device-enable pairs, lane masks, CPU/DMA ownership,
+and FDC bytes sent to/read from even and odd memory addresses. A deliberate
+routing-error control fails the test. This is mux equivalence, not a full DMA
+controller simulation or hardware result.
+
+The separate timing-comparison snapshot is
+`build/quartus-20260921-014115-47680a/source` (ao486, 20 MHz). Its fitted timing
+is pending. It includes the disk ACK fix and startup mute; the earlier disk-fix
+snapshot remains a comparison point without this bus change.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the
