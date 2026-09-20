@@ -28,7 +28,11 @@ module  pll_0002(
 		.output_clock_frequency0("100.000000 MHz"),
 		.phase_shift0("0 ps"),
 		.duty_cycle0(50),
+`ifdef ZET98_TURBO40
+		.output_clock_frequency1("40.000000 MHz"),
+`else
 		.output_clock_frequency1("20.000000 MHz"),
+`endif
 		.phase_shift1("0 ps"),
 		.duty_cycle1(50),
 		.output_clock_frequency2("75.000000 MHz"),

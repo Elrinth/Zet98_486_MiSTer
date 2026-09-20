@@ -4,6 +4,7 @@
 **/output_files/
 *.qws
 *.log
+**/c5_pin_model_dump.txt
 /build/
 /.idea/
 /references/

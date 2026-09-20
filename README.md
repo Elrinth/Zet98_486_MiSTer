@@ -43,6 +43,23 @@ by default. Override `-Image` and `-DockerContext` if needed. It compiles an
 isolated source snapshot under `build/`, retaining the log and Quartus reports.
 Compilation alone does not establish working hardware or acceptable timing.
 
+The imported 20 MHz baseline completed Quartus compilation on 2026-09-20, using
+49% of the FPGA ALMs, but **failed timing** (worst reported setup slack
+`-22.563 ns`, plus unconstrained paths). Its generated RBF is not a verified
+release. The timing failures must be understood before claiming stable higher
+clock rates. `scripts/report-timing.tcl` generates detailed paths from a fitted
+project for this investigation.
+
+An experimental **40 MHz Zet** build can be prepared with
+`./scripts/build.ps1 -SystemClockMHz 40`. It is an intermediate performance
+experiment, not the 486 upgrade. The default remains 20 MHz. The 40 MHz build
+adjusts the system-frequency parameter, PS/2 clock divider, OPNA clock enable,
+and VFO interrupt pulse width; SDRAM and video clocks stay at 100 and 75 MHz.
+It needs timing closure and hardware checks for boot, floppy access, music
+pitch/tempo and Rusty gameplay before it can be recommended. A doubled clock
+does not imply doubled frame rate. `-PrepareOnly` creates the source snapshot
+without running Quartus.
+
 For CPU adapter simulation, see [tests/README.md](tests/README.md).
 
 ## Credits and provenance

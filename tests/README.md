@@ -21,4 +21,6 @@ docker --context desktop-linux run --rm --network none --mount "type=bind,source
 The bench checks byte, word and dword transfers at even/odd addresses,
 16-bit port-address wrapping, correct peripheral byte-lane side effects,
 wait-state stability, acknowledgement release and reset during a request.
-These tests do not verify ao486 integration, BIOS boot, or Rusty performance.
+The VHDL bench also compares OPNA/PIT enable rates and the VFO interrupt pulse
+width at 20 and 40 MHz. These tests do not verify ao486 integration, BIOS boot,
+complete peripheral timing, or Rusty performance.

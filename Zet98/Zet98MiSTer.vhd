@@ -3549,7 +3549,8 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 	
-	VFOTIM	:fixtimer generic map(200,2) port map(
+	-- Preserve the original 100 ns interrupt pulse when changing SYSFREQ.
+	VFOTIM	:fixtimer generic map(200,2*SYSFREQ/20000) port map(
 		start	=>VFO_TSTART,
 		sft	=>FDC_hmssft,
 		
@@ -3785,7 +3786,9 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>srstn
 	);
 
-	OPNS	:sftgen generic map(2) port map(2,OPN_sft,cpuclk,srstn);
+	-- The baseline enables OPNA at 10 MHz (20 MHz / 2). Scale the divisor
+	-- with the system clock so a CPU speed experiment does not speed up music.
+	OPNS	:sftgen generic map(SYSFREQ/10000) port map(SYSFREQ/10000,OPN_sft,cpuclk,srstn);
 	SNDID_CS<='1' when ioaddr=x"a460" else '0';
 
 	C2	:if SND=2 generate

@@ -190,6 +190,14 @@ parameter CONF_STR = {
 wire clk_ram, clk_sys, clk_vid;
 wire pll_locked;
 
+// Compile-time experiment: keep wall-clock peripheral rates consistent with
+// the PLL setting. The default remains the original 20 MHz Zet baseline.
+`ifdef ZET98_TURBO40
+localparam integer SYS_CLK_KHZ = 40000;
+`else
+localparam integer SYS_CLK_KHZ = 20000;
+`endif
+
 pll pll
 (
 	.refclk(CLK_50M),
@@ -267,7 +275,7 @@ wire [63:0] img_size;
 wire [65:0] ps2_key;
 wire [64:0] sysrtc;
 
-hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400), .PS2WE(1), .VDNUM(4)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * (SYS_CLK_KHZ / 20000)), .PS2WE(1), .VDNUM(4)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -340,7 +348,7 @@ assign AUDIO_S = 1;
 
 wire disk_led;
 
-Zet98MiSTer Zet98_top
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),

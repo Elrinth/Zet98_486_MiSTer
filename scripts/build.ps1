@@ -1,6 +1,9 @@
 param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
-    [string]$DockerContext = 'desktop-linux'
+    [string]$DockerContext = 'desktop-linux',
+    [ValidateSet(20, 40)]
+    [int]$SystemClockMHz = 20,
+    [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +30,15 @@ try {
     }
     git rev-parse HEAD | Set-Content -LiteralPath (Join-Path $buildRoot 'source-commit.txt')
     git diff --stat | Set-Content -LiteralPath (Join-Path $buildRoot 'source-changes.txt')
+    $SystemClockMHz | Set-Content -LiteralPath (Join-Path $buildRoot 'system-clock-mhz.txt')
+    if ($SystemClockMHz -eq 40) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO40=1"
+    }
+    if ($PrepareOnly) {
+        Write-Host "Prepared $SystemClockMHz MHz source snapshot: $sourceRoot"
+        return
+    }
     & docker --context $DockerContext image inspect $Image --format '{{.Id}}' |
         Set-Content -LiteralPath (Join-Path $buildRoot 'toolchain-image.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Quartus Docker image is not installed.' }
