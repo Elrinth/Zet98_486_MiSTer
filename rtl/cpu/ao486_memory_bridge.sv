@@ -20,7 +20,8 @@
 // does not provide CDC, arbitration, cache/DMA coherence or address mapping.
 // Used by the opt-in ao486 build; the default CPU remains Zet.
 module ao486_memory_bridge #(
-    parameter NARROW_READS = 1'b1
+    parameter NARROW_READS = 1'b1,
+    parameter SKIP_EMPTY_HALVES = 1'b1
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -54,6 +55,10 @@ module ao486_memory_bridge #(
     reg [15:0] read_low;
     wire [1:0] half_select = high_half ? byte_enable[3:2] : byte_enable[1:0];
     wire skip_half = half_select == 0;
+    wire [3:0] request_enable = avm_write ||
+        (NARROW_READS && avm_burstcount == 1 && avm_byteenable != 0)
+        ? avm_byteenable : 4'b1111;
+    wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0);
 
     assign busy = state != IDLE;
     assign avm_waitrequest = reset || busy || bus_ack;
@@ -81,24 +86,28 @@ module ao486_memory_bridge #(
                 IDLE: if ((avm_read || avm_write) && !avm_waitrequest) begin
                     address <= avm_address;
                     write_data <= avm_writedata;
-                    byte_enable <= avm_write ||
-                        (NARROW_READS && avm_burstcount == 1 && avm_byteenable != 0)
-                        ? avm_byteenable : 4'b1111;
+                    byte_enable <= request_enable;
                     remaining <= avm_write ? 4'd1 : avm_burstcount;
                     write_request <= avm_write;
-                    high_half <= 0;
+                    // Byte/word operations need no transfer/release states
+                    // for a halfword that has no selected bytes. ACK release
+                    // is still required after every actual legacy transfer.
+                    high_half <= SKIP_EMPTY_HALVES && request_enable[1:0] == 0;
+                    read_low <= 16'hffff;
                     state <= TRANSFER;
                 end
                 TRANSFER: if (skip_half || bus_ack) begin
                     if (!write_request) begin
                         if (!high_half) read_low <= skip_half ? 16'hffff : bus_readdata;
-                        else begin
-                            avm_readdata <= {skip_half ? 16'hffff : bus_readdata, read_low};
+                        if (last_half) begin
+                            avm_readdata <= high_half ?
+                                {skip_half ? 16'hffff : bus_readdata, read_low} :
+                                {16'hffff, skip_half ? 16'hffff : bus_readdata};
                             avm_readdatavalid <= 1;
                         end
                     end
-                    high_half <= !high_half;
-                    if (high_half) begin
+                    high_half <= !last_half;
+                    if (last_half) begin
                         remaining <= remaining - 1'b1;
                         address <= address + 1'b1;
                     end

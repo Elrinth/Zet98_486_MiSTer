@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 module ao486_memory_bridge_tb #(
-    parameter NARROW_READS = 1'b1
+    parameter NARROW_READS = 1'b1,
+    parameter SKIP_EMPTY_HALVES = 1'b1
 );
     reg clk = 0;
     always #5 clk = !clk;
@@ -18,7 +19,9 @@ module ao486_memory_bridge_tb #(
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_memory_bridge #(.NARROW_READS(NARROW_READS)) dut (.*);
+    ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES)) dut (.*);
+    integer clock_cycles = 0;
+    always @(posedge clk) clock_cycles <= clock_cycles+1;
 
     reg [7:0] memory [0:8191];
     reg [7:0] expected_memory [0:8191];
@@ -234,6 +237,7 @@ module ao486_memory_bridge_tb #(
         drain();
         $display("PASS: ao486 memory bridge: %0d commands, %0d transfers, narrow=%0d, byte masks, bursts, high addresses, stalls, reset",
                  requests, bus_tail, NARROW_READS);
+        $display("memory_bridge_cycles=%0d",clock_cycles);
         $finish;
     end
     initial begin

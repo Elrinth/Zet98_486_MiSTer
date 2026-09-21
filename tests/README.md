@@ -21,6 +21,16 @@ that instruction fetches still use sixteen transfers per eight-DWORD burst. Writ
 burst counts can likewise reflect a pending read; each write is still a single
 DWORD command, split according to its actual byte enables.
 
+The memory bridge also skips the state-machine steps for empty halfwords.
+It still waits for ACK to fall after each real transfer and drains writes
+before granting I/O. `tests/run-memory-bridge.sh` compares the same 603-command
+workload with this optimization enabled and disabled, checking all data and
+side effects in both runs. With narrow reads it reduces 17,496 clocks to
+17,076 (420 fewer); without narrow reads it saves 210 clocks on writes.
+The full ao486 CPU and cache tests also pass, including DMA changes,
+self-modifying code, upper-memory bypass and interrupt/IRET. This is simulation
+evidence; the change has not yet been benchmarked in hardware or Rusty.
+
 `ao486_bus_bridge` arbitrates the two adapters onto one memory/I/O bus. It drains
 pending memory commands before granting I/O, including the second command of
 an unaligned ao486 write. A granted I/O transaction retains ownership through
