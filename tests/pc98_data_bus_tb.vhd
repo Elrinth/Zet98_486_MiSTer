@@ -6,6 +6,8 @@ use std.env.all;
 
 entity pc98_data_bus_tb is end entity;
 architecture test of pc98_data_bus_tb is
+    signal pMPUReadData : std_logic_vector(7 downto 0) := x"5a";
+    signal pMPUOE : std_logic := '0';
     signal legacy_bus : std_logic_vector(15 downto 0);
     signal enables : std_logic_vector(33 downto 0) := (others => '0');
     alias BNK89_DOE : std_logic is enables(0);
@@ -258,6 +260,14 @@ begin
             DMA_H2L <= '0'; DMA_L2H <= '1'; check;
         end procedure;
     begin
+        -- The newly added MPU occupies only the low byte. Exercise the actual
+        -- production mux before the unchanged-device equivalence checks.
+        pMPUOE<='1'; wait for 1 ns;
+        assert dbus=x"ff5a" report "MPU did not drive just the low byte" severity failure;
+        cpuoe<='1'; cpusel<="11"; cpuod<=x"c391"; wait for 1 ns;
+        assert dbus=x"c391" report "MPU overrode CPU write lanes" severity failure;
+        cpuoe<='0'; cpusel<="00"; pMPUOE<='0'; wait for 1 ns;
+        report "PASS: MPU low-byte read and CPU write priority";
         -- Every pair of device enables, including a single enabled device.
         -- Preserve native lane masks and exercise CPU takeover suppression.
         for mask in 0 to 3 loop

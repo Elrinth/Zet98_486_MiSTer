@@ -156,6 +156,8 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     output reg pIDERead, pIDEWrite, pIDEResetn,
     input [15:0] pIDEReadData,
     input pIDEOE, pIDEIRQ,
+    input [7:0] pMPUReadData,
+    input pMPUOE, pMPUIRQ,
     output pLed, output [1:0] pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
     input pSramld, pSramst,
     output [7:0] pVideoR, pVideoG, pVideoB,

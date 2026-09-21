@@ -82,6 +82,21 @@ begin
         pcm_irq<='1'; await_irq; acknowledge(true,x"14"); pcm_irq<='0';
         write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
         assert mint='0' report "PCM-only IRQ repeated after EOI" severity failure;
+        -- MPU-PC98II INT2 is master IRQ6 (vector 0Eh), not IBM-PC IRQ9.
+        write_pic(false,'1',x"3d");
+        for byte_index in 1 to 32 loop
+            mirq(6)<='1'; await_irq; acknowledge(false,x"0e"); mirq(6)<='0';
+            write_pic(false,'0',x"20"); cycles(12);
+            assert mint='0' report "MPU IRQ6 repeated after byte consumption and EOI" severity failure;
+        end loop;
+        -- MIDI and sound can be pending together: IRQ6 outranks the cascade,
+        -- then the FM/PCM interrupt must remain deliverable after its EOI.
+        mirq(6)<='1'; sirq(4)<='1'; cycles(12); await_irq;
+        acknowledge(false,x"0e"); mirq(6)<='0'; write_pic(false,'0',x"20");
+        await_irq; acknowledge(true,x"14"); sirq(4)<='0';
+        write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "Simultaneous MIDI/sound interrupts did not clear" severity failure;
+        report "PASS: 32 MPU IRQ6 vectors/EOIs and simultaneous MIDI + cascaded IRQ12";
         report "PASS: existing PC-98 PICs: master/slave vectors, one-cycle acknowledge, masking and EOI";
         report "PASS: shared IRQ12 retains FM when PCM clears, and delivers subsequent PCM-only vector";
         finish;

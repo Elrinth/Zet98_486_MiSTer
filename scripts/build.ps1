@@ -13,6 +13,7 @@ param(
     [ValidateSet(8, 32, 64)]
     [int]$LowMemoryCacheKB = 8,
     [switch]$RawIde,
+    [switch]$MidiUart,
     [switch]$PrepareOnly
 )
 
@@ -50,6 +51,11 @@ try {
     [bool]$LowMemoryCache | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache.txt')
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
+    [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
+    if ($MidiUart) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_MPU_UART=1"
+    }
     if ($RawIde) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RAW_IDE=1"

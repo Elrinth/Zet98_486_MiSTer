@@ -37,8 +37,13 @@ are still undergoing timing work and have not been deployed. The latest
 50 MHz memory/video changes are being hardware-tested separately from the
 verified Bundle50 fallback. See [hardware evidence and limitations](HARDWARE_TESTING.md).
 
+An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
+`-MidiUart`, passes serial, bus and interrupt simulations. It is off by
+default and does not yet implement intelligent-mode sequencing. Hardware
+MidiLink playback and game MIDI compatibility remain unverified.
+
 DOS, BIOS ROMs, games and prepared private disk packages are not distributed
-in this repository. MIDI/MPU-401, optical-drive support, native HDI mounting,
+in this repository. Complete MIDI/MPU-401, optical-drive support, native HDI mounting,
 and native HDM/FDI/NFD selection are still pending. The import utility covers
 standard images described below. Doom II boots in software emulation, but
 its FPGA graphics are currently corrupt; it is not a supported playable title.

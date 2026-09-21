@@ -139,7 +139,7 @@ assign VGA_SL    = 0;
 assign VGA_F1    = 0;
 assign VGA_SCALER = 0;
 assign HDMI_FREEZE = 0;
-assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+assign {UART_RTS, UART_DTR} = 0;
 assign DDRAM_CLK = clk_sys;
 
 assign LED_USER  = ioctl_download & ~ldr_done;
@@ -154,13 +154,20 @@ wire [11:0] aspect_y = status[2] ? 12'd0 : (status[1] ? 12'd9 : 12'd3);
 
 `include "build_id.v" 
 parameter CONF_STR = {
+`ifdef ZET98_MPU_UART
+	"Zet98;UART31250,MIDI31250;",
+`else
 	"Zet98;;",
+`endif
 	"-;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
 	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
 	"O5,Floppy icon,On,Off;",
+`ifdef ZET98_MPU_UART
+	"OQ,MPU MIDI,Off,UART;",
+`endif
 	"-;",
 	"R6,Reset;",
 	"-;",
@@ -337,6 +344,24 @@ end else begin : no_raw_ide
 	assign {ide_lba,ide_rd,ide_wr,ide_buff_din,ide_oe,ide_irq}=0;
 	assign ide_readdata=16'hffff;
 end endgenerate
+
+// MPU-PC98II uses even low-byte ports E0D0/E0D2 and the otherwise unused
+// master PIC IRQ6. Reuse the exported CPU I/O request, not IDE's decode.
+wire [7:0] mpu_readdata;
+wire mpu_oe, mpu_irq;
+`ifdef ZET98_MPU_UART
+pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000)) mpu (
+    .clk(clk_sys), .reset(!ide_resetn), .enable(status[26]),
+    .io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
+    .io_read(ide_read), .io_write(ide_write), .io_readdata(mpu_readdata),
+    .io_oe(mpu_oe), .irq(mpu_irq), .midi_rx(UART_RXD), .midi_tx(UART_TXD),
+    .rx_overrun(), .rx_framing_error(), .tx_overrun()
+);
+`else
+assign mpu_readdata=8'hff;
+assign {mpu_oe,mpu_irq}=0;
+assign UART_TXD=1'b1;
+`endif
 
 wire [65:0] ps2_key;
 wire [64:0] sysrtc;
@@ -528,6 +553,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
 	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
 	.pIDEReadData(ide_readdata), .pIDEOE(ide_oe), .pIDEIRQ(ide_irq),
+	.pMPUReadData(mpu_readdata), .pMPUOE(mpu_oe), .pMPUIRQ(mpu_irq),
 
 	.pLed(disk_led),
 	.pFloppyAccess(floppy_access),

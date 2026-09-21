@@ -538,3 +538,5 @@ set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to "emu:emu|Zet98MiS
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pc98_video_scale.sv
 
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/hdmi_tune_gate.sv
+
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/midi/pc98_mpu_uart.sv

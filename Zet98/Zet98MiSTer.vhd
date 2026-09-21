@@ -90,6 +90,8 @@ port(
 	pIDERead, pIDEWrite, pIDEResetn :out std_logic;
 	pIDEReadData :in std_logic_vector(15 downto 0);
 	pIDEOE, pIDEIRQ :in std_logic;
+	pMPUReadData :in std_logic_vector(7 downto 0);
+	pMPUOE, pMPUIRQ :in std_logic;
 
 -- DIP switch, Lamp ports
 	pDip1			: in std_logic_vector(1 downto 0);
@@ -2488,6 +2490,7 @@ begin
 		'1' & FDIBM_ODAT				when FDIBM_DOE='1' else
 		'1' & OPN_ODAT				when OPN_DOE='1' else
 		'1' & SNDID_ODAT				when SNDID_OE='1' else
+		'1' & pMPUReadData			when pMPUOE='1' else
 		'1' & IDE_ODAT(7 downto 0)	when IDE_DOE='1' else
 		'1' & TSTMP_ODAT(7 downto 0)	when TSTMP_DOE='1' else
 		'0' & x"ff";
@@ -2896,7 +2899,7 @@ DBIO_ODAT<=(others=>'1');
 		IR3		=>'0',
 		IR4		=>not COM_INTn,
 		IR5		=>'0',
-		IR6		=>'0',
+		IR6		=>pMPUIRQ,
 		IR7		=>INTS,
 		
 		INT		=>INTM,
