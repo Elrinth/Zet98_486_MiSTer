@@ -1457,3 +1457,16 @@ three seconds later is black; the core was left running. At 22:47:35 the Rusty
 title/logo is visible. Menu text rendering needs closer comparison, and no
 frame-rate improvement is inferred from these still images. Space selected
 the first menu item at 22:48:42 for the next gameplay check.
+
+GDCGuard50 (source `348029d`, build `quartus-20260921-220423-963f94`)
+passes all sixteen detailed corner checks, minimum +0.084 ns, and the HPS
+SPI/HDMI-I2C/UART placement guards. Its RBF SHA-256 is
+`0468e0acc88419a49ccc35d933336eb67da60433595665386fb7fcb2d8269427`.
+Its 60 MHz counterpart fails five summary checks, worst -0.297 ns, and is
+not deployed. Board-I/O constraint coverage remains incomplete.
+
+The current PaletteCaption50 hardware reaches a Rusty gameplay scene by
+22:58:51 after selecting the title's first item. A menu is overlaid and its
+lettering appears malformed; gameplay performance and text rendering remain
+unverified. This is stronger boot-progress evidence than the intro alone,
+not evidence that all Rusty graphics are correct.

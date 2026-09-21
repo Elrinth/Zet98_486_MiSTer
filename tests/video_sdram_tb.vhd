@@ -5,6 +5,7 @@ use ieee.numeric_std.all;
 package video_capture is
     type capture_t is protected
         procedure write_word(data : std_logic_vector(15 downto 0); address : natural);
+        procedure expect_page(index : natural; page : std_logic);
         procedure check_lines(lines : natural);
     end protected;
     shared variable capture : capture_t;
@@ -13,12 +14,17 @@ package body video_capture is
     type capture_t is protected body
     type counts_t is array(0 to 3) of natural;
     variable capture_counts : counts_t := (others=>0);
+    type pages_t is array(0 to 639) of std_logic;
+    variable pages : pages_t := (others=>'X');
+    procedure expect_page(index : natural; page : std_logic) is
+    begin pages(index):=page; end procedure;
     procedure write_word(data : std_logic_vector(15 downto 0); address : natural) is
         variable plane, word : natural;
     begin
         assert not is_x(data) report "Unknown graphics plane data" severity failure;
         plane:=to_integer(unsigned(data(15 downto 14)));
-        word:=to_integer(unsigned(data(13 downto 0)));
+        word:=to_integer(unsigned(data(12 downto 0)));
+        assert data(13)=pages(word) report "Graphics plane from wrong display page" severity failure;
         assert word=capture_counts(plane) and address=word mod 40
             report "Missing, duplicate or reordered graphics word: plane=" &
                 integer'image(plane) & " word=" & integer'image(word) &
@@ -76,7 +82,7 @@ use work.video_capture.all;
 use work.VIDEO_TIMING_pkg.all;
 
 entity video_sdram_tb is
-    generic(PHASE_PS : natural := 0; DATA_DELAY_NS : natural := 20; ADDRESS_DELAY_NS : natural := 20);
+    generic(PHASE_PS : natural := 0; DATA_DELAY_NS : natural := 20; ADDRESS_DELAY_NS : natural := 20; CPU_MHZ : positive := 50);
 end entity;
 architecture test of video_sdram_tb is
     signal memclk, pixelclk, cpuclk, rstn, ready : std_logic := '0';
@@ -87,6 +93,11 @@ architecture test of video_sdram_tb is
     signal dq : std_logic_vector(15 downto 0) := (others=>'Z');
     signal ga : std_logic_vector(13 downto 0);
     signal va : std_logic_vector(21 downto 0);
+    signal delayed_ga : std_logic_vector(13 downto 0);
+    signal cpu_page : std_logic := '1';
+    -- Two CDC stages, SDRAMC.MEMADR, then the physical PMEMADR register.
+    signal page_history : std_logic_vector(3 downto 0) := "0000";
+    signal front_reads, back_reads : natural := 0;
     signal rd, ack : std_logic;
     type words_t is array(0 to 3) of std_logic_vector(15 downto 0);
     signal data, delayed_data : words_t;
@@ -96,7 +107,17 @@ architecture test of video_sdram_tb is
     signal commands : natural := 0;
 begin
     memclk<=not memclk after 5 ns;
-    cpuclk<=not cpuclk after 10 ns;
+    cpuclk<=not cpuclk after (500000 / CPU_MHZ) * 1 ps;
+    process begin
+        wait until ready='1';
+        loop
+            for edge in 1 to 37 loop wait until rising_edge(cpuclk); end loop;
+            cpu_page<=not cpu_page;
+        end loop;
+    end process;
+    process(memclk) begin
+        if rising_edge(memclk) then page_history<=page_history(2 downto 0) & cpu_page; end if;
+    end process;
     process begin
         wait for PHASE_PS * 1 ps;
         loop pixelclk<='1'; wait for 20 ns; pixelclk<='0'; wait for 20 ns; end loop;
@@ -104,7 +125,10 @@ begin
     delays : for lane in 0 to 3 generate
         delayed_data(lane)<=transport data(lane) after DATA_DELAY_NS * 1 ns;
     end generate;
-    va <= transport "000000" & ga & "00" after ADDRESS_DELAY_NS * 1 ns;
+    delayed_ga <= transport ga after ADDRESS_DELAY_NS * 1 ns;
+    display_address : entity work.display_page_address
+        port map(memory_clk=>memclk, async_rstn=>rstn, cpu_page=>cpu_page,
+                 pixel_address=>delayed_ga, memory_address=>va);
     memory : entity work.SDRAMC generic map(22,100,64000/8192) port map(
         PMEMCKE=>cke, PMEMCS_N=>cs, PMEMRAS_N=>ras, PMEMCAS_N=>cas,
         PMEMWE_N=>we, PMEMUDQ=>udq, PMEMLDQ=>ldq, PMEMBA1=>ba1,
@@ -136,11 +160,17 @@ begin
     process
         variable row : unsigned(12 downto 0) := (others=>'0');
         variable addr : unsigned(21 downto 0);
-        variable word : natural;
+        variable word, page : natural;
     begin
         wait until falling_edge(memclk);
         if ready='1' then
-            if cs='0' and ras='0' and cas='1' and we='1' then row:=unsigned(ma); end if;
+            if cs='0' and ras='0' and cas='1' and we='1' then
+                row:=unsigned(ma);
+                if ba0='0' then
+                    assert ma(12 downto 8)="00010" and ma(7)=page_history(3)
+                        report "Wrong or unsynchronized graphics display page" severity failure;
+                end if;
+            end if;
             if cs='0' and ras='1' and cas='0' and we='1' then
                 if ba0='1' then
                     dq<=x"a55a" after 20 ns, (others=>'Z') after 30 ns;
@@ -151,10 +181,13 @@ begin
                 -- already present in the row. Test crosses multiple rows.
                 word:=to_integer(addr(15 downto 2));
                 assert word=commands report "Wrong graphics SDRAM address" severity failure;
-                dq<=std_logic_vector(to_unsigned(word,16)) after 20 ns,
-                    std_logic_vector(to_unsigned(16#4000#+word,16)) after 30 ns,
-                    std_logic_vector(to_unsigned(16#8000#+word,16)) after 40 ns,
-                    std_logic_vector(to_unsigned(16#c000#+word,16)) after 50 ns,
+                capture.expect_page(commands,addr(16));
+                if addr(16)='1' then page:=16#2000#; back_reads<=back_reads+1;
+                else page:=0; front_reads<=front_reads+1; end if;
+                dq<=std_logic_vector(to_unsigned(page+word,16)) after 20 ns,
+                    std_logic_vector(to_unsigned(16#4000#+page+word,16)) after 30 ns,
+                    std_logic_vector(to_unsigned(16#8000#+page+word,16)) after 40 ns,
+                    std_logic_vector(to_unsigned(16#c000#+page+word,16)) after 50 ns,
                     (others=>'Z') after 60 ns;
                 commands<=commands+1;
                 end if;
@@ -173,6 +206,7 @@ begin
     end process;
     process begin
         wait for 137 ns;
+        assert va(21 downto 16)="000100" report "Display page not reset to front" severity failure;
         for plane in 0 to 3 loop
             assert data(plane)=x"0000" report "Graphics plane not reset" severity failure;
         end loop;
@@ -190,6 +224,7 @@ begin
         wait until rising_edge(pixelclk);
         assert cpu_commands>100 report "CPU contention was not exercised" severity failure;
         assert commands=640 report "Incorrect graphics burst count" severity failure;
+        assert front_reads>100 and back_reads>100 report "Both display pages not exercised" severity failure;
         report "PASS: 16 four-plane graphics lines, phase=" & integer'image(PHASE_PS) &
             " ps, data route=" & integer'image(DATA_DELAY_NS) & " ns, >=20 ns capture margin";
         finish;

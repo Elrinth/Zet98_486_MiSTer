@@ -3152,8 +3152,10 @@ DBIO_ODAT<=(others=>'1');
 					VID_KNJ2DAT when VID_KNJSEL="10" else
 					(others=>'0');
 	
-	GRAMADR<=	RAM_VRAMF(21 downto 16) & GADDR & "00" when gGDC_VGRAMSEL='0' else
-					RAM_VRAMB(21 downto 16) & GADDR & "00";
+    display_address : entity work.display_page_address
+        generic map(FRONT_PAGE=>RAM_VRAMF(21 downto 16), BACK_PAGE=>RAM_VRAMB(21 downto 16))
+        port map(memory_clk=>ramclk, async_rstn=>srstn, cpu_page=>gGDC_VGRAMSEL,
+                 pixel_address=>GADDR, memory_address=>GRAMADR);
 	
 	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,grpclk,srstn);
 	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,grpclk,srstn);

@@ -54,3 +54,26 @@ and reset. The existing integer-scaling and actual wrapper viewport tests
 also pass. The default HDL Docker image now includes Python for the top-level
 mapping check. Physical timing and hardware validation of the scaler-mode
 instance are pending.
+
+## SDRAM display-page selection
+
+The CPU-written display-page bit formerly fed the SDRAM row-address mux
+directly. PaletteTransfer60 reports -0.114 ns on that path. The separate
+`display_page_address` entity now synchronizes this single bit with two
+100 MHz memory-clock registers and a local reset-release chain. Its second
+stage selects the original front/back page constants. Pixel addresses retain
+the existing held graphics request protocol, and no SDRAM transaction cycle
+is added. Page changes gain synchronization latency; this is not a frame-boundary
+page-flip mechanism.
+
+Only the CPU bit to the first stage and the reset synchronizer's two CLRN
+pins are excepted. The second stage, row mux and all memory consumers remain
+normally timed. The real SDRAMC/GRAPHSCR integration regression switches pages
+while CPU traffic competes with 640 graphics bursts. It checks page selection
+at the physical SDRAM pins and the page/word/plane identity of all 2560 returned
+words, accounting for both MEMADR and PMEMADR registers. All 36 CPU-rate/phase
+combinations pass at 20/40/50/60/90/100 MHz and six pixel phases, with the existing
+20 ns address/data delay tests. Reset selects the front page even if the CPU
+input starts high. Late-data and live-page-bypass negative controls fail.
+These tests do not establish full-core operation at 90/100 MHz. Physical timing
+and hardware tests of this new page synchronizer are pending.
