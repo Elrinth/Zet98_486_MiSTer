@@ -145,6 +145,15 @@ a relocated COM segment, substituting a result port for DOS file operations.
 A 64 MB diagnostic must reject the 16 MB model. The probe is destructive to
 extended RAM and must boot without XMS/EMS managers or resident applications.
 
+`run-sdram.sh` exercises the actual SDRAM controller CPU port at 20/40/50 MHz.
+Each run checks 384 requests on the SDRAM command pins: row/column/bank,
+single/four-plane reads and writes, byte/plane masks, completion counts and
+read-modify-write data that changes after the read command. A small constant
+read-burst source supplies data; this is not a SDRAM electrical timing model.
+The controller now uses the request's registered address/bank/masks, while
+keeping graphics RMW write data live. Arbitration with other ports and FPGA
+timing require separate validation.
+
 Icarus 11 propagates pull defaults from some Intel model input ports into
 connected Verilog registers. The test script inserts identity expressions at
 those connections in temporary simulation copies. Vendored and synthesized

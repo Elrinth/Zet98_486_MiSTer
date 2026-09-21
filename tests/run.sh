@@ -15,6 +15,7 @@ iverilog -g2012 -Wall -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
     rtl/cpu/ao486_bus_bridge.sv tests/ao486_memory_integration_tb.sv
 vvp "$out/memory-integration.vvp"
 bash tests/run-extmem-bridge.sh
+bash tests/run-sdram.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \
     LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb
