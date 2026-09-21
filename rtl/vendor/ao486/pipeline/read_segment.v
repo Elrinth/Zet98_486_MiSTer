@@ -221,13 +221,28 @@ assign rd_seg_ss_fault_init = seg_select == 3'd2 && seg_fault;
 
 //------------------------------------------------------------------------------
 
+// Keep parallel address sums before the late segment selection. Without
+// retained nets Quartus can share an adder after the mux, extending the
+// read-command-to-memory-request critical path. Arithmetic still wraps at 32 bits.
+(* keep = "true" *) wire [31:0] es_linear;
+assign es_linear = es_base + rd_address_effective;
+(* keep = "true" *) wire [31:0] cs_linear;
+assign cs_linear = cs_base + rd_address_effective;
+(* keep = "true" *) wire [31:0] ss_linear;
+assign ss_linear = ss_base + rd_address_effective;
+(* keep = "true" *) wire [31:0] ds_linear;
+assign ds_linear = ds_base + rd_address_effective;
+(* keep = "true" *) wire [31:0] fs_linear;
+assign fs_linear = fs_base + rd_address_effective;
+(* keep = "true" *) wire [31:0] gs_linear;
+assign gs_linear = gs_base + rd_address_effective;
 assign rd_seg_linear =
-    (seg_select == 3'd0)?       es_base + rd_address_effective :
-    (seg_select == 3'd1)?       cs_base + rd_address_effective :
-    (seg_select == 3'd2)?       ss_base + rd_address_effective :
-    (seg_select == 3'd3)?       ds_base + rd_address_effective :
-    (seg_select == 3'd4)?       fs_base + rd_address_effective :
-                                gs_base + rd_address_effective;
+    (seg_select == 3'd0)? es_linear :
+    (seg_select == 3'd1)? cs_linear :
+    (seg_select == 3'd2)? ss_linear :
+    (seg_select == 3'd3)? ds_linear :
+    (seg_select == 3'd4)? fs_linear :
+                            gs_linear;
 
 //------------------------------------------------------------------------------
 

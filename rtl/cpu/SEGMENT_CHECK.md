@@ -24,3 +24,17 @@ The former segment path is no longer the worst path; the new worst path
 runs from read_commands through pipeline readiness and instruction decode.
 This is a physical-fit regression, not a measured speed improvement.
 The complete-core 50/60 MHz fits and hardware validation remain pending.
+
+The no-retiming 66 MHz experiment reports 60.44 MHz Fmax and -1.395 ns
+worst setup. Its critical path moves to write result / ECX through rd_eip.
+This small improvement still fails 66 MHz; the production retiming setting
+has not changed.
+
+The Metadata60 complete fit also places late segment selection before an
+address adder on its read-command-to-memory-request path. The six segment
+base-plus-offset sums now have retained intermediate nets, so address
+arithmetic is available before the final selection. All sums still wrap at
+32 bits and selectors 5/6/7 retain GS behavior. The original reference's
+4,637,520 cases, full CPU smoke test, cached coherency/benchmark tests and
+16/64 MB protected-mode memory tests pass; cycle counts are unchanged.
+FPGA timing and hardware validation of these retained sums remain pending.
