@@ -1385,3 +1385,44 @@ test compile used a reserved VHDL identifier; the corrected complete run is
 `build/video-settings-tests-v2.log`. Physical timing and hardware validation
 are pending. See `rtl/VIDEO_SETTINGS_TRANSFER.md` for the handshake and scoped
 constraints.
+
+### MIDI withdrawal fix on hardware
+
+MidiPollFix50 (source `85444af`) passes all sixteen post-fit corner checks,
+minimum +0.084 ns, and the fitted HPS SPI/HDMI-I2C/UART location guards.
+The RBF SHA-256 is
+`dadf56000097d3ea86bf81f02e24e8bf229b1c490594f25559ebaed528251161`.
+Board-I/O constraint coverage remains incomplete.
+
+The same silent polled-ACK diagnostic was loaded at 21:46:51 on 2026-09-21.
+Its returned file at 21:48:20 reports `ACK=FE IRR=00 IRQ=00 EMPTY=00`, versus
+`FE/40/01/01` on HPSCache50. This confirms removal of the stale IRQ6 after
+software consumes FEh with interrupts disabled. The companion v2 test was
+loaded at 21:48:38 and passes 200 acknowledged commands/IRQ6/EOI, including
+99 interspersed UART resets that must not acknowledge. At 21:49:46 the HPS
+capture reports all 134 expected SysEx bytes at offset zero, with termios
+restored; packet SHA-256 remains
+`49a265aaedf5513a3b0d2c4a3ce3f4d90c26426a51b19d2b439c268c0427a38f`.
+These are silent compatibility tests, not audible game playback verification.
+The private DOS VHD was loaded with MPU enabled at 21:50:32 for that next test.
+
+Nightslave selected at 21:52:40 passes its former driver-startup stall and
+shows its title by 21:53:48 with MPU enabled. Its Music Type was changed from
+FM1 through FM2 to MIDI (MPU/RS-232C), then applied by leaving configuration.
+UART receive count rises from 402 to 6737 at 22:00:04. After selecting the
+first data slot on the disposable test VHD, the synth reports the game's
+GS instrument programs and varying active voices while UART traffic continues.
+FluidSynth PID 5539 has both ALSA sequencer and `/dev/MrAudio` outputs open.
+This verifies game MIDI reception and active software synthesis; it does not
+measure TV audio quality or certify complete soundtrack timing.
+
+The PaletteTransfer60 candidate fails seven summary checks, worst setup
+-0.413 ns at LFB_EN to scaler input-mode, CPU -0.198 ns, memory graphics-bank
+selection -0.114 ns, and video capture hold -0.338 ns. The held palette path
+is no longer among the reported failing paths. It was not loaded. The initial
+GDC snapshot candidate stops at its collection guard: synthesis removes
+LINENUM1 (bits 95..104), whose final GRAPHSCR98 input is unused. The revised
+guard checks all 111 consumed bits individually in both banks and passes
+mapped-design validation using the original reset instance names. Its local
+reset instances now have unique names so the legacy video-reset constraint
+does not accidentally collect the new chain. Full fitting remains pending.

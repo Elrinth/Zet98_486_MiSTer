@@ -20,8 +20,8 @@ architecture rtl of video_settings_transfer is
     attribute altera_attribute of request_sync,ack_sync:signal is
         "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 begin
-    cpu_reset:entity work.reset_release port map(cpu_clk,rstn,cpu_rstn);
-    video_reset:entity work.reset_release port map(video_clk,rstn,video_rstn);
+    settings_cpu_reset:entity work.reset_release port map(cpu_clk,rstn,cpu_rstn);
+    settings_video_reset:entity work.reset_release port map(video_clk,rstn,video_rstn);
     transfer_data<=held_data;
     settings_out<=received_data;
     process(cpu_clk,cpu_rstn) begin

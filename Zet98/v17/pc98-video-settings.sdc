@@ -4,9 +4,23 @@
 # delayed-payload/early-capture regressions in tests/run-video-settings.sh.
 set settings_payload [get_registers {*|gdc_settings|held_data*}]
 set settings_capture [get_registers {*|gdc_settings|received_data*}]
-if {[get_collection_size $settings_payload] < 121 ||
-    [get_collection_size $settings_capture] < 121} {
-    error "Expected the complete 121-bit GDC settings snapshot"
+# GRAPHSCR98 declares LINENUM1 but never consumes it. Quartus removes that
+# field (bits 95..104) in both banks. Check every actually consumed bit;
+# aggregate counts alone could be satisfied by replicated registers.
+foreach bank [list $settings_payload $settings_capture] {
+    set present [dict create]
+    foreach_in_collection reg $bank {
+        set name [get_node_info $reg -name]
+        if {[regexp {(held_data|received_data)\[([0-9]+)\]} $name unused field bit]} {
+            dict set present $bit 1
+        }
+    }
+    for {set bit 0} {$bit < 121} {incr bit} {
+        if {$bit >= 95 && $bit <= 104} {continue}
+        if {![dict exists $present $bit]} {
+            error "Missing consumed GDC settings snapshot bit $bit"
+        }
+    }
 }
 set_max_delay -from $settings_payload -to $settings_capture 20.000
 foreach {source first_stage} {
@@ -20,7 +34,7 @@ foreach {source first_stage} {
     }
     set_false_path -from $launch -to $capture
 }
-foreach reset {cpu_reset video_reset} {
+foreach reset {settings_cpu_reset settings_video_reset} {
     set clears [get_pins -compatibility_mode "*|gdc_settings|${reset}|stages*|clrn"]
     if {[get_collection_size $clears] != 2} {
         error "Expected two GDC settings reset synchronizer CLRN pins: $reset"

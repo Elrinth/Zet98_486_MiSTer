@@ -24,6 +24,11 @@ is at least two complete 75 MHz video periods after launch (26.66 ns), leaving
 inputs and the four local reset synchronizer CLRN pins have false paths.
 All later stages and CRTC consumers retain normal timing checks. Register and
 pin collection guards reject a missing or incomplete transfer in Quartus.
+The logical map is 121 bits. `GRAPHSCR98` declares but does not consume its
+ten-bit `LINENUM1` input, so synthesis removes bits 95..104 in both banks.
+The guard requires every one of the other 111 bits individually, allowing
+register replication without masking a missing field. No live field is
+exempted from timing.
 
 The regression checks coherent sequence patterns, hot writes, reset, stable
 outputs between video edges, and final delivery within one microsecond. A
