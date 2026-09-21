@@ -3,10 +3,13 @@
 // Initial ao486 connection to Zet98's legacy memory/peripheral fabric.
 // The existing fabric implements the low 1 MB. Reset ROM aliases are explicit;
 // other physical addresses read as FFFF and discard writes, never alias RAM.
-// Extended RAM and external DMA/cache coherence remain integration work.
-module pc98_ao486 (
+// Instruction caching is limited to fixed low RAM, with external invalidation.
+module pc98_ao486 #(
+    parameter ICACHE_ENABLE = 1'b1
+) (
     input  wire        clk,
     input  wire        reset,
+    input  wire        cache_invalidate,
     input  wire        interrupt_do,
     input  wire [7:0]  interrupt_vector,
     output wire        interrupt_done,
@@ -73,7 +76,8 @@ module pc98_ao486 (
     assign unmapped_access = physical_strobe && !mapped;
 
     ao486 cpu (
-        .clk(clk), .rst_n(!cpu_reset), .a20_enable(a20_enable), .cache_disable(1'b1),
+        .clk(clk), .rst_n(!cpu_reset), .a20_enable(a20_enable), .cache_disable(!ICACHE_ENABLE),
+        .cache_invalidate(cache_invalidate),
         .interrupt_do(interrupt_do), .interrupt_vector(interrupt_vector), .interrupt_done(interrupt_done),
         .avm_address(avm_address), .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount), .avm_write(avm_write), .avm_read(avm_read),

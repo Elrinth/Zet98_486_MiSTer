@@ -6,6 +6,9 @@ module l1_icache
 	input             pr_reset,
 	
 	input             DISABLE,
+	// Zet98: level-sensitive invalidation. Drain an outstanding memory burst,
+	// discard its prefetched result, then clear all tags before another lookup.
+	input             INVALIDATE,
 
 	input             CPU_REQ,
 	input      [31:0] CPU_ADDR,
@@ -75,6 +78,7 @@ reg [CACHEBURST_BITS-1:0] burstleft;
 
 reg   [2:0] state;
 reg         CPU_REQ_hold;
+reg         invalidate_pending;
 
 // fifo for snoop
 wire [61:0] Fifo_dout;
@@ -93,7 +97,7 @@ isimple_fifo (
 	.wrreq(snoop_we),
 
 	.q(Fifo_dout),
-	.rdreq((state == IDLE) && !Fifo_empty),
+	.rdreq((state == IDLE) && !INVALIDATE && !invalidate_pending && !Fifo_empty),
 	.empty(Fifo_empty)
 );
 	
@@ -118,9 +122,11 @@ always @(posedge CLK) begin : mainfsm
 
 		MEM_REQ         <= 1'b0;
 		CPU_REQ_hold    <= 1'b0;
+		invalidate_pending <= 1'b0;
 	end
 	else begin
 		if (CPU_REQ) CPU_REQ_hold <= 1'b1;
+		if (INVALIDATE) invalidate_pending <= 1'b1;
 
 		// LRU update after read
 		LRU_we <= CPU_VALID && ~LRU_we;
@@ -156,7 +162,18 @@ always @(posedge CLK) begin : mainfsm
 		
 			IDLE:
 				begin
-					if (!Fifo_empty) begin
+					if (INVALIDATE) begin
+						// External DMA may own memory for many cycles. Coalesce
+						// all writes and wait until the owner releases the bus.
+					end
+					else if (invalidate_pending) begin
+						state              <= START;
+						update_tag_addr    <= {LINE_BITS{1'b0}};
+						update_tag_we      <= 1'b1;
+						tags_dirty_in      <= {ASSOCIATIVITY{1'b1}};
+						invalidate_pending <= 1'b0;
+					end
+					else if (!Fifo_empty) begin
 						state         <= WRITEONE;
 						read_addr     <= Fifo_dout[25:0];
 						memory_addr_a <= Fifo_dout[RAMSIZEBITS - 1:0];
@@ -185,7 +202,7 @@ always @(posedge CLK) begin : mainfsm
 
 			READONE:
 				begin
-					if (pr_reset) begin
+					if (pr_reset || INVALIDATE || invalidate_pending) begin
 						state     <= IDLE;
 						CPU_DONE  <= 1'b1;
 					end else begin

@@ -31,6 +31,7 @@ module icache(
     input           rst_n,
     
     input           cache_disable,
+    input           cache_invalidate,
     
     //RESP:
     input           pr_reset,
@@ -101,7 +102,7 @@ reg   [1:0]  reset_prefetch_count = 2'd0;
 
 //------------------------------------------------------------------------------
 
-wire reset_combined = reset_prefetch | pr_reset;
+wire reset_combined = reset_prefetch | pr_reset | cache_invalidate;
 
 always @(posedge clk) begin
     prefetch_checknext <= 1'b0;
@@ -117,7 +118,8 @@ always @(posedge clk) begin
     end
     
     // Reset the prefetch fifo when a write hits it (checks are done in linear address space)
-    if (prefetch_checknext && prefetch_checkaddr >= min_check && prefetch_checkaddr <= max_check) begin
+    if (cache_invalidate ||
+        (prefetch_checknext && prefetch_checkaddr >= min_check && prefetch_checkaddr <= max_check)) begin
         reset_prefetch       <= 1'b1;
         reset_prefetch_count <= 2'd2;
     end
@@ -159,7 +161,10 @@ l1_icache l1_icache_inst(
     .RESET           (~rst_n),
     .pr_reset        (reset_combined),
     
-    .DISABLE         (cache_disable),
+    // Zet98: only fixed low RAM is cacheable. Banked windows, VRAM and
+    // reset/BIOS aliases must fetch again when mappings or contents change.
+    .DISABLE         (cache_disable || readcode_cache_address >= 32'h00080000),
+    .INVALIDATE      (cache_invalidate),
     
     .CPU_REQ         (readcode_cache_do),
     .CPU_ADDR        (readcode_cache_address),

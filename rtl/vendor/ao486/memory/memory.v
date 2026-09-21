@@ -31,6 +31,7 @@ module memory(
     input               rst_n,
     
     input               cache_disable,
+    input               cache_invalidate,
 
     //REQ:
     input               read_do,
@@ -401,6 +402,7 @@ icache icache_inst(
     .rst_n                      (rst_n),
                                 
     .cache_disable              (cache_disable),
+    .cache_invalidate           (cache_invalidate),
                                 
     //RESP:                     
     .pr_reset                   (pr_reset),                   //input

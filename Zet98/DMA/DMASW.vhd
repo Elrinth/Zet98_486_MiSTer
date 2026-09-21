@@ -20,20 +20,19 @@ signal	dmaenb	:std_logic;
 
 begin
 	process(clk,rstn)
-	variable lstb	:std_logic;
 	begin
 		if(rstn='0')then
 			dmaenb<='0';
-			lstb:='0';
 		elsif(clk' event and clk='1')then
 			if(dmabreq='1')then
-				if(cpustb='0' and lstb='1')then
+				-- Cached code and HLT can leave the CPU bus idle indefinitely.
+				-- An idle bus is available without waiting for a new falling edge.
+				if(cpustb='0')then
 					dmaenb<='1';
 				end if;
 			elsif(dmabreq='0')then
 				dmaenb<='0';
 			end if;
-			lstb:=cpustb;
 		end if;
 	end process;
 	

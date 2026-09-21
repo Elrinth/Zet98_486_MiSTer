@@ -24,6 +24,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Unable to read the installed Intel simulation models.' }
         & docker --context $DockerContext run --rm --network none --mount $sourceMount $SimulationImage bash tests/run-cpu.sh
         if ($LASTEXITCODE -ne 0) { throw 'Full ao486 CPU test failed.' }
+        & docker --context $DockerContext run --rm --network none --mount $sourceMount $SimulationImage bash tests/run-cache.sh
+        if ($LASTEXITCODE -ne 0) { throw 'ao486 cache coherence/performance test failed.' }
     }
 } finally {
     Pop-Location

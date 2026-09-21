@@ -93,7 +93,8 @@ or game data is included in the tests. A DOS-reported successful log write is
 not proof that the core has persisted it to the host D88.
 
 The full CPU test is `tests/run-cpu.sh`. It assembles `ao486_smoke.asm` with NASM
-and runs the unmodified ao486 CPU/cache sources with the PC-98 CPU wrapper and
+and runs the imported ao486 CPU/cache sources, including the documented local
+cache changes, with the PC-98 CPU wrapper and
 Intel RAM models. It checks a 486-only instruction (`BSWAP`), unaligned DWORD
 memory and odd-port I/O, `REP MOVSD`, A20 wrapping and unmapped-memory isolation,
 high reset-ROM aliases, interrupt/IRET, and a CPU-only reset that retains RAM.
@@ -102,5 +103,20 @@ The upstream simulation observer is supplied as a read-only test hook.
 Icarus 11 propagates pull defaults from some Intel model input ports into
 connected Verilog registers. The test script inserts identity expressions at
 those connections in temporary simulation copies. Vendored and synthesized
-sources remain unchanged. These tests use actual CPU execution but not the
+sources are not altered by the simulation workaround. These tests use actual CPU execution but not the
 complete PC-98 peripherals, real BIOS or floppy images.
+
+`run-cache.sh` uses the real instruction cache and Intel RAM models to test
+warm hits, level-held/repeated invalidation, a request queued during tag clearing,
+and invalidation during an outstanding burst. A full CPU program then runs with
+cache off and on: it checks externally modified warmed code, CPU self-modifying
+code, uncacheable upper-window code, and ALU/VRAM-copy checksums. The synthetic
+bus uses eight added wait cycles by default (`+wait=N` overrides it). It prints
+cycles and bus transfers for two small hot loops; these are diagnostic
+microbenchmarks, not Rusty frame rates or a model of complete SDRAM arbitration.
+A negative control disconnects invalidation and must fail on stale code.
+
+`run-cache-map.sh` combines the actual memory mapper with the marked production
+invalidation expression. It checks 3,328 bank/read/write/I/O cases plus DMA
+ownership. The DMA grant test separately checks requesting an already idle bus,
+waiting for an active CPU transfer, retaining ownership and release/reset.

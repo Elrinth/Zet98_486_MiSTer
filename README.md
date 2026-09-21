@@ -6,15 +6,18 @@ initially a SuperStation One with SuperDock. A faster CPU must preserve game,
 video, timer, sound and disk timing.
 
 **The default build uses Zet; the optional ao486 integration is experimental.**
-The first ao486 hardware test reaches DOS, Rusty's sound-driver loading and
-the C-Lab logo with the user's BIOS/disks. Severe video corruption was observed;
-it later affected Console Mode too and cleared after a full power cycle.
-PC-98 text is now stable, but the logo appears white and the Opening disk is
-unavailable through DOS drive B in the isolated reference test. There is
-no Rusty speedup or DX4-100 performance claim yet.
+The ao486 DiskFix hardware test reaches DOS, displays Rusty's C-Lab logo
+correctly and plays opening cutscenes with the user's BIOS/disks. The user
+reports extremely poor performance; speed remains the primary unresolved
+target. Earlier severe video corruption affected Console Mode too and cleared
+after a full power cycle. The isolated DOS probe now reads both System and
+Opening disks and persists its log to the host image. There is no Rusty speedup
+or DX4-100 performance claim yet.
 The source now fixes a truncated HPS disk acknowledgement that prevented
 slots 1–3 from completing transfers. The regression reproduces the old failure
-and passes with the fix; a new FPGA build and hardware retest are pending.
+and passes with the fix. Hardware also requires waiting for image loading
+before reset: a 60-second delay makes drive B accessible in the DOS probe,
+where the earlier three-second delay did not. Rusty gameplay remains unverified.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -97,16 +100,23 @@ establish a higher usable clock. The test RBF is for boot investigation only.
 The source now removes a combinational feedback loop between the two PC-98
 data-bus byte lanes. Device selection is resolved before DMA byte routing,
 preserving the old priorities without routing final outputs back into each
-other. Simulation matches the historical mux over 57,748 cases. The fitted
-timing comparison is pending; this is not yet a clock-rate or speedup result.
+other. Simulation matches the historical mux over 57,748 cases. The new fit
+improves worst reported slack from -22.883 ns to -5.493 ns, but still fails
+timing; the additional pixel-clock audit also finds violations. This is not
+yet a clock-rate or speedup result, and this bus rewrite is not yet deployed.
 
 This first integration deliberately retains the existing low-1-MB memory map.
 Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
 CPU control ports F0/F2/F6 implement reset and A20 controls, using
 [NP2kai's CPU I/O implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/io/cpuio.c)
-as a behavioral reference. Extended RAM, NMI, external DMA/cache coherence,
-independent CPU clocking and complete game compatibility remain work in progress. Cache
-is forced off during initial integration; this is not a performance release.
+as a behavioral reference. Extended RAM, NMI, independent CPU clocking and
+complete game compatibility remain work in progress. Cache is forced off in
+the currently deployed DiskFix RBF. The source enables instruction caching for
+fixed low RAM, with full invalidation for external DMA and aliased bank-window
+writes. It also allows DMA to acquire an already idle CPU bus, which becomes
+essential when the CPU executes cached code. Simulation passes, including
+stale-code negative controls. The FPGA build and hardware comparison are
+pending; this is not yet a hardware performance result.
 
 Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
 Hardware observations and the isolated test setup are recorded in
@@ -117,14 +127,15 @@ the PC-98 speaker for ten seconds after core start/reset, then restores it
 automatically. FM/PSG audio paths and mixer gain are preserved. Select **Off**
 to hear startup beeps immediately. This is a fixed timer, not BIOS-completion
 detection; early software speaker tones within those ten seconds are also
-muted. This option is not present in the existing test RBFs.
+muted. It is included in the experimental `Zet98_486_DiskFix_20260921` test RBF;
+the audible hardware check is pending.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,
 not video synchronization; it does not claim to fix the observed frame glitches.
-This option was added after the first ao486 test RBF and is not in that image.
+It is present in the newer DiskFix test RBF, but not the first ao486 image.
 
-The next video test build registers pixel data, blanking and sync together
+The newer experimental test build registers pixel data, blanking and sync together
 with the MiSTer pixel enable. It also replaces the variable modulo in the text
 font-address path with a scanline counter, verified for all 32 character heights.
 `Video test: Color bars` supplies an independent 640x480 raster through the

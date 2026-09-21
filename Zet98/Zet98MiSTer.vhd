@@ -132,6 +132,7 @@ end component;
 component pc98_ao486
 port(
     clk, reset :in std_logic;
+    cache_invalidate :in std_logic;
     interrupt_do :in std_logic;
     interrupt_vector :in std_logic_vector(7 downto 0);
     interrupt_done :out std_logic;
@@ -1825,6 +1826,7 @@ signal	DMAUM_CS:std_logic;
 signal	abus	:std_logic_vector(19 downto 1);
 signal	dbus	:std_logic_vector(15 downto 0);
 signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
+signal cache_invalidate :std_logic;
 signal	bussel	:std_logic_vector(1 downto 0);
 
 --io port
@@ -2355,7 +2357,8 @@ begin
             interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
-            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open
+            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open,
+            cache_invalidate=>cache_invalidate
         );
         cyc<=stb;
         nmia<='0';
@@ -2559,6 +2562,17 @@ begin
 	DMA_BACK<=DMAen;
 	
 	cpuack<=ack when DMAen='0' else '0';
+
+    -- Cache only fixed RAM below 80000h. External DMA must invalidate it;
+    -- CPU writes through either banked window can also alias that RAM without
+    -- matching ao486's physical-address snoop. Hold invalidation until the
+    -- entire write/bus ownership interval ends, not merely its first cycle.
+    -- BEGIN PC98 CACHE INVALIDATION
+    cache_invalidate <= '1' when DMAen='1' else
+        '1' when MWR='1' and MSD_CS='1' and cpuaddr(19)='1' and
+                 CB_ADDR>=RAM_MAIN(21 downto 0) and
+                 CB_ADDR<(RAM_MAIN(21 downto 0)+x"40000") else '0';
+    -- END PC98 CACHE INVALIDATION
 	
 	DMAU_CS<='1' when ioaddr_odd(15 downto 3)=(x"002" & "0") and ioaddr_odd(0)='1' else '0';
 	DMAUM_CS<='1' when ioaddr_odd=x"0029" else '0';

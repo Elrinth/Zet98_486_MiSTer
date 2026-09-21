@@ -155,9 +155,8 @@ are unchanged. The timer continues while bypassed and saturates after expiry,
 so later menu changes do not restart it. Simulation passed exact duration,
 automatic restoration, reset, bypass, and saturation checks.
 Quartus Analysis & Elaboration also passed for the ao486 source snapshot
-`build/quartus-20260921-011511-1dccf1/source` (0 errors). No RBF with this feature has yet
-been loaded on the device. The device was left in Console Mode after the noisy
-disk-order trial.
+`build/quartus-20260921-011511-1dccf1/source` (0 errors). The feature is now in
+the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 ### Per-drive HPS acknowledgement fix
 
@@ -165,8 +164,9 @@ Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
 engine; slots 1–3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
-later System-disk writes. This explains the observed missing B drive and is
-consistent with the mount-order stall; hardware confirmation is still pending.
+later System-disk writes. This can prevent Opening-disk loading and is
+consistent with the mount-order stall. The hardware retests below confirm
+writeback and, after allowing image-loading time, DOS access to both drives.
 
 The wrapper now retains all four bits and ORs them for the serialized legacy
 engine. All slots explicitly request one 512-byte block. Mount read-only
@@ -179,7 +179,35 @@ The real wrapper/HPS regression passes reads and writes on all four slots
 negative control restoring only the scalar ACK fails at slot 1, as expected.
 The existing adapter, peripheral, video and startup-mute tests also pass.
 The next ao486 build snapshot is `build/quartus-20260921-013307-8d60fc/source`.
-Its compilation and hardware checks are pending.
+Compilation completed in 24m48s with 32,146 / 41,910 ALMs (77%), 395 / 553
+RAM blocks, and 63 / 112 DSP blocks. Timing still fails: 11 negative-slack
+checks, worst `-22.883 ns`; CPU-register paths alone pass with `19.854 ns`
+slack. This is an experimental diagnostic build, not a verified release.
+
+RBF SHA-256: `eab37f279929baef8181551c767ad5bbfaf7b690295cd73eea878ae81e548721`.
+The device checksum matched after upload as
+`_Computer/_Zet98_Test/Zet98_486_DiskFix_20260921.rbf`. It includes startup
+mute and the video-output/text-row changes, but not the later DMA bus rewrite.
+
+A fresh v1 probe image was launched with System first, Opening second and a
+three-second reset delay. Both host images were open. After boot/writeback,
+the retrieved System image contains `Z98DIAG.TXT`: A:\SYS_DISK reads correctly,
+but all B: paths still report `0003`. This proves actual DOS log persistence
+to the host D88; it does not prove second-drive access. A follow-up using the
+same program/core with a fresh System image and a 60-second reset delay
+succeeded. The retrieved log shows `B:\OP_DISK OK read=0000` and
+`B:\MGXLOAD.BIN OK read=0010`; the sixteen bytes read match the original
+Opening image exactly. `B:\SYS_DISK` now returns `0002` (missing file), as
+expected on a valid B drive containing the Opening disk. This isolates the
+reset delay as the remaining cause in this probe comparison. Keep a 60-second
+delay for now; the minimum safe delay and faster image loading remain unmeasured.
+
+Rusty was subsequently launched on the same DiskFix RBF with System/Opening
+images and that 60-second reset delay. It resets once after the initial wait.
+The user confirms a correctly displayed C-Lab logo and opening cutscenes, but
+reports extremely poor performance. This proves further game loading and
+visible intro graphics, not satisfactory gameplay speed. Startup-speaker
+confirmation and a repeatable gameplay measurement remain pending.
 
 ### DMA byte-lane feedback removal
 
@@ -199,11 +227,17 @@ routing-error control fails the test. This is mux equivalence, not a full DMA
 controller simulation or hardware result.
 
 The separate timing-comparison snapshot is
-`build/quartus-20260921-014115-47680a/source` (ao486, 20 MHz). Its fitted timing
-is pending. It includes the disk ACK fix and startup mute; the earlier disk-fix
-snapshot remains a comparison point without this bus change.
-Both snapshots have passed Quartus Analysis & Synthesis. The bus rewrite does
-not add registers (both report 27,077 registers); placement/routing is pending.
+`build/quartus-20260921-014115-47680a/source` (ao486, 20 MHz). Compilation
+completed in 25m32s with 32,458 ALMs (77%), 395 RAM blocks and 63 DSP blocks.
+Worst reported slack improves from -22.883 ns to -5.493 ns, with nine negative
+checks remaining. CPU-register setup alone passes at +20.828 ns. Both snapshots
+report 27,077 registers before fitting. No combinational-loop warning appears
+in the new build. Remaining critical paths include video counters feeding
+system-clock peripheral write inputs through the shared data bus.
+
+RBF SHA-256: `0889dc674ab81d1ce76e0fc28f918ba1113a581e8db0f3b5135a0f75bc18fc53`.
+It includes the disk ACK fix and startup mute, but is not deployed; Rusty's
+confirmed intro is on the earlier DiskFix snapshot without this bus change.
 
 ### Pixel-clock constraint audit
 
@@ -225,8 +259,49 @@ failures from/to the pixel clock (`-0.277 ns` / `-2.621 ns`).
 
 These are additional outstanding timing issues, not evidence that the bus fix
 failed or that the user's display symptoms have one established cause. The
-audit still needs repeating on the newer fits, and full production constraint
+audit on the new ao486 bus-rewrite fit reports setup from/to the pixel clock
+of -7.136 / -5.520 ns and hold of -0.175 / -2.384 ns. These are additional
+checks beyond its ordinary nine negative checks. Full production constraint
 coverage remains unfinished.
+
+### Instruction-cache performance work
+
+The DiskFix RBF that shows Rusty's intro still disables the instruction cache.
+The new source enables caching only below physical address 80000h. Upper and
+banked windows remain uncached. CPU writes use the existing instruction snoop;
+external DMA ownership and bank-window writes aliasing fixed RAM invalidate
+prefetch and all cache tags. An outstanding fill drains before tag clearing.
+This is an instruction-cache change, not the upstream platform's L2/data cache.
+
+The DMA arbiter previously required a falling CPU-strobe edge before granting
+ownership. Cached execution or HLT can leave the bus idle indefinitely, so DMA
+now acquires an already idle bus while still waiting for an active CPU transfer.
+The cache/map/DMA regressions and the full CPU smoke test pass. The latter needs
+590 legacy transfers versus the original uncached run's 1,822; this is a test
+program, not a Rusty performance measurement.
+
+The full CPU benchmark with eight simulated memory wait cycles reports an ALU
+loop of 434,005 cycles / 32,833 transfers with cache disabled and 6,361 / 17
+with cache enabled. A VRAM-write loop changes from 114,260 / 8,641 to
+6,463 / 417. Both verify output checksums. These deliberately small hot loops
+expose repeated code-fetch costs; their ratios must not be advertised as Rusty
+speedup. The memory model does not include the complete SDRAM/video arbitration.
+The negative control with external invalidation disconnected fails on stale
+code, confirming that the coherence test actually exercises cached instructions.
+
+Quartus Analysis & Elaboration passed before the small DMA idle-grant change.
+The complete build including it is in
+`build/quartus-20260921-022919-fb952a/source`; compilation/timing and hardware
+results are pending. An earlier cache build was deliberately stopped to include
+the DMA grant fix. No 66/100 MHz performance claim is established.
+
+`tests/hardware/cpu_bench.asm` is an 8086-compatible DOS benchmark for an isolated
+System disk. It measures 131,072 ALU iterations and word-copy iterations using
+the DOS clock, checks results and saves `Z98PERF.TXT`. Units are hundredths;
+zero means below timer resolution, and each kernel must take less than one hour.
+It does not measure game frame rate. The uncached baseline was launched on
+DiskFix at 02:34:10 local time, with a single disposable disk and a 60-second
+reset delay. Only its BOOT.COM contents differ from the supplied System image.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
