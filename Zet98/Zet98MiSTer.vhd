@@ -3042,10 +3042,12 @@ DBIO_ODAT<=(others=>'1');
 	KNJ2_DOE<=	KNJ_DOE when KNJ_RAMSEL="10" else '0';
 	
 
+	-- Text, attributes and font fetches use the renderer pixel clock.
+	-- CPU writes stay on the independent CPU ports of these dual-port RAMs.
 	KNJ0	:KANJI1RAMDP port map(
 		address_a		=>VID_KNJADDR,
 		address_b		=>KNJ_ADDR,
-		clock_a		=>vidclk,
+		clock_a		=>grpclk,
 		clock_b		=>cpuclk,
 		data_a		=>(others=>'0'),
 		data_b		=>KNJ_WRDAT,
@@ -3058,7 +3060,7 @@ DBIO_ODAT<=(others=>'1');
 	KNJ1	:KANJI1RAMDP port map(
 		address_a		=>VID_KNJADDR,
 		address_b		=>KNJ_ADDR,
-		clock_a		=>vidclk,
+		clock_a		=>grpclk,
 		clock_b		=>cpuclk,
 		data_a		=>(others=>'0'),
 		data_b		=>KNJ_WRDAT,
@@ -3071,7 +3073,7 @@ DBIO_ODAT<=(others=>'1');
 	KNJ2	:GAIJIRAMDP port map(
 		address_a		=>VID_KNJADDR,
 		address_b		=>KNJ_ADDR,
-		clock_a		=>vidclk,
+		clock_a		=>grpclk,
 		clock_b		=>cpuclk,
 		data_a		=>(others=>'0'),
 		data_b		=>KNJ_WRDAT,
@@ -3089,8 +3091,8 @@ DBIO_ODAT<=(others=>'1');
 	GRAMADR<=	RAM_VRAMF(21 downto 16) & GADDR & "00" when gGDC_VGRAMSEL='0' else
 					RAM_VRAMB(21 downto 16) & GADDR & "00";
 	
-	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,vidclk,srstn);
-	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,vidclk,srstn);
+	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,grpclk,srstn);
+	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,grpclk,srstn);
 	vadat<=vadatw(7 downto 0);
 
 	

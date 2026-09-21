@@ -70,16 +70,6 @@ signal	wPITCH	:std_logic_vector(12 downto 0);
 signal	TRAMADRx	:std_logic_vector(12 downto 0);
 signal	iskanji	:std_logic;
 
-component knjaddrcnv
-port(
-	kcode	:in std_logic_vector(15 downto 0);
-	cline	:in std_logic_vector(3 downto 0);
-	
-	romsel	:out std_logic_vector(1 downto 0);
-	romaddr	:out std_logic_vector(16 downto 0)
-);
-end component;
-
 component delayer
 generic(
 	counts	:integer	:=5
@@ -141,7 +131,10 @@ begin
 			if(HCOMP='1')then
 					TRAMADRx<=(others=>'1');
 					tramdatl<=(others=>'0');
-			elsif(TRAMADRb/=TRAMADRx)then
+			-- TRAM is synchronous to this pixel clock. The address advances at
+			-- UCOUNT=6; wait until the new RAM output is valid before deciding
+			-- whether to retain the right half of a two-cell Kanji character.
+			elsif(UCOUNT=2 and TRAMADRb/=TRAMADRx)then
 				if(iskanji='1' and TRAMDAT(15)='0')then
 					tramdatl<=TRAMDAT;
 					tramdatl(15)<='1';
@@ -156,9 +149,10 @@ begin
 	
 	tramdatm<=tramdatl when TRAMADRb=TRAMADRx else TRAMDAT;
 	
-	acnv	:knjaddrcnv port map(
+	acnv	:entity work.knjaddrcnv port map(
 		kcode	=>tramdatm,
 		cline	=>conv_std_logic_vector(C_LIN,4),
+		mon		=>open,
 		
 		romsel	=>FROMSEL,
 		romaddr	=>FROMADR

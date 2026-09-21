@@ -199,3 +199,7 @@ checks their results, and writes `Z98PERF.TXT`. Each block has 131,072 iteration
 Compare blocks per reported second using the same BIOS/settings. The clock may
 have coarse resolution despite expressing its result in hundredths; this is
 a synthetic throughput test, not a game frame-rate test.
+
+`run-text-pixel-memory.sh` checks rendered Latin and two-cell Kanji pixels,
+colors, reverse and underline with synchronous pixel-clock text/font memories.
+It sweeps 0/12/25 ns RAM delay and rejects a 200 ns late-data negative control.

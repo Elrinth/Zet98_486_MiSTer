@@ -583,7 +583,19 @@ The subsequent cache fit with explicit pixel clocks
 clocks and fails 23 checks, worst -3.139 ns. A separate cache revision moves
 validity into RAM and uses a nonblocking background clear, aiming to reduce
 logic use. Its unit and full CPU/coherence/extended-memory tests pass, with
-unchanged ALU/VRAM simulation kernels; fitting and hardware tests are pending.
+unchanged ALU/VRAM simulation kernels. Its 50 MHz fit
+(`quartus-20260921-062504-f9ca37`) completes in 37m42s with 33348 ALMs, 438 RAM
+blocks and 65 DSP blocks: 3616 fewer ALMs than the first cache. CPU setup is
++1.101 ns, but the complete design fails 21 timing checks, worst -2.703 ns.
+RBF SHA-256: `b7542ba77e4bebfc8d2b266cd4ea6cbfa5faa516f902e1a2782020bfd52e02c5`.
+This version still has the earlier graphics handshake. The fresh hardware
+benchmark launched at 07:13:51 and passes with ALU 244 / RAM copy 119 blocks
+per 1000 hundredths, unchanged from the larger cache
+(`compactcache50-bench-return-3.d88`, `compactcache50-bench-071628.png`).
+The 07:17:10 PCM run also passes the board/FIFO/two-IRQ checks
+(`compactcache50-pcm-return-1.d88`). Its XMS run launched at 07:20:00 passes
+with 63424 KB free and the 17 MB block at physical 01000000h
+(`compactcache50-xms-return-1.d88`).
 
 The `-SystemClockMHz 60` experiment passes OPNA/PIT/PCM-rate and SDRAM request
 simulation. Its first full fit (`quartus-20260921-061451-2d245c`) completes in
@@ -601,7 +613,27 @@ not immediately change that frame. This is not a successful gameplay test.
 To isolate the intro-to-game transition, a disposable System disk changes only
 three bytes: it skips the BOOT.COM call to OP.COM (offset 0143h in the file).
 All original source images remain untouched. This disk plus Game Disk A was
-launched at 06:51:33 using `Zet98_Rusty_SkipIntro50.mgl`; outcome is pending.
+launched at 06:51:33 using `Zet98_Rusty_SkipIntro50.mgl`. The 06:54:19 capture
+shows the title menu. Temporary keyboard input reaches the cemetery story
+scene at 06:56:46 and dialogue at 06:58:50; advancing dialogue reaches the
+actual first stage at 07:02:31. The player, enemies, HUD and timer render
+coherently (`rusty-skipintro50-070231.png`). This is a gameplay milestone for
+the private intro-skipping disk, not proof that the original intro completes.
+A two-second Right-key trial coincides with apparent death/respawn and is not
+a valid movement or FPS measurement. Sound quality remains unverified.
+
+### Pixel-clock text memories
+
+Text, attribute and font display ports now share the 25 MHz renderer clock;
+their independent CPU ports are unchanged. This removes the 75 MHz to pixel
+RAM-output crossings and gives font address/enable logic a full pixel period.
+Kanji right-half prefetch is explicitly scheduled at pixel phase 2, after the
+synchronous text read settles and before font capture at phase 6.
+`tests/run-text-pixel-memory.sh` verifies 1024 pixels per run across all 16 font
+rows, alternating Latin/two-cell Kanji, both font banks, independent colors,
+reverse video and underline. It passes with 0/12/25 ns RAM delays, and rejects
+a deliberately late 200 ns response. Fitting and hardware validation of this
+text-memory change are pending.
 
 ### Graphics transfer timing work
 
@@ -624,11 +656,17 @@ of VIDDAT3 and explicit 10-bit graphics line-counter wrap.
 An audit of the previous constrained 50 MHz fit matches all 64 data bits and
 14 address bits plus duplicates. Those bundled buses pass the justified
 20 ns limit; other control/configuration/text-video paths still fail. A fresh
-50 MHz fit includes the new control handshake, compact cache and constraints
-(`quartus-20260921-064725-d61d77`). Hardware validation is pending; this is not
+50 MHz fit includes the new control handshake, compact cache and constraints.
+The first attempt (`quartus-20260921-064725-d61d77`) stopped at the constraint
+endpoint guard: before RAM packing, 64 line-data bits are represented by 32
+two-bit input keepers. The corrected guard accepts that representation while
+still requiring all 64 source registers. A mapped-netlist check matches
+14/13/64/32 address-source/address-target/data-source/data-target registers
+and both control synchronizers. The fresh retry is
+`quartus-20260921-070116-c80cce`. Hardware validation is pending; this is not
 yet a demonstrated fix for Rusty's black transition or the earlier HDMI issue.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
-Still required: reliable complete floppy/game loading, Rusty gameplay,
-repeatable scene timing, sound pitch/tempo, and video stability. Neither the
+Still required: reliable unmodified intro-to-game loading, repeatable gameplay
+timing, sound pitch/tempo, and video stability. Neither the
 initial logo nor successful FPGA fitting measures Rusty speed.

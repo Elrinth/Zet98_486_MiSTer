@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd LIB/delayer.vhd \
-    Zet98/sdramc.vhd VIDEO/graphscr98.vhd tests/video_sdram_tb.vhd
+    Zet98/sdramc.vhd VIDEO/GRAPHSCR98.vhd tests/video_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_sdram_tb
 for phase in 0 1 3333 5000 6667 9999; do
     ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb -gPHASE_PS="$phase" --assert-level=error

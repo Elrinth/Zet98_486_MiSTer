@@ -31,7 +31,10 @@ The source now fixes a truncated HPS disk acknowledgement that prevented
 slots 1–3 from completing transfers. The regression reproduces the old failure
 and passes with the fix. Hardware also requires waiting for image loading
 before reset: a 60-second delay makes drive B accessible in the DOS probe,
-where the earlier three-second delay did not. Rusty gameplay remains unverified.
+where the earlier three-second delay did not. The cached 50 MHz build now
+reaches Rusty's first stage with coherent player/enemy/HUD graphics, using a
+private disk copy that skips the opening program. The original opening
+transition, measured gameplay speed and sound quality remain unresolved.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
