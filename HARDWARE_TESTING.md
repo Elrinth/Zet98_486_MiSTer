@@ -885,3 +885,15 @@ floppy contains the same result. The full FPGA profile was saved again at
 15:16:25 screenshot and returned log pass the 64 MB diagnostic: 63,424 KB
 free (hex F7C0), a 17 MB block at physical 01000000, both-end verification
 and recovery of the full free count after unlock/free.
+
+### Video corner timing preparation
+
+The all-corner 60 MHz report identifies -0.626 ns parent-settings-to-pixel
+hold and -0.239 ns parent-reset-to-raster removal at slow/-40 C. Settings now
+pass through an opposite-edge parent register before the pixel registers;
+normal half-cycle setup/hold checks remain. The raster counters use the
+existing pixel reset chain; the clock divider still uses parent reset.
+Full CRTC render tests pass six reset phases (640 visible pixels), raster
+counter tests pass, and 40 reset phases/stopped-clock recovery pass. A test
+that reconnects raster reset to the parent domain fails as intended. Physical
+timing and hardware verification of these video changes remain pending.

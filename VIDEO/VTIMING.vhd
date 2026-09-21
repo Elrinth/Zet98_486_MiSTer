@@ -13,7 +13,8 @@ generic(
 	HFP		:integer	:=3;
 	HSY		:integer	:=12;
 	VFP		:integer	:=51;
-	VSY		:integer	:=2
+	VSY		:integer	:=2;
+    EXTERNAL_PIXEL_RESET : boolean := false
 );	
 port(
 	VCOUNT	:out integer range 0 to VWIDTH-1;
@@ -27,7 +28,8 @@ port(
 	clk3	:out std_logic;
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+    pixel_rstn :in std_logic := '0'
 );
 end VTIMING;
 architecture MAIN of VTIMING is
@@ -46,6 +48,7 @@ signal	vcompb	:std_logic;
 signal	clk2sft	:std_logic_vector(1 downto 0);
 signal	clk3sft	:std_logic_vector(2 downto 0);
 signal	clk3b	:std_logic;
+signal raster_rstn :std_logic;
 
 begin
 
@@ -62,8 +65,9 @@ begin
 	clk3<=clk3sft(2);
 	clk3b<=clk3sft(2);
 
-	process(clk3b,rstn)begin
-		if(rstn='0')then
+    raster_rstn <= pixel_rstn when EXTERNAL_PIXEL_RESET else rstn;
+	process(clk3b,raster_rstn)begin
+		if(raster_rstn='0')then
 			vcounter<=VWIDTH-1;
 			hucounter<=0;
 			ucounter<=0;

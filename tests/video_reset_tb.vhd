@@ -19,8 +19,8 @@ begin
         if running then clk<=not clk; else clk<='0'; end if;
     end process;
     video_reset : entity work.reset_release port map(clk,raw_rstn,video_rstn);
-    divider : entity work.VTIMING
-        port map(v,hu,u,hcomp,vcomp,open,pixel_clk,clk,video_rstn);
+    divider : entity work.VTIMING generic map(EXTERNAL_PIXEL_RESET=>true)
+        port map(v,hu,u,hcomp,vcomp,open,pixel_clk,clk,video_rstn,pixel_rstn);
     pixel_reset : entity work.reset_release port map(pixel_clk,video_rstn,pixel_rstn);
     process
         variable edges : natural := 0;
@@ -48,6 +48,14 @@ begin
             assert pixel_rstn='0' report "Pixel reset released before two receiving edges" severity failure;
         else
             assert pixel_rstn='1' report "Pixel reset did not release on second edge" severity failure;
+        end if;
+    end process;
+    process begin
+        wait until rising_edge(pixel_clk);
+        if pixel_rstn='0' then
+            wait for 1 ps;
+            assert u=0 and hu=0 and v=VWIDTH-1 and hcomp='0' and vcomp='0'
+                report "Raster counters ran before pixel reset released" severity failure;
         end if;
     end process;
     process

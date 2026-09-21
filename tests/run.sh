@@ -58,6 +58,4 @@ ghdl -a --std=08 --workdir="$out" rtl/startup_mute.vhd tests/startup_mute_tb.vhd
 ghdl -e --std=08 --workdir="$out" startup_mute_tb
 ghdl -r --std=08 --workdir="$out" startup_mute_tb --assert-level=error
 
-ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd rtl/reset_release.vhd tests/video_reset_tb.vhd
-ghdl -e --std=08 -fsynopsys --workdir="$out" video_reset_tb
-ghdl -r --std=08 -fsynopsys --workdir="$out" video_reset_tb --assert-level=error
+bash tests/run-video-reset.sh

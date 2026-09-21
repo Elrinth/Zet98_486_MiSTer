@@ -88,7 +88,8 @@ generic(
 	HFP		:integer	:=3;
 	HSY		:integer	:=12;
 	VFP		:integer	:=51;
-	VSY		:integer	:=2
+	VSY		:integer	:=2;
+    EXTERNAL_PIXEL_RESET : boolean := false
 );	
 port(
 	VCOUNT	:out integer range 0 to VWIDTH-1;
@@ -102,7 +103,8 @@ port(
 	clk3	:out std_logic;
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+    pixel_rstn :in std_logic := '0'
 );
 end component;
 
@@ -300,6 +302,25 @@ signal dotpline_video : std_logic_vector(4 downto 0);
 signal graphen_video : std_logic;
 signal lowbl_video : std_logic;
 
+signal tbaseaddr_pixel_source : std_logic_vector(12 downto 0);
+signal tpitch_pixel_source : std_logic_vector(7 downto 0);
+signal hmode_pixel_source : std_logic;
+signal vlines_pixel_source : std_logic_vector(4 downto 0);
+signal curaddr_pixel_source : std_logic_vector(12 downto 0);
+signal cure_pixel_source : std_logic;
+signal curupper_pixel_source : integer range 0 to 19;
+signal curlower_pixel_source : integer range 0 to 19;
+signal cblink_pixel_source : std_logic;
+signal blinkrate_pixel_source : std_logic_vector(4 downto 0);
+signal gbaseaddr0_pixel_source : std_logic_vector(13 downto 0);
+signal gbaseaddr1_pixel_source : std_logic_vector(13 downto 0);
+signal glinenum0_pixel_source : std_logic_vector(9 downto 0);
+signal glinenum1_pixel_source : std_logic_vector(9 downto 0);
+signal gpitch_pixel_source : std_logic_vector(7 downto 0);
+signal dotpline_pixel_source : std_logic_vector(4 downto 0);
+signal graphen_pixel_source : std_logic;
+signal lowbl_pixel_source : std_logic;
+
 begin
 	-- The resettable divide-by-three pixel clock has three possible phases.
 	-- Direct CPU-to-pixel paths needed enough route delay for one phase's hold
@@ -333,6 +354,32 @@ begin
 		end if;
 	end process;
 
+    -- Derived pixel rising edges follow parent rising edges. Stage the
+    -- held settings on the opposite edge so their next transition cannot
+    -- overtake the pixel clock. Both half-cycle paths remain normally timed.
+    process(clk) begin
+        if falling_edge(clk) then
+            tbaseaddr_pixel_source <= tbaseaddr_video;
+            tpitch_pixel_source <= tpitch_video;
+            hmode_pixel_source <= hmode_video;
+            vlines_pixel_source <= vlines_video;
+            curaddr_pixel_source <= curaddr_video;
+            cure_pixel_source <= cure_video;
+            curupper_pixel_source <= curupper_video;
+            curlower_pixel_source <= curlower_video;
+            cblink_pixel_source <= cblink_video;
+            blinkrate_pixel_source <= blinkrate_video;
+            gbaseaddr0_pixel_source <= gbaseaddr0_video;
+            gbaseaddr1_pixel_source <= gbaseaddr1_video;
+            glinenum0_pixel_source <= glinenum0_video;
+            glinenum1_pixel_source <= glinenum1_video;
+            gpitch_pixel_source <= gpitch_video;
+            dotpline_pixel_source <= dotpline_video;
+            graphen_pixel_source <= graphen_video;
+            lowbl_pixel_source <= lowbl_video;
+        end if;
+    end process;
+
 	TIM	:vtiming generic map(
 	DOTPU	=>DOTPU,
 	HWIDTH	=>HWIDTH,
@@ -343,8 +390,9 @@ begin
 	HFP		=>HFP,
 	HSY		=>HSY,
 	VFP		=>VFP,
-	VSY		=>VSY
-	) port map(VCOUNT,HUCOUNT,UCOUNT,HCOMP,VCOMP,clk2,clk3,clk,rstn);
+	VSY		=>VSY,
+    EXTERNAL_PIXEL_RESET=>true
+	) port map(VCOUNT,HUCOUNT,UCOUNT,HCOMP,VCOMP,clk2,clk3,clk,rstn,pixel_rstn);
 	
 	KNJSEL	<=KNJFNT_SEL when EMUMODE='0' else "00";
 	KNJADR	<=KNJFNT_ADDR when EMUMODE='0' else ('0' & x"0800")+EFNT_ADDR;
@@ -363,17 +411,17 @@ begin
 		BITOUT	=>T_BIT,
 		COLOR	=>TCOLOR,
 		
-		CURADDR	=>curaddr_video,
-		CURE	=>cure_video,
-		CURUPPER=>curupper_video,
-		CURLOWER=>curlower_video,
-		CBLINK	=>cblink_video,
-		BLINKRATE=>blinkrate_video,
+		CURADDR	=>curaddr_pixel_source,
+		CURE	=>cure_pixel_source,
+		CURUPPER=>curupper_pixel_source,
+		CURLOWER=>curlower_pixel_source,
+		CBLINK	=>cblink_pixel_source,
+		BLINKRATE=>blinkrate_pixel_source,
 		
-		BASEADDR=>tbaseaddr_video,
-		HMODE	=>hmode_video,
-		VLINES	=>vlines_video,
-		PITCH	=>tpitch_video,
+		BASEADDR=>tbaseaddr_pixel_source,
+		HMODE	=>hmode_pixel_source,
+		VLINES	=>vlines_pixel_source,
+		PITCH	=>tpitch_pixel_source,
 		
 		UCOUNT	=>UCOUNT,
 		HUCOUNT	=>HUCOUNT,
@@ -431,9 +479,9 @@ begin
 		DOTOUT	=>G_DOT,
 		DOTE	=>G_DOTE,
 
-		GRAPHEN	=>graphen_video,
-		DOTPLINE=>dotpline_video,
-		BLANK	=>lowbl_video,
+		GRAPHEN	=>graphen_pixel_source,
+		DOTPLINE=>dotpline_pixel_source,
+		BLANK	=>lowbl_pixel_source,
 		
 		UCOUNT	=>UCOUNT,
 		HUCOUNT	=>HUCOUNT,
@@ -441,11 +489,11 @@ begin
 		HCOMP	=>HCOMP,
 		VCOMP	=>VCOMP,
 
-		BASEADDR0=>gbaseaddr0_video,
-		BASEADDR1=>gbaseaddr1_video,
-		LINENUM0=>glinenum0_video,
-		LINENUM1=>glinenum1_video,
-		PITCH	=>gpitch_video,
+		BASEADDR0=>gbaseaddr0_pixel_source,
+		BASEADDR1=>gbaseaddr1_pixel_source,
+		LINENUM0=>glinenum0_pixel_source,
+		LINENUM1=>glinenum1_pixel_source,
+		PITCH	=>gpitch_pixel_source,
 		
 		clk		=>clk3,
 		rstn	=>pixel_rstn
