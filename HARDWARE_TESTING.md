@@ -291,9 +291,19 @@ code, confirming that the coherence test actually exercises cached instructions.
 
 Quartus Analysis & Elaboration passed before the small DMA idle-grant change.
 The complete build including it is in
-`build/quartus-20260921-022919-fb952a/source`; compilation/timing and hardware
-results are pending. An earlier cache build was deliberately stopped to include
-the DMA grant fix. No 66/100 MHz performance claim is established.
+`build/quartus-20260921-022919-fb952a/source`. Compilation completed in 25m40s
+with 32,506 ALMs (78%), 395 RAM blocks and 63 DSP blocks. The full design still
+fails timing: ten negative checks, worst -5.704 ns. CPU-register setup passes
+at +21.539 ns; the worst complete-design path remains video VCOUNT through the
+shared read-data mux into OPNA write logic. The separate pixel-clock audit finds
+setup from/to the pixel clock of -7.101 / -5.902 ns and hold of +0.103 / -3.000 ns.
+These additional constraints do not modify the RBF. This is an experimental
+test build, not a timing-verified release.
+
+RBF SHA-256: `043146c966dc9d9371bb0cc4165e373c5064c95699739f64e88a4aee5cb3f450`.
+The remote checksum was verified and the cache benchmark launched at 02:59:40
+local time. An earlier cache build was deliberately stopped to include the
+DMA grant fix. No 66/100 MHz performance claim is established.
 
 `tests/hardware/cpu_bench.asm` is an 8086-compatible DOS benchmark for an isolated
 System disk. It uses the DOS clock, checks results and saves `Z98PERF.TXT`.
@@ -309,13 +319,32 @@ disposable disk and a 60-second reset delay. The retrieved host D88 contains:
 ALU **4 blocks / 1100 hundredths**, RAM copy **2 blocks / 1100 hundredths**,
 and passing checksums. Each block contains 131,072 iterations. Baseline and
 future cache-test disks start byte-identical; only BOOT.COM's allocation differs
-from the supplied System image. The cache build has not yet been deployed.
+from the supplied System image. The cache build also includes the data-bus
+feedback removal and DMA idle-grant fix, so this comparison is between complete
+builds at the same 20 MHz clock, not a runtime cache-toggle experiment.
 
-An independent CPU/adapter 66 MHz feasibility fit is also running under
+The cache run saved its result at 03:02:36 and was retrieved at 03:03:34:
+ALU **106 blocks / 1000 hundredths**, RAM copy **40 blocks / 1000 hundredths**,
+with both checksums passing. Normalized by reported elapsed time, these are
+**29.15x** and **22x** the uncached baseline throughput respectively. DOS time
+has coarse resolution and these are small hot loops; they measure neither
+Rusty frame rate nor improvement over the original Zet CPU. The authoritative
+local copies are `build/hardware/cpu-bench-v2-baseline-return-2.d88` and
+`build/hardware/cpu-bench-v2-cache-return-2.d88`, with extracted `.txt` logs.
+The isolated Rusty cache launcher uses the same System/Opening images and
+60-second reset delay. Game A and Game B are both available in the test folder
+for later swaps. User confirmation of cached-build gameplay remains pending.
+
+An independent CPU/adapter 66 MHz feasibility fit completed under
 `build/cpu-probe-66-20260921`. `scripts/probe-cpu.tcl` uses virtual pins and
 one-nanosecond input/output delays; it is not a board design or a deployable RBF.
 Its register timing and unconstrained-path reports distinguish CPU headroom
-from the still-unresolved platform clock crossings. Results are pending.
+from the still-unresolved platform clock crossings. The fit uses 17,983 ALMs,
+16 RAM blocks and three DSP blocks. It fails register setup by -1.708 ns;
+register hold passes at +0.363 ns and the isolated design is fully constrained
+for setup/hold. The worst setup path runs from execute operand-size state into
+the prefetch FIFO count. Same-clock Fmax is estimated at 59.32 MHz for this fit;
+that estimate is not validation of a complete core at 59, 66 or 100 MHz.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

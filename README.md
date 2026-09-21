@@ -8,8 +8,10 @@ video, timer, sound and disk timing.
 **The default build uses Zet; the optional ao486 integration is experimental.**
 The ao486 DiskFix hardware test reaches DOS, displays Rusty's C-Lab logo
 correctly and plays opening cutscenes with the user's BIOS/disks. The user
-reports extremely poor performance; speed remains the primary unresolved
-target. Earlier severe video corruption affected Console Mode too and cleared
+reports extremely poor performance on that uncached build. A new cached ao486
+build passes the hardware arithmetic/RAM checksums and substantially improves
+small-loop throughput at the same clock; Rusty gameplay speed remains unverified.
+Earlier severe video corruption affected Console Mode too and cleared
 after a full power cycle. The isolated DOS probe now reads both System and
 Opening disks and persists its log to the host image. There is no Rusty speedup
 or DX4-100 performance claim yet.
@@ -103,7 +105,8 @@ preserving the old priorities without routing final outputs back into each
 other. Simulation matches the historical mux over 57,748 cases. The new fit
 improves worst reported slack from -22.883 ns to -5.493 ns, but still fails
 timing; the additional pixel-clock audit also finds violations. This is not
-yet a clock-rate or speedup result, and this bus rewrite is not yet deployed.
+yet a clock-rate result. The bus rewrite is included in the newer Cache test
+RBF; its full-design timing still fails at -5.704 ns, while CPU setup passes.
 
 This first integration deliberately retains the existing low-1-MB memory map.
 Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
@@ -111,12 +114,16 @@ CPU control ports F0/F2/F6 implement reset and A20 controls, using
 [NP2kai's CPU I/O implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/io/cpuio.c)
 as a behavioral reference. Extended RAM, NMI, independent CPU clocking and
 complete game compatibility remain work in progress. Cache is forced off in
-the currently deployed DiskFix RBF. The source enables instruction caching for
+the earlier DiskFix RBF. The newer Cache test RBF enables instruction caching for
 fixed low RAM, with full invalidation for external DMA and aliased bank-window
 writes. It also allows DMA to acquire an already idle CPU bus, which becomes
 essential when the CPU executes cached code. Simulation passes, including
-stale-code negative controls. The FPGA build and hardware comparison are
-pending; this is not yet a hardware performance result.
+stale-code negative controls. The full FPGA build fits but still fails timing.
+On the SuperStation One at 20 MHz, the new build passes both hardware benchmark
+checksums and gives about 29x arithmetic-loop and 22x RAM-copy throughput versus
+uncached ao486 at 20 MHz. These are small hot-loop results, not Rusty frame rates
+or a comparison against the original Zet CPU. See the hardware notes for raw
+counts, timing limits and the separate 66 MHz CPU feasibility result.
 
 Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
 Hardware observations and the isolated test setup are recorded in
