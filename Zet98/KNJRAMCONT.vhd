@@ -31,8 +31,9 @@ port(
 end KNJRAMCONT;
 
 architecture rtl of KNJRAMCONT is
-signal	BGNADDR	:std_logic_vector(LDR_AWIDTH-1 downto 0);
-signal	ENDADDR	:std_logic_vector(LDR_AWIDTH-1 downto 0);
+signal	LDR_EXTADDR	:std_logic_vector(23 downto 0);
+signal	ENDADDR	:std_logic_vector(23 downto 0);
+signal	FONT_OFFSET	:std_logic_vector(23 downto 0);
 signal	CGADDR	:std_logic_vector(16 downto 0);
 signal	JISCODE	:std_logic_vector(15 downto 0);
 signal	CGCODE	:std_logic_vector(15 downto 0);
@@ -51,9 +52,11 @@ port(
 end component;
 
 begin
-	BGNADDR<=LDR_BGNADDR(LDR_AWIDTH-1 downto 0);
-	ENDADDR(LDR_AWIDTH-1 downto 18)<=LDR_BGNADDR(LDR_AWIDTH-1 downto 18);
-	ENDADDR(17 downto 0)<=(others=>'1');
+	-- The 0x46800-byte FONT.ROM spans two full banks and a third tail.
+	LDR_EXTADDR(23 downto LDR_AWIDTH)<=(others=>'0');
+	LDR_EXTADDR(LDR_AWIDTH-1 downto 0)<=LDR_ADDR;
+	FONT_OFFSET<=LDR_EXTADDR-LDR_BGNADDR;
+	ENDADDR<=LDR_BGNADDR+x"0467ff";
 
 	process(clk,rstn)begin
 		if(rstn='0')then
@@ -85,11 +88,11 @@ begin
 		romaddr	=>CGADDR
 	);
 	
-	KNJRAMADDR<=LDR_ADDR(16 downto 0) when LDR_EN='1' else CGADDR;
-	KNJRAMSEL<=	'0' & LDR_ADDR(17) when LDR_EN='1' else KNJRAMSELb;
+	KNJRAMADDR<=FONT_OFFSET(16 downto 0) when LDR_EN='1' else CGADDR;
+	KNJRAMSEL<=	FONT_OFFSET(18 downto 17) when LDR_EN='1' else KNJRAMSELb;
 	
-	KNJRAMWR<=	LDR_WR	when LDR_EN='1' and LDR_ADDR>=BGNADDR and LDR_ADDR<=ENDADDR else
-				iowr	when ioaddr=x"00a9" else
+	KNJRAMWR<=	LDR_WR	when LDR_EN='1' and LDR_EXTADDR>=LDR_BGNADDR and LDR_EXTADDR<=ENDADDR else
+				iowr	when LDR_EN='0' and ioaddr=x"00a9" else
 				'0';
 	KNJRAMOE<=	iord	when ioaddr=x"00a9" else '0';
 	KNJRAMWDAT<=	LDR_WDAT when LDR_EN='1' else

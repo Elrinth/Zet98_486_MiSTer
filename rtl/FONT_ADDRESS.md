@@ -35,6 +35,14 @@ gaiji restrictions require separate verification.
 
 ## Verification
 
+The loader also stopped after the first 256 KiB of the 288,768-byte font and
+could select only banks 0 and 1. The final 26,624 bytes, including the last
+stored JIS rows, never reached bank 2. It now uses a full-width bounds check
+and derives bank/address from the offset inside FONT.ROM. Writes outside
+that exact region are blocked, including when an unrelated CPU write is
+present during loading. The production top level supplies 20 loader address
+bits, sufficient for the entire combined boot image.
+
 `bash tests/run-font-address.sh` exercises the actual controller and converter
 through CPU port writes: 8,192 ANK row/half addresses and all 282,624 bytes in
 the 92-row glyph area, including all three ROM banks. It independently
@@ -43,6 +51,9 @@ corresponding printable-character check to fail. All checks pass after the
 fixes. Existing pixel-clock text/font tests also pass all six delay/cursor
 combinations and reject deliberately late RAM data. These tests prove address
 selection and the tested display pipeline, not complete game compatibility.
+The loader regression covers both sides of each bank boundary, first and last
+font bytes, out-of-range writes, and the write strobe; restoring its old
+two-bank limit fails the independent negative control.
 
 Rusty's title menu has malformed lettering on the PaletteCaption50 FPGA
 build while the same private game disk displays readable Start, Continue,
@@ -70,7 +81,8 @@ The verifier checks the capture structure, compares each pair with the raw
 font data, and separately reports unstable reads. It returns failure for any
 byte mismatch. In NP2kai, all 736 pairs match the known-working development
 ROM (`647b5fa9...42f21db7`), with zero unstable reads. A changed capture byte
-and a truncated record are rejected. Hardware capture remains pending.
+and a truncated record are rejected. This reference result does not validate
+the corrected hardware build.
 
 For a standalone diagnostic floppy, assemble with `-DPROBE_SHELL=1` and set
 `SHELL=Z98FONT.COM` in its minimal CONFIG.SYS. That version flushes its result
@@ -78,3 +90,12 @@ and halts with interrupts enabled rather than returning from DOS's shell.
 The DOS 3.30 D88 boot produced the same 1,528-byte capture as the DOS 6.20
 hard-disk run in NP2kai. Keep source images unchanged and use a new copy for
 each hardware capture because an existing result filename is refused.
+
+GDCGuard50 hardware completed the floppy probe at 23:58:23 on 2026-09-21.
+After unloading it, the captured file reports 395 mismatching sample pairs
+out of 736, with zero immediate/delayed disagreements. Every returned byte
+matches the original mapper plus an unfilled third bank. In particular,
+the two halves of row-09 S exactly match original offsets `1e60`/`1e70`.
+This confirms the source defects on hardware; it does not yet validate the
+corrected RBF. Capture SHA-256:
+`ce6941ff44c359a35702751b7e39288552282c4d32c51cd6a7152c2c0eff507c`.

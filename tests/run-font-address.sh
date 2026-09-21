@@ -39,3 +39,22 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=e
 fi
 grep -q 'Rusty row09 S selected the wrong FONT.ROM glyph' "$out/bad-mapper.log" || { cat "$out/bad-mapper.log"; exit 1; }
 echo 'PASS: original JIS row 09..0b mapping bug rejected'
+
+# Independently restore the loader's old 256-KiB limit and two-bank select.
+python3 - "$out/bad-loader.vhd" <<'PY'
+from pathlib import Path
+import sys
+s=Path('Zet98/KNJRAMCONT.vhd').read_text()
+assert s.count('FONT_OFFSET(18 downto 17)') == 1
+assert s.count('LDR_EXTADDR<=ENDADDR') == 1
+s=s.replace('FONT_OFFSET(18 downto 17)', "'0' & FONT_OFFSET(17)")
+s=s.replace('LDR_EXTADDR<=ENDADDR', 'LDR_EXTADDR<x"080000"')
+Path(sys.argv[1]).write_text(s)
+PY
+ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/knjaddrcnv.vhd "$out/bad-loader.vhd" tests/font_address_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" font_address_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=error > "$out/bad-loader.log" 2>&1; then
+    echo 'FAIL: original two-bank loader passed' >&2; exit 1
+fi
+grep -q 'Font loader lost a bank boundary or the third bank' "$out/bad-loader.log" || { cat "$out/bad-loader.log"; exit 1; }
+echo 'PASS: original two-bank font loader rejected'
