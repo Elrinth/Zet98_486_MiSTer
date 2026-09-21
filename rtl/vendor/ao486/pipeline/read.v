@@ -548,6 +548,16 @@ assign read_address =
     (read_system_descriptor)?               rd_descriptor_offset :
                                             rd_system_linear; //used by read_rmw_system_dword, read_system_dword,read_system_word,read_system_qword
 
+// System reads bypass segment checks. Keep their late command decoding out
+// of the virtual-access length used by read_segment. The command-level SAT
+// check proves this equals read_length whenever a segment check is active.
+wire [3:0] segment_read_length =
+    rd_is_8bit?                 4'd1 :
+    read_length_word?           4'd2 :
+    read_length_dword?          4'd4 :
+    rd_operand_16bit?           4'd2 :
+                                4'd4;
+
 assign read_length =
     read_system_word?           4'd2 :
     read_system_dword?          4'd4 :
@@ -650,7 +660,7 @@ read_segment read_segment_inst(
     
     .rd_address_effective       (rd_address_effective),         //input [31:0]
     .rd_address_effective_ready (rd_address_effective_ready),   //input
-    .read_length                (read_length),                  //input [3:0]
+    .read_length                (segment_read_length),          //input [3:0]
     
     .rd_prefix_group_2_seg      (rd_prefix_group_2_seg),        //input [2:0]
     

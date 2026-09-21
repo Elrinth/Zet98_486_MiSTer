@@ -1097,3 +1097,11 @@ with minimum +0.093 ns. Its 60 MHz counterpart fails by -0.415 ns. Corrected
 graphics-capture and compositor 60 MHz analyses still fail by -0.316 ns and
 -0.613 ns respectively; none were deployed. The next 60 MHz snapshot
 (8040277) stages framebuffer viewport controls and is still fitting.
+
+That viewport 60 MHz fit subsequently completes in 30m50s, but fails five
+summary checks, worst -0.760 ns; it was not deployed. A separate CPU change
+removes system-read length decoding from virtual segment checks. Yosys proves
+the new and original lengths equal for every command input whenever segment
+checking is active; a wrong byte length produces a counterexample. Cached
+and uncached full-CPU regressions pass (576 bus transfers each). A new fit
+is needed to measure the effect on the read-command-to-TLB critical path.

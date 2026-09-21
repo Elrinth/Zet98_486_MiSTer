@@ -19,4 +19,18 @@ fixed low RAM (below 80000h) and resets prefetch during external invalidation.
 The sibling `cache/l1_icache.v` drains outstanding fills and clears all tags
 before resuming after invalidation. This supports the PC-98 external DMA fabric
 without pretending its writes pass through ao486's built-in DMA/snoop port.
-Original license notices are retained; other imported sources are unchanged.
+Local timing changes also retain prefetched instruction data, register the
+decode input, and compute segment limits/linear sums before segment selection.
+`pipeline/read.v` now gives segment checks their own virtual-access length,
+removing unrelated system-read command decoding from that path. The original
+length still feeds memory requests, including descriptor/TSS reads. No CPU
+cycle or exception stage is added by this length change.
+
+`tests/prove-segment-read-length.py` uses Yosys to prove that both lengths
+are equal whenever the actual command decoder enables a segment read/write
+check. Every decoder input is unconstrained; the proof also rejects an
+intentionally wrong byte length. Run it with the separate
+`tests/Dockerfile.formal` image. The full cached and uncached CPU instruction,
+memory/I/O, interrupt/IRET and reset regressions pass. Physical frequency
+improvement still requires a fitted timing report. Original license notices
+are retained.
