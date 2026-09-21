@@ -1,7 +1,7 @@
 param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
     [string]$DockerContext = 'desktop-linux',
-    [ValidateSet(20, 40, 50)]
+    [ValidateSet(20, 40, 50, 60)]
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486')]
     [string]$Cpu = 'Zet',

@@ -50,7 +50,7 @@ begin
         t20 := now;
         assert abs(t20 - t40) <= 50 ns report "VFO timer duration changed" severity failure;
         wait until pulse40 = '0';
-        assert now - t40 = 100 ns report "Fast VFO pulse width changed" severity failure;
+        assert abs(now - t40 - 100 ns) < 1 ps report "Fast VFO pulse width changed" severity failure;
         wait until pulse20 = '0';
         assert now - t20 = 100 ns report "20 MHz VFO pulse width changed" severity failure;
         wait for 100 us;

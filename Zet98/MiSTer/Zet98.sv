@@ -197,7 +197,9 @@ wire pll_locked;
 
 // Compile-time experiment: keep wall-clock peripheral rates consistent with
 // the PLL setting. The default remains the original 20 MHz Zet baseline.
-`ifdef ZET98_TURBO50
+`ifdef ZET98_TURBO60
+localparam integer SYS_CLK_KHZ = 60000;
+`elsif ZET98_TURBO50
 localparam integer SYS_CLK_KHZ = 50000;
 `elsif ZET98_TURBO40
 localparam integer SYS_CLK_KHZ = 40000;
