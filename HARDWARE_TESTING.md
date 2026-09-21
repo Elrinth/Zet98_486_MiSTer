@@ -1066,3 +1066,34 @@ and graphics input-capture changes need their own passing fit and tests.
 The 17:19:39 capture confirms a coherent Rusty castle intro on Metadata50
 from the simplified writable-VHD launcher. This validates the startup
 path on that build; gameplay FPS and audible music remain unmeasured.
+
+### MIDI50 guest test and physical UART placement
+
+The MIDI50 RBF from `quartus-20260921-175150-60ecc2` (e94b42e) uses
+34025 ALMs, 455 RAM blocks and 66 DSPs. Reanalysis of the identical fitted
+netlist with the corrected graphics input-capture endpoint (3160a61) passes
+all sixteen corner/type timing checks, minimum +0.091 ns. Original reports
+using the obsolete line-buffer endpoint are retained separately. Board-I/O
+constraint coverage remains incomplete. RBF SHA-256:
+`8aa2024c6a6307f17f82542b99142b58df400b203ae3e724ad126444ae9e6718`.
+
+The disposable MPU diagnostic was loaded at 18:35:13 device time. Its
+18:39:57 screenshot and returned Z98MPU.TXT confirm 200 ACK/IRQ6 deliveries
+and EOI. A separately configured HPS capture received zero bytes; this is
+not a MIDI playback pass. Quartus's fitted atom database identifies the
+cause: the unassigned UART was placed at Y66 (UART0), instead of MiSTer's
+required Y67 (UART1). An explicit project assignment and a post-fit guard
+have been added; the guard rejects the old netlist. No Linux UART pinmux
+registers were modified. The corrected build awaits fit and hardware capture.
+
+Independent private NP2kai testing of Nightslave observes only UART-entry
+and reset commands, with 6335 bytes in the final UART session. Replaying
+that session through the actual MPU RTL and an independent 31250-baud
+decoder passes without dropped/reordered bytes or overflow. Game/music
+data remain private; this is protocol coverage, not FPGA audio validation.
+
+The complete-metadata 50 MHz fit (126dcd2) also passes all timing corners
+with minimum +0.093 ns. Its 60 MHz counterpart fails by -0.415 ns. Corrected
+graphics-capture and compositor 60 MHz analyses still fail by -0.316 ns and
+-0.613 ns respectively; none were deployed. The next 60 MHz snapshot
+(8040277) stages framebuffer viewport controls and is still fitting.

@@ -101,9 +101,13 @@ try {
     # Linux filesystem: Windows bind shares can stall these accesses in 9P.
     # Keep the source snapshot and export the complete database for TimeQuest.
     $containerName = 'zet98-' + $buildName
+    $compileCommand = 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
+    if ($MidiUart) {
+        $compileCommand += ' && quartus_cdb -t ../../scripts/check-hps-uart.tcl'
+    }
     $containerId = & docker --context $DockerContext create --name $containerName `
         --network none --workdir /project/Zet98/v17 $Image bash -lc `
-        'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
+        $compileCommand
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated Quartus container.' }
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
     & docker --context $DockerContext cp "$sourceRoot/." "${containerName}:/project/"

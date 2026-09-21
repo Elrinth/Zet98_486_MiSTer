@@ -2,8 +2,10 @@
 
 Build with `scripts/build.ps1 -MidiUart` and select **MPU MIDI: UART** in
 the core menu. The option is off by default. This prototype has passed
-simulation; integrated FPGA timing, serial capture and audible playback are
-not yet verified. It is not a complete intelligent-mode MPU-401.
+simulation and guest IRQ tests on a fitted 50 MHz core. The first hardware
+test exposed an incorrect HPS UART placement; the corrected build still needs
+serial capture and audible playback verification. It is not a complete
+intelligent-mode MPU-401.
 
 The guest interface is the PC-98 default: low-byte data at **E0D0h**,
 command/status at **E0D2h**, and **master PIC IRQ6**, normally vector 0Eh.
@@ -57,6 +59,13 @@ The actual VHDL bus expressions pass low-byte/CPU priority tests, and the
 existing PIC simulation checks 32 IRQ6/EOI cycles plus simultaneous MIDI and
 cascaded sound interrupts. Hardware game/driver compatibility is pending.
 
+A private trace of the owner's Nightslave copy in NP2kai uses commands
+3Fh, FFh and 3Fh, then UART data. Its final 6335-byte UART session passes an
+independent serial-decoder replay against this RTL at 50 MHz, without loss,
+reordering or FIFO overflow. This establishes compatibility with that observed
+command sequence, not audible playback on the FPGA. The trace and game data
+are not distributed in this repository.
+
 The silent `tests/hardware/mpu_uart_probe.asm` diagnostic is prepared for a
 disposable DOS boot disk. It checks 100 reset/UART pairs (200 IRQ6 ACKs),
 restores the prior PIC mask/vector, and queues an exact 134-byte SysEx packet
@@ -64,4 +73,19 @@ for independent HPS serial capture. Its saved `Z98MPU.TXT` result covers
 command IRQs and successful enqueueing, not the physical serial stream.
 `tests/mpu_probe_unicorn.py` checks that program's normal flow and missing-IRQ,
 wrong-ACK and stuck-busy failures against an independent x86/DOS/MPU model.
-Hardware execution is pending a fitted MIDI-enabled core.
+On 2026-09-21, the MIDI50 build passed all 200 ACK/IRQ6 checks on the
+SuperStation One and saved the expected result. Independent Linux capture
+received zero bytes. The fitted atom database shows the UART at
+`HPSINTERFACEPERIPHERALUART_X52_Y66_N111` (UART0), whereas MiSTer's MIDI
+route requires `HPSINTERFACEPERIPHERALUART_X52_Y67_N111` (UART1/ttyS1).
+This legacy project includes sys.qip without sourcing sys.tcl, so it lacked
+the upstream location assignment. The project now explicitly fixes that
+location, and MIDI builds run `scripts/check-hps-uart.tcl` against the actual
+fitted netlist. The check rejects the observed wrong placement.
+
+`tests/hardware/capture_mpu_uart.py` captures the diagnostic packet at
+31250 baud without transmitting or starting a synthesizer. It refuses a
+busy port, saves raw bytes and a JSON result, and restores the original
+serial settings. Its Linux pseudo-terminal test checks fragmented delivery,
+an incorrect packet and settings restoration. Hardware serial capture must
+still pass after the corrected placement is fitted.
