@@ -33,6 +33,13 @@ threshold/acknowledge/masking, reset and mute. Sample-rate counts match at
 20/40/50 MHz. PIC tests independently verify shared FM/PCM interrupt levels;
 they are not a mixed-language CPU/PCM/PIC or real-hardware test.
 
+The 40 MHz / 64 MB build now passes the disposable DOS hardware probe on the
+SuperStation: 86-board identification, the complete 32 KB FIFO's full/empty
+states and reset, plus two IRQ12 deliveries with status, acknowledgement and
+PIC EOI. It records the result in `Z98PCM.TXT`. PCM stays muted throughout;
+audio output quality and game-driver compatibility remain unverified. The
+build fits at 33,087 ALMs and 427 RAM blocks but still fails full-design timing.
+
 Behavioral references (not copied source):
 
 - [NP2kai register implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/cbus/pcm86io.c)

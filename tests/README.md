@@ -170,6 +170,13 @@ cycles and bus transfers for two small hot loops; these are diagnostic
 microbenchmarks, not Rusty frame rates or a model of complete SDRAM arbitration.
 A negative control disconnects invalidation and must fail on stale code.
 
+It now compares instruction/low-memory cache settings 00, 10 and 11. The
+optional conventional-RAM cache has a standalone `run-lowmem-cache.sh` test
+covering all 4096 entries, tag collisions, byte-write invalidation, uncached
+accesses, delayed ACK release, reset and invalidation during hits/misses.
+Removing write invalidation must fail. `LOWMEM_CACHE=1` also enables the cache
+in `run-cpu.sh` and `run-extmem.sh`; see `rtl/cpu/LOWMEM_CACHE.md`.
+
 `run-cache-map.sh` combines the actual memory mapper with the marked production
 invalidation expression. It checks 3,328 bank/read/write/I/O cases plus DMA
 ownership. The DMA grant test separately checks requesting an already idle bus,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 module ao486_cpu_tb;
+    parameter LOWMEM_CACHE=0;
     reg clk = 0;
     always #5 clk = !clk;
     reg reset = 1;
@@ -20,7 +21,7 @@ module ao486_cpu_tb;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
-    pc98_ao486 dut (.*);
+    pc98_ao486 #(.LOWMEM_CACHE(LOWMEM_CACHE)) dut (.*);
 
     reg [7:0] memory [0:1048575];
     reg [7:0] ports [0:65535];

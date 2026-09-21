@@ -403,7 +403,12 @@ localparam EXT_RAM_MB = `ZET98_EXT_RAM_MB;
 `else
 localparam EXT_RAM_MB = 0;
 `endif
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .SND(SOUND_MODEL)) Zet98_top
+`ifdef ZET98_LOWMEM_CACHE
+localparam LOWMEM_CACHE = 1;
+`else
+localparam LOWMEM_CACHE = 0;
+`endif
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .LOWMEM_CACHE(LOWMEM_CACHE), .SND(SOUND_MODEL)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),

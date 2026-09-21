@@ -484,8 +484,27 @@ Its returned disk is `cpu-bench-v2-opt40-repeat-return-1.d88`.
 
 An optional 50 MHz setting now preserves OPNA/PIT rates and 100 ns VFO pulses
 in simulation. PS/2 scaling multiplies before dividing, avoiding truncation
-at a non-integer multiple of 20 MHz. Its complete fit and hardware results are
-pending. No 50 MHz or faster usability claim follows from this build option.
+at a non-integer multiple of 20 MHz. The 64 MB / 50 MHz fit
+(`quartus-20260921-044331-0e2634`) finishes in 28m38s, using 33,192 ALMs,
+395 RAM blocks and 63 DSP blocks. CPU and system setup pass at +2.335 ns.
+One production-summary timing check fails: HDMI setup -0.040 ns at the slow
+-40 C corner. The separate pixel-clock audit still fails setup -6.150 / -4.510 ns
+and hold -0.036 / -2.568 ns from/to the pixel clock. This is not timing closed.
+RBF SHA-256: `c5d6cc14478326d1810b89df5893fed1d7291ac6a43779496accab600b9c17d1`.
+
+The first launch at 05:14:36 had its diagnostic D88 uploaded to the core folder,
+not the MGL setname's game folder, and no disk mounted. That attempt says
+nothing about guest boot. After correcting the deployment, the 05:21:33 run
+mounted the disk under `games/Zet98_Test` and saved a passing result:
+ALU 245 / RAM copy 98 blocks, each in 1000 hundredths. This is about 21% / 17%
+above the repeated 40 MHz result and 2.31x / 2.13x the matching 20 MHz result.
+The authoritative return is `cpu-bench-v2-50-mounted-return-2.d88` and its
+extracted text log. It remains a synthetic benchmark, not Rusty FPS.
+
+The same 50 MHz RBF was launched with the 64 MB physical-memory probe at
+05:34:21 CEST. `ram-probe-64-50-return-1.d88` contains a passing `Z98RAM.TXT`
+for all 62 mapped extended MB, partial/unaligned access and real-mode return.
+BIOS/XMS discovery remains untested.
 
 The next source change registers horizontal/vertical retrace status in the
 video domain, then synchronizes the two independent levels into the CPU
@@ -498,8 +517,16 @@ complete fit also enables the optional 16 MB DDR map for hardware diagnosis.
 The optional `-SoundBoard PC9801_86` integration adds PCM playback and shared
 IRQ12. Standalone PCM and PIC regressions pass, and Quartus analysis/elaboration
 passes in `quartus-20260921-044759-401082`. The complete PCM build and silent
-DOS FIFO/IRQ diagnostic are pending. See `rtl/PCM86.md` for explicit limitations;
-this is not yet verified Rusty or Nightslave 86-board sound.
+DOS FIFO/IRQ diagnostic now pass on hardware. The 40 MHz / 64 MB PCM fit
+(`quartus-20260921-045234-21f89e`) finishes in 26m17s, using 33,087 ALMs,
+427 RAM blocks and 65 DSP blocks. It fails 17 timing checks, worst -4.630 ns;
+CPU setup is +3.613 ns and pixel setup is -7.112 / -7.044 ns from/to.
+SHA-256: `faa15038020039556947e45a94cd93cf0e41a2a0cd11f5cfc807164a2df24d37`.
+Launched at 05:25:22, the silent diagnostic saves `Z98PCM.TXT` reporting the
+86-board ID, 32 KB FIFO full/empty/reset, and two IRQ12 deliveries with pending
+status, acknowledgement and PIC EOI. Returned disk: `pcm86-probe-return-1.d88`.
+PCM is muted throughout; actual sound quality and game-driver compatibility
+remain unverified. See `rtl/PCM86.md` for explicit limitations.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

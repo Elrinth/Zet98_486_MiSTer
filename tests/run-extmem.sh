@@ -16,7 +16,7 @@ for ram in 16 64; do
     if [[ "$test" == dos-probe ]]; then probe=1; program=tests/hardware/ram_probe.asm; fi
     nasm -DTOP_MB="$ram" -DSIM=1 -f bin "$program" -o "$out/ram.bin"
     iverilog -g2012 -I rtl/vendor/ao486 -s ao486_extmem_tb -Pao486_extmem_tb.RAM_MB="$ram" \
-        -Pao486_extmem_tb.DOS_PROBE="$probe" \
+        -Pao486_extmem_tb.DOS_PROBE="$probe" -Pao486_extmem_tb.LOWMEM_CACHE="${LOWMEM_CACHE:-0}" \
         -o "$out/cpu.vvp" "${sources[@]}" "$out/l1_icache.v" "$out/simple_fifo_mlab.v" \
         rtl/vendor/common/simple_mult.v rtl/cpu/*.sv tests/cpu_export.sv tests/ao486_extmem_tb.sv \
         "$intel_lib/altera_mf.v" 2>"$out/compile.log" || { cat "$out/compile.log"; exit 1; }
@@ -26,7 +26,7 @@ done
 # A 64 MB probe must reject an implementation with only the 16 MB map.
 nasm -DTOP_MB=64 -DSIM=1 -f bin tests/hardware/ram_probe.asm -o "$out/ram.bin"
 iverilog -g2012 -I rtl/vendor/ao486 -s ao486_extmem_tb -Pao486_extmem_tb.RAM_MB=16 \
-    -Pao486_extmem_tb.DOS_PROBE=1 -o "$out/negative.vvp" "${sources[@]}" \
+    -Pao486_extmem_tb.DOS_PROBE=1 -Pao486_extmem_tb.LOWMEM_CACHE="${LOWMEM_CACHE:-0}" -o "$out/negative.vvp" "${sources[@]}" \
     "$out/l1_icache.v" "$out/simple_fifo_mlab.v" rtl/vendor/common/simple_mult.v \
     rtl/cpu/*.sv tests/cpu_export.sv tests/ao486_extmem_tb.sv "$intel_lib/altera_mf.v" \
     2>"$out/compile.log" || { cat "$out/compile.log"; exit 1; }

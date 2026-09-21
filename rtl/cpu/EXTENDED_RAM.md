@@ -37,7 +37,8 @@ disposable DOS probe passes on the SuperStation, checking sentinels at both
 ends of every mapped MB, partial writes and protected-to-real-mode return.
 The 64 MB / 40 MHz build also passes the same physical-memory probe on hardware,
 checking 62 mapped MB of extended RAM. It fits at 32,917 ALMs with the same
-RAM/DSP use and also fails full-design timing. The new read buffer's fitting
+RAM/DSP use and also fails full-design timing. The 64 MB map also passes on
+the 50 MHz build (`ram-probe-64-50-return-1.d88`). The new read buffer's fitting
 and hardware check remain pending. Neither hardware probe establishes BIOS/XMS
 memory discovery or exhaustive RAM stability.
 

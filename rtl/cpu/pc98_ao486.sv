@@ -7,7 +7,8 @@
 module pc98_ao486 #(
     parameter ICACHE_ENABLE = 1'b1,
     parameter EXT_RAM_MB = 0,
-    parameter EXT_RAM_READ_CACHE = 1'b1
+    parameter EXT_RAM_READ_CACHE = 1'b1,
+    parameter LOWMEM_CACHE = 1'b0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -83,7 +84,21 @@ module pc98_ao486 #(
     wire [15:0] extended_readdata;
     wire mapped = legacy_mapped || extended_mapped;
     assign bus_address = physical_address[19:1];
-    assign bus_strobe = physical_strobe && legacy_mapped;
+    wire legacy_request = physical_strobe && legacy_mapped;
+    wire legacy_ack;
+    wire [15:0] legacy_readdata;
+    generate if(LOWMEM_CACHE) begin : lowmem_cache
+        pc98_lowmem_cache cache (
+            .clk(clk), .reset(cpu_reset), .invalidate(cache_invalidate),
+            .address(bus_address), .select(bus_select), .write(bus_write), .io(bus_io),
+            .strobe(legacy_request), .legacy_strobe(bus_strobe), .legacy_ack(bus_ack),
+            .legacy_readdata(peripheral_read), .ack(legacy_ack), .readdata(legacy_readdata)
+        );
+    end else begin : no_lowmem_cache
+        assign bus_strobe=legacy_request;
+        assign legacy_ack=bus_ack;
+        assign legacy_readdata=peripheral_read;
+    end endgenerate
     assign unmapped_access = physical_strobe && !mapped;
 
     generate if (EXT_RAM_MB != 0) begin : extended_ram
@@ -129,7 +144,7 @@ module pc98_ao486 #(
         .io_write_data(io_write_data), .io_write_done(io_write_done), .busy(),
         .bus_address(physical_address), .bus_select(bus_select), .bus_writedata(bus_writedata),
         .bus_write(bus_write), .bus_strobe(physical_strobe), .bus_io(bus_io),
-        .bus_readdata(legacy_mapped ? peripheral_read : extended_mapped ? extended_readdata : 16'hffff),
-        .bus_ack((legacy_mapped && bus_ack) || extended_ack || unmapped_access)
+        .bus_readdata(legacy_mapped ? legacy_readdata : extended_mapped ? extended_readdata : 16'hffff),
+        .bus_ack((legacy_mapped && legacy_ack) || extended_ack || unmapped_access)
     );
 endmodule

@@ -2,6 +2,7 @@
 `timescale 1ns/1ps
 module ao486_cache_tb;
     parameter ICACHE_ENABLE = 1;
+    parameter LOWMEM_CACHE = 0;
     parameter INVALIDATION_CONNECTED = 1;
     reg clk = 0;
     always #5 clk = !clk;
@@ -23,7 +24,7 @@ module ao486_cache_tb;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
-    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE)) dut (.*);
+    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE),.LOWMEM_CACHE(LOWMEM_CACHE)) dut (.*);
     reg [7:0] memory [0:1048575];
     integer cycles = 0, transactions = 0, phase = 0, delay_left = 0;
     integer memory_wait = 8, dma_left = 0, dma_tests = 0;
@@ -68,7 +69,7 @@ module ao486_cache_tb;
                                    start_cycles = cycles; start_transfers = transactions;
                                end else if (held_data[15:8] == 2) begin
                                    measurements = measurements + 1;
-                                   $display("BENCH cache=%0d wait=%0d kernel=%0d cycles=%0d transfers=%0d", ICACHE_ENABLE,
+                                   $display("BENCH icache=%0d lowmem_cache=%0d wait=%0d kernel=%0d cycles=%0d transfers=%0d", ICACHE_ENABLE, LOWMEM_CACHE,
                                        memory_wait, held_data[7:0], cycles-start_cycles, transactions-start_transfers);
                                end else if (held_data == 16'hdead) $fatal(1, "Cache coherence/checksum failure");
                                else if (held_data == 16'h600d) begin
