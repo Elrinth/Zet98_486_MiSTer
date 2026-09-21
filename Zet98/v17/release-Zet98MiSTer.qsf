@@ -535,6 +535,7 @@ set_global_assignment -name VHDL_FILE ../IO_WRP.vhd
 set_global_assignment -name SDC_FILE Zet98MiSTer.sdc
 set_global_assignment -name SIGNALTAP_FILE gcrtc.stp
 set_global_assignment -name VHDL_FILE ../../rtl/reset_release.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/video_settings_transfer.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
 
 # The fabric divide-by-three pixel clock must use a clock network.

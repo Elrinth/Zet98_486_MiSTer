@@ -1370,3 +1370,18 @@ cycling dots, crop bounds, idle/disable and 56576 continuous/bursty video
 stream checks pass. Physical timing of this change is not yet verified.
 A read-only Windows bind-mount test did not start and was interrupted; the
 successful negative control instead copied the source into Docker as usual.
+
+### GDC settings crossing
+
+The next candidate routes the CRTC's 19 GDC settings through a held 121-bit
+snapshot, addressing the 60 MHz pitch-to-video path. No CRTC pixel pipeline
+stage changes. Rapid setting updates can coalesce and visible register
+programming gains bounded latency; exact raster effects remain unverified.
+The actual transfer passes coherent hot-write/reset tests and 20 ns delayed
+payload tests at six CPU ratios and three phases. Late payload, early capture
+and live bypass fail. The actual top-level map passes 10,122 vectors across
+19 fields; swapping same-width text and graphics pitch is rejected. The first
+test compile used a reserved VHDL identifier; the corrected complete run is
+`build/video-settings-tests-v2.log`. Physical timing and hardware validation
+are pending. See `rtl/VIDEO_SETTINGS_TRANSFER.md` for the handshake and scoped
+constraints.

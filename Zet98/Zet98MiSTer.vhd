@@ -1773,6 +1773,7 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
+signal video_settings_source,video_settings_received : std_logic_vector(120 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -2961,6 +2962,29 @@ DBIO_ODAT<=(others=>'1');
 		rstn	=>rstn
 	);
 
+    -- Begin GDC settings snapshot mapping (CPU -> parent video clock).
+    video_settings_source(12 downto 0) <= tGDC_BASEADDR(12 downto 0);
+    video_settings_source(20 downto 13) <= tGDC_PITCH;
+    video_settings_source(21) <= not tGDC_C40;
+    video_settings_source(26 downto 22) <= tGDC_CHARLINES;
+    video_settings_source(39 downto 27) <= tGDC_CURADDR;
+    video_settings_source(40) <= tGDC_CUREN;
+    video_settings_source(45 downto 41) <= tGDC_CURUPPER;
+    video_settings_source(50 downto 46) <= tGDC_CURLOWER;
+    video_settings_source(51) <= not tGDC_CURBLINK;
+    video_settings_source(56 downto 52) <= tGDC_BLRATE;
+    video_settings_source(70 downto 57) <= gGDC_BASEADDR0(13 downto 0);
+    video_settings_source(84 downto 71) <= gGDC_BASEADDR1(13 downto 0);
+    video_settings_source(94 downto 85) <= gGDC_LINENUM0;
+    video_settings_source(104 downto 95) <= gGDC_LINENUM1;
+    video_settings_source(112 downto 105) <= gGDC_PITCH;
+    video_settings_source(117 downto 113) <= gGDC_DOTPLINE;
+    video_settings_source(118) <= gGDC_GRAPHEN;
+    video_settings_source(119) <= tGDC_VIDEN;
+    video_settings_source(120) <= GLOWBLK;
+    gdc_settings : entity work.video_settings_transfer
+        port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
+    -- End GDC settings snapshot mapping.
 	VID	:CRTC98 port map(
 		TRAM_ADR	=>vaddr,
 		TRAM_DAT	=>vtdat,
@@ -2992,30 +3016,30 @@ DBIO_ODAT<=(others=>'1');
 		VSYNC		=>pVideoVS,
 		VIDEOEN	=>pVideoEN,
 		
-		TBASEADDR	=>tGDC_BASEADDR(12 downto 0),
-		HMODE		=>not tGDC_C40,
-		VLINES		=>tGDC_CHARLINES,
-		TPITCH		=>tGDC_PITCH,
+		TBASEADDR	=>video_settings_received(12 downto 0),
+		HMODE		=>video_settings_received(21),
+		VLINES		=>video_settings_received(26 downto 22),
+		TPITCH		=>video_settings_received(20 downto 13),
 
-		GRAPHEN		=>gGDC_GRAPHEN,
-		DOTPLINE	=>gGDC_DOTPLINE,
-		LOWBL		=>GLOWBLK,
+		GRAPHEN		=>video_settings_received(118),
+		DOTPLINE	=>video_settings_received(117 downto 113),
+		LOWBL		=>video_settings_received(120),
 		GCOLOR		=>'0',
 		MONOSEL		=>(others=>'0'),
-		TXTEN		=>tGDC_VIDEN,
+		TXTEN		=>video_settings_received(119),
 
-		CURADDR		=>tGDC_CURADDR,
-		CURE		=>tGDC_CUREN,
-		CURUPPER	=>tGDC_iCURUPPER,
-		CURLOWER	=>tGDC_iCURLOWER,
-		CBLINK		=>not tGDC_CURBLINK,
-		BLINKRATE	=>tGDC_BLRATE,
+		CURADDR		=>video_settings_received(39 downto 27),
+		CURE		=>video_settings_received(40),
+		CURUPPER	=>conv_integer(video_settings_received(45 downto 41)),
+		CURLOWER	=>conv_integer(video_settings_received(50 downto 46)),
+		CBLINK		=>video_settings_received(51),
+		BLINKRATE	=>video_settings_received(56 downto 52),
 
-		GBASEADDR0	=>gGDC_BASEADDR0(13 downto 0),
-		GBASEADDR1	=>gGDC_BASEADDR1(13 downto 0),
-		GLINENUM0	=>gGDC_LINENUM0,
-		GLINENUM1	=>gGDC_LINENUM1,
-		GPITCH		=>gGDC_PITCH,
+		GBASEADDR0	=>video_settings_received(70 downto 57),
+		GBASEADDR1	=>video_settings_received(84 downto 71),
+		GLINENUM0	=>video_settings_received(94 downto 85),
+		GLINENUM1	=>video_settings_received(104 downto 95),
+		GPITCH		=>video_settings_received(112 downto 105),
 
 		EMUMODE		=>'0',
 

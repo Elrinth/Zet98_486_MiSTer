@@ -20,6 +20,7 @@ bash tests/run-sub-write-bundle.sh
 bash tests/run-sdram-read-bundle.sh
 bash tests/run-floppy-sdram.sh
 bash tests/run-video-sdram.sh
+bash tests/run-video-settings.sh
 bash tests/run-graphics-address.sh
 bash tests/run-text-pixel-memory.sh
 bash tests/run-video-counters.sh
