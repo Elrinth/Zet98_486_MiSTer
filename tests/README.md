@@ -37,6 +37,14 @@ docker --context desktop-linux build -t zet98-sim -f tests/Dockerfile .
 docker --context desktop-linux run --rm --network none --mount "type=bind,source=$($PWD.Path),target=/project,readonly" zet98-sim bash tests/run.sh
 ```
 
+`tests/run-video-counters.sh` checks the values sampled by pixel-clocked
+consumers over complete frames at six reset phases. It checks every raster
+coordinate and line/frame pulse before delta-cycle updates, preserving the
+sampling behavior while removing VTIMING's 75 MHz output staging. The
+text-memory, text-row, reset and retrace tests cover its downstream users.
+The floppy-overlay test also checks that a changed crop does not move the
+indicator until vertical blank, while retaining all 59 frames and captions.
+
 The bench checks byte, word and dword transfers at even/odd addresses,
 16-bit port-address wrapping, correct peripheral byte-lane side effects,
 wait-state stability, acknowledgement release and reset during a request.

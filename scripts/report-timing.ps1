@@ -21,8 +21,8 @@ if ($LASTEXITCODE -ne 0) { throw "Cannot copy snapshot; $containerName retained.
     Tee-Object -FilePath (Join-Path $buildRoot 'postfit.log')
 $reportExit = & docker --context $DockerContext inspect $containerName --format '{{.State.ExitCode}}'
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect result; $containerName retained." }
-& docker --context $DockerContext cp "${containerName}:/project/Zet98/v17/output_files/." `
-    (Join-Path $projectPath 'output_files')
+& python (Join-Path $PSScriptRoot 'docker-export.py') --context $DockerContext `
+    $containerName /project/Zet98/v17/output_files (Join-Path $projectPath 'output_files')
 if ($LASTEXITCODE -ne 0) { throw "Cannot export reports; $containerName retained." }
 & docker --context $DockerContext rm $containerName | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Warning "Reports exported, but cleanup of $containerName failed." }

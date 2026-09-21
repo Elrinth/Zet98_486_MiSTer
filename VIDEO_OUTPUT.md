@@ -75,6 +75,9 @@ FDC-selected drive activity is combined with each drive's HPS transfers.
 If both request service together, the last uniquely active drive is retained.
 It expires after 15 idle frames. It never draws into blanking; RGB, DE, sync
 and clock enable have the same two-clock pipeline latency.
+Crop validation and indicator bounds are calculated in three register stages
+starting at vertical sync. This removes crop arithmetic from the caption's
+per-pixel path and keeps indicator placement fixed during the visible frame.
 
 ## Graphics scanout correction
 
@@ -89,11 +92,19 @@ per frame, about 24% of graphics fetches; it is not a measured CPU-speed gain.
 Only the two existing starting-address windows are exposed. The second window
 continues to the bottom of the screen; additional parameter-RAM partitions,
 wrapping through drawing-pattern RAM, and display zoom remain unsupported.
-GDC settings are registered before pixel-domain address arithmetic with their
-clock crossings still timed. A global clock-network assignment for the pixel
-divider is under full FPGA-fit evaluation. An isolated Quartus fit confirms
-the corrected quoted QSF destination uses a global clock network; the build
-script checks the full Fitter report and rejects a missing assignment.
+Graphics and text GDC settings are registered before pixel-domain address
+arithmetic, with their clock crossings still timed. VTIMING now delivers its
+counters directly to pixel-clocked consumers, removing the previous
+pixel-to-75-MHz-to-pixel round trip. The sampled raster coordinates and
+line/frame pulses are unchanged. Full-frame counter checks, text rendering,
+SDRAM transfer checks, text-row alignment, retrace interrupts and 40 reset
+release phases pass simulation.
+
+The full FPGA fit confirms the corrected quoted QSF destination uses a global
+clock network; the build script rejects a missing assignment. Global routing
+alone did not close timing: it exposed the counter round trip and text-address
+paths addressed above. The new changes still require a passing full timing
+report and hardware checks before they can be called stable.
 
 `tests/run-graphics-address.sh` checks both complete frames at split lengths
 1, 3, 200, 400, 513, 1023 and zero, repeat counts 0/1/3/31, 14-bit VRAM wrap,

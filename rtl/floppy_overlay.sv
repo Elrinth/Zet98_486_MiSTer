@@ -26,14 +26,17 @@ module floppy_overlay #(
     reg [22:0] animation_ticks;
     reg [4:0] dot_phase;
     wire frame_start=in_ce && in_vs && !prev_vs;
-    wire crop_valid=crop_width>=96 && crop_height>=78 &&
-        {1'b0,crop_left}+{1'b0,crop_width}<=width &&
-        {1'b0,crop_top}+{1'b0,crop_height}<=height;
-    wire [11:0] right_edge=crop_valid ? crop_left+crop_width : width;
-    wire [11:0] bottom_edge=crop_valid ? crop_top+crop_height : height;
+    // Position changes only in vertical blank. Pipeline crop validation and
+    // rectangle arithmetic before the per-pixel font/ROM path; combining all
+    // three made the crop-to-caption path exceed the 75 MHz clock period.
+    reg [1:0] position_pending;
+    reg [12:0] crop_right_sum,crop_bottom_sum;
+    reg crop_large;
+    reg [11:0] right_edge,bottom_edge,box_left,box_right,box_top,box_bottom;
+    wire crop_valid=crop_large && crop_right_sum<=width && crop_bottom_sum<=height;
     wire box=enabled_sync && sized && hold_frames!=0 && in_de &&
-        x>=right_edge-92 && x<right_edge-4 && y>=bottom_edge-74 && y<bottom_edge-4;
-    wire [6:0] dx=x-(right_edge-92), dy=y-(bottom_edge-74);
+        x>=box_left && x<box_right && y>=box_top && y<box_bottom;
+    wire [6:0] dx=x-box_left, dy=y-box_top;
     wire disk_pixel=box && dx>=19 && dx<69 && dy<56;
     wire [17:0] rom_address=disk_pixel ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
     (* ramstyle="M10K" *) reg [1:0] pixels[0:165199];
@@ -81,6 +84,8 @@ module floppy_overlay #(
         if(reset) begin
             activity_meta<=0;activity_sync<=0;enabled_meta<=0;enabled_sync<=0;
             prev_de<=0;prev_vs<=0;sized<=0;drive<=0;
+            position_pending<=0;crop_right_sum<=0;crop_bottom_sum<=0;crop_large<=0;
+            right_edge<=0;bottom_edge<=0;box_left<=0;box_right<=0;box_top<=0;box_bottom<=0;
             x<=0;y<=0;max_width<=0;width<=0;height<=0;hold_frames<=0;
             animation_frame<=0;frame_base<=0;animation_ticks<=0;dot_phase<=0;
             ce_pipe<=0;hs_pipe<=0;vs_pipe<=0;de_pipe<=0;rgb_pipe<=0;
@@ -89,6 +94,20 @@ module floppy_overlay #(
         end else begin
             activity_meta<=activity;activity_sync<=activity_meta;
             enabled_meta<=enabled;enabled_sync<=enabled_meta;
+            position_pending<={position_pending[0],frame_start};
+            if(frame_start) begin
+                crop_right_sum<={1'b0,crop_left}+{1'b0,crop_width};
+                crop_bottom_sum<={1'b0,crop_top}+{1'b0,crop_height};
+                crop_large<=crop_width>=96 && crop_height>=78;
+            end
+            if(position_pending[0]) begin
+                right_edge<=crop_valid ? crop_right_sum[11:0] : width;
+                bottom_edge<=crop_valid ? crop_bottom_sum[11:0] : height;
+            end
+            if(position_pending[1]) begin
+                box_left<=right_edge-12'd92; box_right<=right_edge-12'd4;
+                box_top<=bottom_edge-12'd74; box_bottom<=bottom_edge-12'd4;
+            end
             if(activity_sync!=0) hold_frames<=HOLD_FRAMES;
             else if(frame_start && hold_frames!=0) hold_frames<=hold_frames-1'b1;
             if(activity_sync==1) drive<=0;

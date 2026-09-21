@@ -19,6 +19,7 @@ bash tests/run-sdram.sh
 bash tests/run-video-sdram.sh
 bash tests/run-graphics-address.sh
 bash tests/run-text-pixel-memory.sh
+bash tests/run-video-counters.sh
 bash tests/run-video-scale.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \

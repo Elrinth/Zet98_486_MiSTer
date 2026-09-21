@@ -106,8 +106,8 @@ try {
         Tee-Object -FilePath (Join-Path $buildRoot 'quartus.log')
     $compileExit = & docker --context $DockerContext inspect $containerName --format '{{.State.ExitCode}}'
     if ($LASTEXITCODE -ne 0) { throw "Cannot inspect $containerName; container retained." }
-    & docker --context $DockerContext cp "${containerName}:/project/Zet98/v17/." `
-        (Join-Path $sourceRoot 'Zet98/v17')
+    & python (Join-Path $PSScriptRoot 'docker-export.py') --context $DockerContext `
+        $containerName /project/Zet98/v17 (Join-Path $sourceRoot 'Zet98/v17')
     if ($LASTEXITCODE -ne 0) { throw "Cannot export results from $containerName; container retained." }
     & docker --context $DockerContext rm $containerName | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Warning "Export succeeded; cleanup of $containerName failed." }

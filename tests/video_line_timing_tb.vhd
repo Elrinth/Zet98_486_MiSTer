@@ -36,7 +36,7 @@ begin
                     when others => char_lines <= 32;
                 end case;
             end if;
-            -- The actual VTIMING stages its counters onto the fast clock.
+            -- VTIMING and the text row counter share the pixel clock.
             -- The row must settle during the first character of horizontal
             -- blank, well before KNJSCR's active-text fetches at HUCOUNT >= 20.
             -- VTIMING starts on its final scanline after reset. Begin the

@@ -69,6 +69,8 @@ signal	C0ADDR	:std_logic_vector(12 downto 0);
 signal	wPITCH	:std_logic_vector(12 downto 0);
 signal	TRAMADRx	:std_logic_vector(12 downto 0);
 signal	iskanji	:std_logic;
+signal base_addr_pixel :std_logic_vector(12 downto 0);
+signal pitch_pixel :std_logic_vector(7 downto 0);
 signal cursor_addr_pixel :std_logic_vector(12 downto 0);
 signal cursor_enable_pixel, cursor_blink_pixel :std_logic;
 signal cursor_upper_pixel, cursor_lower_pixel :integer range 0 to 19;
@@ -101,17 +103,19 @@ signal	tramdatl	:std_logic_vector(15 downto 0);
 
 begin
 
-	-- Register the CPU-domain cursor settings before the glyph comparison.
+	-- Register the CPU-domain text settings before address arithmetic or glyph comparison.
 	-- These clocks share the PLL and remain fully timed: the short register
 	-- crossing replaces a CPU-to-pixel compare/invert path with only 6.666 ns.
-	-- Cursor updates take effect one pixel later without changing scan timing.
+	-- Settings take effect one pixel later without changing scan timing.
 	process(clk,rstn)begin
 		if rstn='0' then
+			base_addr_pixel<=(others=>'0'); pitch_pixel<=(others=>'0');
 			cursor_addr_pixel<=(others=>'0');
 			cursor_enable_pixel<='0'; cursor_blink_pixel<='0';
 			cursor_upper_pixel<=0; cursor_lower_pixel<=0;
 			cursor_rate_pixel<="01000";
 		elsif rising_edge(clk) then
+			base_addr_pixel<=BASEADDR; pitch_pixel<=PITCH;
 			cursor_addr_pixel<=CURADDR;
 			cursor_enable_pixel<=CURE; cursor_blink_pixel<=CBLINK;
 			cursor_upper_pixel<=CURUPPER; cursor_lower_pixel<=CURLOWER;
@@ -121,7 +125,7 @@ begin
 
 	Hdelay	:delayer generic map(1) port map(HCOMP,DHCOMP,clk,rstn);
 	Vdelay	:delayer generic map(2) port map(VCOMP,DVCOMP,clk,rstn);
-	wPITCH(7 downto 0)<=PITCH;
+	wPITCH(7 downto 0)<=pitch_pixel;
 	wPITCH(12 downto 8)<=(others=>'0');
 	
 	iskanji<=	'0' when TRAMDAT(15 downto 8)=x"00" else
@@ -264,8 +268,8 @@ begin
 				end if;
 			end if;
 			if(DVCOMP='1')then
-				TRAMADRb<=BASEADDR;
-				C0ADDR<=BASEADDR;
+				TRAMADRb<=base_addr_pixel;
+				C0ADDR<=base_addr_pixel;
 				C_LOW<=0;
 			end if;
 			

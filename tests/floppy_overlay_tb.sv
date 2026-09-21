@@ -99,11 +99,15 @@ module floppy_overlay_tb;
         activity=1;frame(160,120,-1,-1,0);frame(160,120,-1,-1,1);
         if(changed!=88*70) $fatal(1,"mode-change placement failed");
         crop_left=20;crop_top=10;crop_width=120;crop_height=100;
+        // A new crop is adopted at VS; the current picture retains its bounds.
+        frame(160,120,-1,-1,1);
         expected_right=140;expected_bottom=110;
         frame(160,120,-1,-1,1);
         if(changed!=88*70) $fatal(1,"cropped viewport clipped loading caption");
         // Ignore invalid crop dimensions, including stale mode-change data.
-        crop_width=200;expected_right=0;expected_bottom=0;
+        crop_width=200;
+        frame(160,120,-1,-1,1);
+        expected_right=0;expected_bottom=0;
         frame(160,120,-1,-1,1);
         if(changed!=88*70) $fatal(1,"invalid crop did not use native bounds");
         $display("PASS floppy animation: all 59 frames/wrap, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);

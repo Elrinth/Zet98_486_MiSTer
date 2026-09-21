@@ -93,21 +93,15 @@ begin
 	end process;
 	
 	
-	process(clk,rstn)begin
-		if(rstn='0')then
-			VCOUNT<=0;
-			HUCOUNT<=0;
-			UCOUNT<=0;
-			VCOMP<='0';
-			HCOMP<='0';
-		elsif(clk' event and clk='1')then
-			VCOUNT<=vcounter;
-			HUCOUNT<=hucounter;
-			UCOUNT<=ucounter;
-			VCOMP<=vcompb;
-			HCOMP<=hcompb;
-		end if;
-	end process;
+	-- All counter consumers run on clk3. Keep their inputs in that domain.
+	-- Retiming these counters at clk created a clk3 -> clk -> clk3 round trip
+	-- with a zero-cycle hold requirement. At a clk3 rising edge these direct
+	-- outputs contain the same previous-pixel state as the old staged outputs.
+	VCOUNT<=vcounter;
+	HUCOUNT<=hucounter;
+	UCOUNT<=ucounter;
+	VCOMP<=vcompb;
+	HCOMP<=hcompb;
 
 end MAIN;
 					
