@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 module ao486_extmem_tb;
     parameter RAM_MB=16;
+    parameter DOS_PROBE=0;
     reg clk=0,reset=1;
     always #5 clk=!clk;
     wire cache_invalidate=0,interrupt_do=0;
@@ -72,6 +73,12 @@ module ao486_extmem_tb;
                     if(held_write && held_address==20'hf2) boots=boots+1;
                     if(held_write && held_address==20'h7ff0) begin
                         if(held_data!=16'h600d) $fatal(1,"protected-mode extended memory program failed");
+                        if(DOS_PROBE) begin
+                            if(boots!=1 || ddr_commands<100 || !dut.cpu.real_mode)
+                                $fatal(1,"DOS probe did not return to real-mode code");
+                            $display("PASS: DOS RAM probe protected-mode tests and real-mode return, %0d MB, %0d DDR commands",RAM_MB,ddr_commands);
+                            $finish;
+                        end
                         if(boots!=2 || ddr_commands<300) $fatal(1,"missing CPU reset or DDR traffic");
                         $display("PASS: actual ao486 %0d MB RAM: protected mode, partial/unaligned writes, REP MOVSD, DDR code execution, CPU reset; %0d DDR commands",RAM_MB,ddr_commands);
                         $finish;
@@ -94,10 +101,10 @@ module ao486_extmem_tb;
         for(i=0;i<1048576;i=i+1) memory[i]=0;
         if(!$value$plusargs("program=%s",program_path)) $fatal(1,"missing CPU program");
         fd=$fopen(program_path,"rb"); if(!fd) $fatal(1,"cannot open CPU program");
-        loaded=$fread(memory,fd,4096); $fclose(fd);
+        loaded=$fread(memory,fd,DOS_PROBE ? 20'h10100 : 4096); $fclose(fd);
         if(!loaded) $fatal(1,"empty CPU program");
-        memory[20'hffff0]=8'hea; memory[20'hffff1]=0; memory[20'hffff2]=8'h10;
-        memory[20'hffff3]=0; memory[20'hffff4]=0;
+        memory[20'hffff0]=8'hea; memory[20'hffff1]=0; memory[20'hffff2]=DOS_PROBE ? 1 : 8'h10;
+        memory[20'hffff3]=0; memory[20'hffff4]=DOS_PROBE ? 8'h10 : 0;
         repeat(5) @(negedge clk); reset=0;
     end
     initial begin #10000000; $fatal(1,"extended CPU watchdog"); end

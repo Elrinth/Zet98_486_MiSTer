@@ -126,6 +126,14 @@ instruction execution from DDR, and persistence through CPU-only reset.
 The standalone bridge test also checks all byte masks/64-bit word lanes,
 backpressure and a late read response across reset. These tests model DDR;
 they do not establish real DDR operation or BIOS/XMS memory detection.
+`hardware/ram_probe.asm` is the disposable DOS-disk RAM diagnostic. It writes
+distinct sentinels at both ends of every mapped extended-memory MB before
+checking them, to detect address aliasing. It also checks partial/unaligned
+writes and returns from protected mode to save `Z98RAM.TXT` through DOS.
+The CPU simulation exercises the same mode-switch and memory-test body from
+a relocated COM segment, substituting a result port for DOS file operations.
+A 64 MB diagnostic must reject the 16 MB model. The probe is destructive to
+extended RAM and must boot without XMS/EMS managers or resident applications.
 
 Icarus 11 propagates pull defaults from some Intel model input ports into
 connected Verilog registers. The test script inserts identity expressions at
