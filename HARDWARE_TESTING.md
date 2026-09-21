@@ -162,7 +162,7 @@ the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
-engine; slots 1â€“3 could never complete their host transfers. The disk engine
+engine; slots 1Ã¢â‚¬â€œ3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
 later System-disk writes. This can prevent Opening-disk loading and is
 consistent with the mount-order stall. The hardware retests below confirm
@@ -857,7 +857,7 @@ FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
 FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
 closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
 shows PASS. An independent full-image comparison at 14:48:25 finds exactly
-140 changed sectors, confined to FAT/root metadata and clusters 7026â€“7030.
+140 changed sectors, confined to FAT/root metadata and clusters 7026Ã¢â‚¬â€œ7030.
 A stricter metadata audit confirms all unrelated FAT and directory entries
 are identical to the pristine archive. Both FAT copies agree. The extracted
 payload also matches on the host, SHA-256
@@ -936,3 +936,27 @@ two existing internal stages, retaining the same three-clock output latency
 as the animated sprite. All 59 GIF frames and wrap, dots, D0/D1 labels,
 hold/disable, crop/mode placement, CE/sync and 56576 continuous/bursty pixel
 checks pass. Its FPGA timing is still pending.
+
+### September 21 afternoon follow-up
+
+The full FPGA memory profile was restored at 15:43:04 and reloaded at
+15:43:58. The 15:47:12 capture confirms the game menu. Doom II was selected
+at 15:49:23. At 15:51:56 it reports pc9821.drv and reaches zone-memory
+initialization; the 15:56:47 capture contains orange horizontal stripes,
+not usable game graphics. This is not a playable-Doom result. The video
+subsystem does not yet implement the complete PC-9821/PEGC feature set.
+The verified Bundle50/profile launcher was reloaded at 16:09:11.
+
+The earlier full 60 MHz snapshot quartus-20260921-152915-dea3d1 (7f6ad16)
+finishes in 27m57s but has ten failing checks, worst -1.584 ns. All-corner
+reports identify remaining GDC plane/address controls into SDRAM, scaling
+options and floppy activity into video, plus a floppy-RAM output hold path.
+CPU-internal setup is -0.031 ns and the system path is -0.211 ns. This build
+predates both the decode-buffer and caption fixes and was not deployed.
+
+The decode-buffer CPU-only 66 MHz probe finishes but fails setup by 1.221 ns;
+its Fmax is 61.08 MHz compared with 59.32 MHz before the change. The critical
+path now goes through segment access checking to memory-write completion.
+This is an isolated virtual-I/O result, not complete-core timing or a
+hardware clock setting. The complete uncached regression passes with
+434005 ALU cycles and 112340 VRAM cycles.

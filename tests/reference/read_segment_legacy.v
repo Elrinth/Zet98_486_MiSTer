@@ -106,7 +106,7 @@ wire        seg_read;
 wire        seg_write;
 
 wire        seg_limit_overflow;
-wire        seg_length_fault;
+wire [4:0]  seg_left;
 wire        seg_invalid_read_access;
 wire        seg_invalid_write_access;
 wire        seg_valid;
@@ -163,27 +163,15 @@ assign seg_limit_overflow =
     (seg_select == 3'd4 && (((fs_cache[43] || !fs_cache[42]) && rd_address_effective > fs_limit) || (!fs_cache[43] && fs_cache[42] && (rd_address_effective <= fs_limit || rd_address_effective > { {16{fs_cache[54]}}, 16'hFFFF })))) ||
     (seg_select == 3'd5 && (((gs_cache[43] || !gs_cache[42]) && rd_address_effective > gs_limit) || (!gs_cache[43] && gs_cache[42] && (rd_address_effective <= gs_limit || rd_address_effective > { {16{gs_cache[54]}}, 16'hFFFF }))));
 
-// Compare each segment before the late segment-select mux. The original
-// path selected a five-bit remaining count and then compared read_length.
-// Keep the exact saturated count, including wraparound/invalid encodings.
-function segment_too_short;
-    input [31:0] remaining;
-    input [3:0] length;
-    reg [4:0] available;
-    begin
-        available = (remaining >= 32'd15) ? 5'd16 : remaining[3:0] + 4'd1;
-        segment_too_short = available < {1'b0, length};
-    end
-endfunction
-
-assign seg_length_fault =
-    (seg_select == 3'd0 && segment_too_short(es_left, read_length)) ||
-    (seg_select == 3'd1 && segment_too_short(cs_left, read_length)) ||
-    (seg_select == 3'd2 && segment_too_short(ss_left, read_length)) ||
-    (seg_select == 3'd3 && segment_too_short(ds_left, read_length)) ||
-    (seg_select == 3'd4 && segment_too_short(fs_left, read_length)) ||
-    (seg_select >= 3'd5 && segment_too_short(gs_left, read_length));
-
+//NOTE: only valid for (not SYSTEM)
+assign seg_left =
+    (seg_select == 3'd0)?   ((es_left >= 32'd15)? 5'd16 : es_left[3:0] + 4'd1) :
+    (seg_select == 3'd1)?   ((cs_left >= 32'd15)? 5'd16 : cs_left[3:0] + 4'd1) :
+    (seg_select == 3'd2)?   ((ss_left >= 32'd15)? 5'd16 : ss_left[3:0] + 4'd1) :
+    (seg_select == 3'd3)?   ((ds_left >= 32'd15)? 5'd16 : ds_left[3:0] + 4'd1) :
+    (seg_select == 3'd4)?   ((fs_left >= 32'd15)? 5'd16 : fs_left[3:0] + 4'd1) :
+                            ((gs_left >= 32'd15)? 5'd16 : gs_left[3:0] + 4'd1);    
+    
 //NOTE: only valid for SEGMENT (not SYSTEM)
 // for read: CODE and (not READABLE); for write: DATA and (not WRITABLE)
 assign seg_invalid_read_access =
@@ -214,7 +202,7 @@ assign seg_valid =
 assign seg_fault = 
     (rd_address_effective_ready && (seg_read || seg_write)) &&
     ((seg_invalid_read_access && seg_read) || (seg_invalid_write_access && seg_write) ||
-     seg_limit_overflow || seg_length_fault || ~(seg_valid));
+     seg_limit_overflow || (seg_left < { 1'b0, read_length }) || ~(seg_valid));
 
 assign rd_seg_gp_fault_init = seg_select != 3'd2 && seg_fault;
 assign rd_seg_ss_fault_init = seg_select == 3'd2 && seg_fault;

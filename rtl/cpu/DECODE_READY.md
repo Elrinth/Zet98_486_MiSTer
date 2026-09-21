@@ -19,10 +19,11 @@ Forcing consumption during a stall must fail. The full CPU smoke test,
 both cached coherency configurations, disconnected-DMA negative control,
 and actual CPU BIOS-write test pass. Cache benchmarks retain exactly
 6361/4543 cycles (instruction cache) and 6393/3720 cycles (instruction plus
-8 KB conventional-memory cache). The uncached stress run reached its
-434005-cycle ALU result before diagnostic interruption; its full rerun is
-pending. No timing or hardware speed claim follows from these simulations.
+8 KB conventional-memory cache). The complete uncached stress run also passes: 434005 ALU cycles and
+112340 VRAM cycles, with DMA/self-modification and upper-window checks. No timing or hardware speed claim follows from these simulations.
 
-An isolated 66 MHz CPU/bridge fit is running. Its virtual I/O constraints
+The isolated 66 MHz CPU/bridge fit completes but fails setup by 1.221 ns;
+its reported Fmax is 61.08 MHz, up from 59.32 MHz in the prior probe. The
+worst path now crosses segment-access checking into memory-write completion. Its virtual I/O constraints
 cannot establish complete PC-98 core timing, hardware reliability or game
 frame rate, even if the CPU-only result passes.
