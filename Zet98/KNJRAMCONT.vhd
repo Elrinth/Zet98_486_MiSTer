@@ -35,6 +35,7 @@ signal	BGNADDR	:std_logic_vector(LDR_AWIDTH-1 downto 0);
 signal	ENDADDR	:std_logic_vector(LDR_AWIDTH-1 downto 0);
 signal	CGADDR	:std_logic_vector(16 downto 0);
 signal	JISCODE	:std_logic_vector(15 downto 0);
+signal	CGCODE	:std_logic_vector(15 downto 0);
 signal	CPOS	:std_logic_vector(7 downto 0);
 signal	KNJRAMSELb	:std_logic_vector(1 downto 0);
 
@@ -73,8 +74,11 @@ begin
 		end if;
 	end process;
 	
+	-- ANK characters have no left/right half. Keep their high byte zero.
+	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" else
+			not CPOS(5) & JISCODE(14 downto 0);
 	cnv	:knjaddrcnv port map(
-		kcode	=>not CPOS(5) & JISCODE(14 downto 8) & JISCODE(7 downto 0),
+		kcode	=>CGCODE,
 		cline	=>CPOS(3 downto 0),
 		
 		romsel	=>KNJRAMSELb,

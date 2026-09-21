@@ -23,6 +23,7 @@ bash tests/run-video-sdram.sh
 bash tests/run-video-settings.sh
 bash tests/run-graphics-address.sh
 bash tests/run-text-pixel-memory.sh
+bash tests/run-font-address.sh
 bash tests/run-video-counters.sh
 bash tests/run-video-scale.sh
 bash tests/run-video-calc.sh

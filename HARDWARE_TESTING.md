@@ -1470,3 +1470,27 @@ The current PaletteCaption50 hardware reaches a Rusty gameplay scene by
 lettering appears malformed; gameplay performance and text rendering remain
 unverified. This is stronger boot-progress evidence than the intro alone,
 not evidence that all Rusty graphics are correct.
+
+GDCGuard50 was loaded at 23:09:36. Its DOS menu was captured at 23:23:39,
+Rusty selected at 23:25:01, and a correctly colored illustrated intro captured
+at 23:28:00. Escape at 23:38:00 reaches the title by 23:39:46. The logo is
+correct while the menu lettering remains malformed. The installed test
+boot.rom SHA-256 is the known-working `647b5fa9...42f21db7` listed above;
+the older local `device-boot.rom` backup is a different font/BIOS and must
+not be substituted when comparing these captures.
+
+Reference tracing isolates Rusty's title lettering to CG-ROM row 09, with
+2,616,320 font reads of 14 glyphs. It makes no direct ANK or GRCG tile-compare
+reads in this run, and no GRCG mode writes with an unaligned tile counter.
+Two source defects are fixed and tested: the wrong row 09..0b FONT.ROM
+mapping used by Rusty, and an independent ANK half-selector bug. See
+`rtl/FONT_ADDRESS.md`. The 290,816 address checks, independent original-bug
+negative controls, and six rendered-text regressions pass. Hardware checking
+of this source change remains pending.
+
+StackDisplay60 (`501807b`, build `quartus-20260921-230252-980603`) finishes
+with five negative summary checks, worst CPU setup -0.348 ns; memory setup
+is -0.097 ns and video setup -0.145 ns. It passes all HPS placement guards
+but is not deployed. Compared with ScalerSettings60's -1.320 ns CPU path,
+the worst CPU violation is smaller; reliable 60 MHz operation is still
+unproven. Detailed path analysis is running with one CPU.

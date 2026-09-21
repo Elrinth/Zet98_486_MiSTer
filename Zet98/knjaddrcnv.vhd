@@ -31,15 +31,14 @@ begin
 	variable tmph	:std_logic_vector(7 downto 0);
 	variable tmpa	:std_logic_vector(15 downto 0);
 	begin
-		if(mcode<x"0900")then
+		-- FONT.ROM stores JIS rows 01..0b at the same 96-glyph stride.
+		if(mcode<x"0c00")then
 			tmpl:=x"00" &  mcode(7 downto 0)-x"20";
 			tmpl:=tmpl-((mcode(14 downto 8)-1)& "00000");
 			tmpa(6 downto 0):=tmpl(6 downto 0);
 			tmph:=('0' & (mcode(14 downto 8)-1))+tmpl(14 downto 7);
 			tmpa(15 downto 7):='0' & tmph;
 			addr<=x"00c0"+tmpa;
-		elsif(mcode<x"0c00")then
-			addr<=x"03a0" + (mcode-x"0c00");
 		else
 			tmpl:=x"00" & mcode(7 downto 0)-x"20";
 			tmpl:=tmpl-((mcode(14 downto 8)-x"c") & "00000");
