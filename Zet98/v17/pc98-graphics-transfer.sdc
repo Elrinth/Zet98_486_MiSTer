@@ -7,31 +7,32 @@
 #
 # Data: SDRAMC writes VIDDAT0..3, then changes the vidend completion toggle.
 # Two VIDCLK synchronizer stages precede registered VIDACKb. GRAPHSCR
-# registers BUFWE after ACK; the line RAM writes on the next
-# pixel edge. No new read can replace the data until the consumer releases
-# GRAMRD and starts another request. The enabled write is at least two pixel
-# edges after completion, not the nearest arbitrary 100/25 MHz clock edges.
+# captures WDAT0..3 after ACK; the line RAM writes those pixel-clock registers
+# on the next pixel edge. No new read can replace the data until the consumer
+# releases GRAMRD and starts another request. The enabled WDAT capture follows
+# synchronized completion, not the nearest arbitrary 100/25 MHz clock edges.
 #
 # Limit only these buses to 20 ns; retain normal hold checks and every control
 # path. tests/run-video-sdram.sh exercises the real producer/consumer with
-# 20 ns transport delays, per-plane/order/count checks and >=20 ns of capture
-# margin. A late-data negative control must fail. This is not a global CDC
+# 20 ns transport delays, per-plane/order/count checks and >=20 ns of stability
+# at both WDAT capture and RAM write. A late-data negative control must fail.
+# This is not a global CDC
 # false path and does not relax CPU-written graphics configuration registers.
 set graphics_address [get_registers {*|VID|GRP|GRAMADRb*}]
 set sdram_address [get_registers {*|ram|MEMADR*}]
 set graphics_data [get_registers {*|ram|VIDDAT*}]
-set graphics_line_data [get_registers {*|VID|GRP|buf*|*porta_datain_reg*}]
-# Before physical RAM packing, TimeQuest represents this mixed-width RAM as
-# 32 two-bit input keepers. After packing they expand to 64 one-bit keepers.
-# The source bus always has all 64 registers; both endpoint forms are valid.
+set graphics_capture [get_registers {*|VID|GRP|WDAT*}]
+# The completed-read capture added ahead of the RAM is now the end of the
+# bundled crossing. Targeting the old RAM input would miss this path and
+# incorrectly include a second, ordinary pixel-clock register transfer.
 if {[get_collection_size $graphics_address] < 14 ||
     [get_collection_size $sdram_address] < 13 ||
     [get_collection_size $graphics_data] < 64 ||
-    [get_collection_size $graphics_line_data] < 32} {
+    [get_collection_size $graphics_capture] < 64} {
     error "Expected the complete SDRAMC/GRAPHSCR bundled address and data buses"
 }
 set_max_delay -from $graphics_address -to $sdram_address 20.000
-set_max_delay -from $graphics_data -to $graphics_line_data 20.000
+set_max_delay -from $graphics_data -to $graphics_capture 20.000
 
 # Only the input of each control synchronizer is asynchronous. The remaining
 # stages, edge detection, completion comparison and ACK/BUFWE logic are timed.

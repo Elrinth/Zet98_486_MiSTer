@@ -186,6 +186,19 @@ fetches. The tested source hash was checked against the workspace after
 correcting an initial Docker copy that used the previous source. FPGA
 fitting and hardware validation of this capture stage remain pending.
 
+The first fit with that capture stage exposed an obsolete constraint endpoint:
+the 20 ns SDRAM data bound still targeted the line RAM instead of WDAT0..3.
+It now ends at all 64 WDAT registers; the following WDAT-to-RAM path retains
+normal pixel-clock setup/hold checks. The real-controller test also asserts
+at least 20 ns of input stability at WDAT capture, in addition to the RAM
+write check. All six phases and the late-data negative pass.
+
+Re-analysis of the unchanged b8e75dc fitted netlist with only this endpoint
+correction removes its -6.506 ns graphics-data setup violation. Its remaining
+worst setup is -0.316 ns in the framework's framebuffer viewport controls;
+CPU-internal setup is +0.046 ns. Other memory/control paths still fail, so this
+is diagnostic evidence, not a deployable 60 MHz result.
+
 ## Final colour-enable timing
 
 The OSD-stage 60 MHz fit still exposed a direct CPU-clock graphics-enable
