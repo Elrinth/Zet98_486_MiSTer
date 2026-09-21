@@ -162,7 +162,7 @@ the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
-engine; slots 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“3 could never complete their host transfers. The disk engine
+engine; slots 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
 later System-disk writes. This can prevent Opening-disk loading and is
 consistent with the mount-order stall. The hardware retests below confirm
@@ -857,7 +857,7 @@ FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
 FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
 closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
 shows PASS. An independent full-image comparison at 14:48:25 finds exactly
-140 changed sectors, confined to FAT/root metadata and clusters 7026ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“7030.
+140 changed sectors, confined to FAT/root metadata and clusters 7026ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ7030.
 A stricter metadata audit confirms all unrelated FAT and directory entries
 are identical to the pristine archive. Both FAT copies agree. The extracted
 payload also matches on the host, SHA-256
@@ -969,3 +969,20 @@ and all scaling/crop/overlay cases pass. The FEC RAM port-B read is also
 registered in its RAM clock; its existing transfer wait covers the latency
 in 24 real-controller/latency-model tests, with a stale-data negative.
 All these changes await complete FPGA timing and hardware validation.
+
+The decode/caption full 60 MHz snapshot quartus-20260921-155027-b6f840
+(5bab734) completes in 30m58s with 34208 ALMs, 453 RAM blocks and 66 DSPs.
+It fails 15 timing checks, worst -1.690 ns; it was not deployed. CPU-internal
+setup improves to +0.373 ns and same-system-clock setup is +0.041 ns. The
+incoming CPU paths still fail by -0.300 ns (SDRAM return/completion signals).
+Remaining failures include GDC controls, CPU palette data into video and
+OSD/floppy-buffer hold paths. The next source already addresses GDC metadata,
+scaling/activity inputs and the floppy buffer; its fits are separate.
+
+Rusty launched from the Bundle50 writable image at 16:15:00 reaches the
+coherent illustrated intro captured at 16:17:47. The simplified package
+launcher without the diagnostic D1 carrier was loaded at 16:19:24 and reaches
+the FPGA-profile menu at 16:22:14. The private installation ZIP contains the
+verified Bundle50 RBF, owner ROM, pristine VHD, loader, scoped configuration
+and that launcher. Archive CRC and all payload SHA-256 checks pass. Nothing
+from the ROM/DOS/game package is included in source control.

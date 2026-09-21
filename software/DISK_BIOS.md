@@ -118,7 +118,7 @@ read; the diagnostic result was saved to its separate disposable floppy.
 
 ## BIOS-first boot experiment
 
-`tests/hardware/ide_bootsector.asm` reads our resident loader from sectors 2–5
+`tests/hardware/ide_bootsector.asm` reads our resident loader from sectors 2â€“5
 of a new 1.23 MB floppy. `ide_bootstrap.asm`, built with `BIOS_BOOT=1`, installs
 the read service before DOS has loaded, checks the private VHD's IPL/partition
 checksum and enters its original IPL. Selected HDD calls use a private stack;
@@ -126,11 +126,13 @@ other devices retain the ROM handler and caller stack. IRQs remain disabled
 inside the wrapper until it restores the original caller frame, including
 IF/DF and the returned carry bit.
 
-The resident area D8000–DFFFF is ordinary RAM in this core's current map. This
+The resident area D8000â€“DFFFF is ordinary RAM in this core's current map. This
 is a **core-specific experiment**, not a portable driver for physical PC-98s.
 Do not enable an upper-memory manager that can overwrite it. The geometry
-and checksum currently identify only the owner's prepared game disk. Writes
-remain disabled, including profile changes and game saves.
+and checksum currently identify only the owner's prepared game disk. Default
+builds disable writes. The explicitly bounded write-enabled loader now passes
+DOS file persistence and saved profile changes on a separate private copy;
+individual games' save behavior remains unverified.
 
 ```sh
 nasm -f bin tests/hardware/ide_bootsector.asm -o build/VHDIPL.BIN
@@ -157,7 +159,7 @@ boot method: the old DOS interrupt hooks can outlive their overwritten code.
 
 ## Calling-convention references
 
-- NEC, *PC-9800 Series Technical Data Book, BIOS*, printed pages 277–288,
+- NEC, *PC-9800 Series Technical Data Book, BIOS*, printed pages 277â€“288,
   especially the read/verify register tables and relative-sector addressing:
   [technical manual](https://pc98.ne.jp/devdocs/pc-9800technicaldatabookbios.pdf).
 - [NP2kai `bios/sxsibios.c`](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/bios/sxsibios.c),

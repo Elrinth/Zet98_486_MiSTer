@@ -2,9 +2,11 @@
 
 Build with `-RawIde` to replace unused SASI slot 2 with `IDE hard disk` (`.vhd`/`.img`).
 The image is a flat array of 512-byte sectors, not a dynamic VHD/VHDX container.
-The controller does **not** yet provide an INT 1Bh disk BIOS, a partition IPL,
-or a bootable DOS installation. The stock test ROM cannot boot this device
-yet. Do not mistake an image selector or an IDENTIFY result for HDD boot support.
+The separate [INT 1Bh service and BIOS-first floppy](../../software/DISK_BIOS.md)
+now boot the owner's prepared DOS 6.20 image on Native50/Bundle50. The
+write-enabled Bundle50 setup also passes file persistence and all four FPGA
+memory profiles. The stock test ROM still cannot boot ATA directly: the
+resident loader, matching image geometry and user-supplied DOS are required.
 
 `scripts/import_disk_image.py source.hdi output.vhd` removes a validated HDI
 header when its logical sectors are 512 bytes and writes geometry metadata
@@ -22,8 +24,9 @@ still reads D88. Use a new output filename, for example:
 
 The private DOS 6.20 multi-game image uses the
 [DOS configuration templates](../../disk-templates/dos620/README.md).
-Its game files and boot menu have software-emulator checks; FPGA HDD boot
-remains unimplemented. The image itself is not included in this repository.
+Its menu and Rusty's intro boot on FPGA; Nightslave reaches its title.
+Doom II runs in NP2kai but currently produces corrupt FPGA graphics after
+text initialization. The image itself is not included in this repository.
 
 Ports follow the PC-98 layout: 0430h presence, 0432h channel selection,
 0640h 16-bit data, 0642h..064Eh even-byte task-file registers, and 074Ch
@@ -65,9 +68,17 @@ only sector 17 changed. RBF SHA-256:
 `24ba511f10d5779908221cabdb8af3212bae358e65493cc21847544c496eac69`.
 This build still had video timing violations; it is diagnostic evidence, not
 a timing-clean release. The subsequent shared-write-port RAM optimization
-has passed simulation and infers 4096 block-RAM bits in Quartus; hardware
-confirmation of that optimization remains pending.
+passes simulation and infers 4096 block-RAM bits in Quartus. Later Native50
+and Bundle50 builds include it and pass BIOS reads and DOS file persistence;
+see [hardware evidence](../../HARDWARE_TESTING.md).
 
-A [read-only INT 1Bh service](../../software/DISK_BIOS.md) now passes
-actual-CPU smoke tests and a separate full 64 KB transfer test. It is not yet
-installed in the disk-ROM window and does not add HDD boot to this controller.
+The [INT 1Bh service](../../software/DISK_BIOS.md) is read-only by default;
+explicitly bounded writes are available for the private writable image. It
+is loaded before DOS by a small D0 floppy, not installed in the disk-ROM
+window. The normal game launcher no longer needs a diagnostic D1 floppy.
+
+Importer checks on the owner's Metal Force HDM, Dungeon Buster FDI and Dark
+Gaiden NFD-R0 preserve every payload byte. A 512-byte-sector Azusa HDI also
+converts byte-for-byte to raw VHD plus geometry JSON. These are conversion
+checks, not boot tests. Several sampled translation HDIs instead contain
+256-byte SASI sectors and remain deliberately unsupported by this path.
