@@ -873,3 +873,12 @@ passes at +0.256 ns; the full CPU-clock domain still fails by -0.033 ns.
 Video setup, pixel hold/removal and other hold checks also fail. This build
 was not deployed. The post-fit reporter now includes incoming memory/video
 paths so a CPU improvement cannot obscure the remaining peripheral limits.
+
+### Writable DOS memory profiles on Bundle50
+
+The profile menu saved LIMITED at 14:57:35 on September 21. After reload at
+14:58:44, DOS reached the LIMITED menu. LIM.COM passed at 15:05:06: 14,272 KB
+free XMS (hex 37C0), a 1 MB block at physical 00110000, both-end copy/readback,
+unlock/free and full recovery of the free count. The returned diagnostic
+floppy contains the same result. The full FPGA profile was saved again at
+15:09:46; its new boot/API verification is pending.

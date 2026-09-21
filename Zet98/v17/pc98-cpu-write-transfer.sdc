@@ -17,3 +17,14 @@ if {[get_collection_size $cpu_write_source] < 80 ||
     error "Expected complete 80-bit CPU write set/preserve bundle endpoints"
 }
 set_max_delay -from $cpu_write_source -to $cpu_write_memory 15.000
+
+# The independent GDC drawing port now uses the same held-data protocol.
+# Its source is captured with SUBREQ and admitted with SUBJOB, never on a
+# live GRCG read result. tests/run-sub-write-bundle.sh checks both deadlines.
+set sub_write_source [get_registers {*|ram|sub_write_source*}]
+set sub_write_memory [get_registers {*|ram|sub_write_memory*}]
+if {[get_collection_size $sub_write_source] < 80 ||
+    [get_collection_size $sub_write_memory] < 80} {
+    error "Expected complete 80-bit GDC write set/preserve bundle endpoints"
+}
+set_max_delay -from $sub_write_source -to $sub_write_memory 15.000

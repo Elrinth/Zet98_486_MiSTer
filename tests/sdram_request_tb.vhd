@@ -9,7 +9,7 @@ use std.env.all;
 -- completion and request count are checked independently of the controller.
 entity sdram_request_tb is
     generic (CPU_MHZ : positive := 50; BUFFERED : boolean := false;
-             MEM_PHASE_PS : natural := 0);
+             MEM_PHASE_PS : natural := 0; USE_SUB : boolean := false);
 end entity;
 architecture test of sdram_request_tb is
     constant AW : positive := 22;
@@ -24,7 +24,9 @@ architecture test of sdram_request_tb is
     signal expected_wd : words_t;
     signal expected_rd : words_t;
     signal preserve_mask : std_logic_vector(15 downto 0) := x"0000";
-    signal rd : words_t;
+    signal rd, cpu_rd, sub_rd : words_t;
+    signal cpu_req, sub_req : std_logic_vector(5 downto 0);
+    signal cpu_ack, sub_ack : std_logic;
     signal cke, cs, ras, cas, we, udq, ldq, ba1, ba0 : std_logic;
     signal ma : std_logic_vector(12 downto 0);
     signal dq : std_logic_vector(15 downto 0);
@@ -42,21 +44,26 @@ begin
         loop wait for 5 ns; memclk<=not memclk; end loop;
     end process;
     dq <= read_source;
-    dut : entity work.SDRAMC generic map(AW,100,64000/8192,BUFFERED) port map(
+    cpu_req <= requests when not USE_SUB else (others=>'0');
+    sub_req <= requests when USE_SUB else (others=>'0');
+    ack <= sub_ack when USE_SUB else cpu_ack;
+    rd <= sub_rd when USE_SUB else cpu_rd;
+    dut : entity work.SDRAMC generic map(AW,100,64000/8192,BUFFERED and not USE_SUB,BUFFERED and USE_SUB) port map(
         PMEMCKE=>cke, PMEMCS_N=>cs, PMEMRAS_N=>ras, PMEMCAS_N=>cas,
         PMEMWE_N=>we, PMEMUDQ=>udq, PMEMLDQ=>ldq, PMEMBA1=>ba1,
         PMEMBA0=>ba0, PMEMADR=>ma, PMEMDAT=>dq,
-        CPUBNK=>bank, CPUADR=>address, CPURDAT0=>rd(0), CPURDAT1=>rd(1),
-        CPURDAT2=>rd(2), CPURDAT3=>rd(3), CPUWDAT0=>wd(0), CPUWDAT1=>wd(1),
+        CPUBNK=>bank, CPUADR=>address, CPURDAT0=>cpu_rd(0), CPURDAT1=>cpu_rd(1),
+        CPURDAT2=>cpu_rd(2), CPURDAT3=>cpu_rd(3), CPUWDAT0=>wd(0), CPUWDAT1=>wd(1),
         CPUWDAT2=>wd(2), CPUWDAT3=>wd(3), CPUPRESERVE=>preserve_mask,
-        CPUWR1=>requests(0), CPUWR4=>requests(1),
-        CPURD1=>requests(2), CPURD4=>requests(3), CPURMW1=>requests(4), CPURMW4=>requests(5),
-        CPUBSEL=>bytes, CPUPSEL=>planes, CPUACK=>ack, CPUCLK=>cpuclk,
-        SUBBNK=>"00", SUBADR=>(others=>'0'), SUBRDAT0=>open, SUBRDAT1=>open,
-        SUBRDAT2=>open, SUBRDAT3=>open, SUBWDAT0=>x"0000", SUBWDAT1=>x"0000",
-        SUBWDAT2=>x"0000", SUBWDAT3=>x"0000", SUBWR1=>'0', SUBWR4=>'0',
-        SUBRD1=>'0', SUBRD4=>'0', SUBRMW1=>'0', SUBRMW4=>'0', SUBBSEL=>"00",
-        SUBPSEL=>"0000", SUBACK=>open, SUBCLK=>cpuclk,
+        CPUWR1=>cpu_req(0), CPUWR4=>cpu_req(1),
+        CPURD1=>cpu_req(2), CPURD4=>cpu_req(3), CPURMW1=>cpu_req(4), CPURMW4=>cpu_req(5),
+        CPUBSEL=>bytes, CPUPSEL=>planes, CPUACK=>cpu_ack, CPUCLK=>cpuclk,
+        SUBBNK=>bank, SUBADR=>address, SUBRDAT0=>sub_rd(0), SUBRDAT1=>sub_rd(1),
+        SUBRDAT2=>sub_rd(2), SUBRDAT3=>sub_rd(3), SUBWDAT0=>wd(0), SUBWDAT1=>wd(1),
+        SUBWDAT2=>wd(2), SUBWDAT3=>wd(3), SUBPRESERVE=>preserve_mask,
+        SUBWR1=>sub_req(0), SUBWR4=>sub_req(1), SUBRD1=>sub_req(2), SUBRD4=>sub_req(3),
+        SUBRMW1=>sub_req(4), SUBRMW4=>sub_req(5), SUBBSEL=>bytes,
+        SUBPSEL=>planes, SUBACK=>sub_ack, SUBCLK=>cpuclk,
         VIDBNK=>"00", VIDADR=>(others=>'0'), VIDDAT0=>open, VIDDAT1=>open,
         VIDDAT2=>open, VIDDAT3=>open, VIDRD=>'0', VIDACK=>open, VIDCLK=>cpuclk,
         FDERDAT=>open, FDEWAIT=>open, FDECLK=>cpuclk,
@@ -195,7 +202,7 @@ begin
             end loop;
         end loop;
         report "PASS: SDRAM request metadata at " & integer'image(CPU_MHZ) &
-            " MHz: " & integer'image(total) & " single/four-plane read/write/RMW commands, masks, live RMW data";
+            " MHz, SUB=" & boolean'image(USE_SUB) & ": " & integer'image(total) & " single/four-plane read/write/RMW commands, masks, live RMW data";
         finish;
     end process;
     process begin wait for 3 ms; assert false report "SDRAM request watchdog" severity failure; end process;

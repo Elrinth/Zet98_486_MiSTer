@@ -10,7 +10,8 @@ The CPU GRCG instance now produces a static set word for each plane and a
 the request metadata. Its existing three-stage request admission captures
 the held bundle into memclk registers. Fresh plane reads are merged there:
 `set | (read & preserve)`. Ordinary writes have a zero preserve mask. The
-separate GDC drawing path retains its original live interface.
+separate GDC drawing port now uses the same set/preserve transfer, with
+its own request, admission registers and completion handshake.
 
 This adds no SDRAM command or transaction state. It also avoids latching an
 RMW result before its read has happened. Only the source-to-admission bundle
@@ -61,3 +62,14 @@ This build precedes the read-capture change. The latter's 60 MHz fit in
 -2.289 ns from the separate GDC drawing write path. CPU-internal setup
 passes at +0.256 ns; CPU-clock-domain setup still fails by -0.033 ns.
 Other video/hold/removal failures remain. Neither 60 MHz RBF was deployed.
+
+The GDC change captures its source with SUBREQ and its memory-side payload
+with SUBJOB. Completed reads are registered on the existing SUBACK edge.
+`tests/run-sub-write-bundle.sh` passes 9216 buffered and 1536 legacy drawing
+transactions, plus deliberately late write/read negative controls. The four
+legacy completion times exactly match the corresponding buffered cases.
+CPU, video-SDRAM and actual GRCG/data-bus regressions also pass. Neither a
+memory operation nor an acknowledgement cycle is added. Only the held
+80-bit source-to-admission bundle receives the same bounded 15 ns constraint;
+request, completion, read results and normal hold checks remain timed.
+Integrated timing and hardware verification of this GDC change are pending.

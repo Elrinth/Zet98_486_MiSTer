@@ -7,7 +7,8 @@ ENTITY SDRAMC IS
 		ADRWIDTH		:integer	:=23;
 		CLKMHZ			:integer	:=100;			--MHz
 		REFCYC			:integer	:=64000/8192;	--usec
-        CPU_WRITE_BUNDLE : boolean := false
+        CPU_WRITE_BUNDLE : boolean := false;
+        SUB_WRITE_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -55,6 +56,7 @@ ENTITY SDRAMC IS
 		SUBWDAT1			:in std_logic_vector(15 downto 0);
 		SUBWDAT2			:in std_logic_vector(15 downto 0);
 		SUBWDAT3			:in std_logic_vector(15 downto 0);
+        SUBPRESERVE :in std_logic_vector(15 downto 0) := x"0000";
 		SUBWR1			:in std_logic;
 		SUBWR4			:in std_logic;
 		SUBRD1			:in std_logic;
@@ -165,6 +167,8 @@ signal	lCPUPSEL :std_logic_vector(3 downto 0);
 type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
 signal cpu_read_words, cpu_write_words : cpu_words_t;
 signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(79 downto 0);
+signal sub_read_words, sub_write_words : cpu_words_t;
+signal sub_write_source, sub_write_crossing, sub_write_memory : std_logic_vector(79 downto 0);
 
 signal	lFDEADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	lFECADR		:std_logic_vector(ADRWIDTH+1 downto 0);
@@ -193,6 +197,7 @@ signal VIDREQ, VIDbusy : std_logic;
 signal VIDdone_sync : std_logic_vector(1 downto 0);
 attribute preserve : boolean;
 attribute preserve of cpu_write_source, cpu_write_memory : signal is true;
+attribute preserve of sub_write_source, sub_write_memory : signal is true;
 attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
 attribute altera_attribute : string;
 attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
@@ -217,6 +222,49 @@ signal	MEMDATOE	:STD_LOGIC;
 
 signal	SUBREQS	:std_logic;
 begin
+
+    sub_write_crossing <= sub_write_source; -- SUB_WRITE_BUNDLE_TRANSPORT
+    sub_bundle : if SUB_WRITE_BUNDLE generate
+        -- The GDC drawing port has its own request/ACK handshake. Capture
+        -- the static GRCG set/preserve operands at the request source, then
+        -- admit them with SUBJOB after its three memory-clock stages.
+        process(SUBCLK) begin
+            if rising_edge(SUBCLK) then
+                if SUBREQS='1' and lsubstb='0' then
+                    sub_write_source <= SUBPRESERVE & SUBWDAT3 & SUBWDAT2 & SUBWDAT1 & SUBWDAT0;
+                end if;
+            end if;
+        end process;
+        process(memclk) begin
+            if rising_edge(memclk) then
+                if lSUBREQ="011" then -- SUB_WRITE_BUNDLE_ADMISSION
+                    sub_write_memory <= sub_write_crossing;
+                end if;
+            end if;
+        end process;
+        planes : for i in 0 to 3 generate
+            sub_write_words(i) <= sub_write_memory(i*16+15 downto i*16) or
+                (sub_read_words(i) and sub_write_memory(79 downto 64));
+        end generate;
+        process(SUBCLK,rstn) begin
+            if rstn='0' then
+                SUBRDAT0 <= (others=>'0'); SUBRDAT1 <= (others=>'0');
+                SUBRDAT2 <= (others=>'0'); SUBRDAT3 <= (others=>'0');
+            elsif rising_edge(SUBCLK) then
+                if subend='1' then -- SUB_READ_COMPLETION_CAPTURE
+                    SUBRDAT0 <= sub_read_words(0);
+                    SUBRDAT1 <= sub_read_words(1);
+                    SUBRDAT2 <= sub_read_words(2);
+                    SUBRDAT3 <= sub_read_words(3);
+                end if;
+            end if;
+        end process;
+    end generate;
+    legacy_sub_write : if not SUB_WRITE_BUNDLE generate
+        sub_write_words <= (SUBWDAT0, SUBWDAT1, SUBWDAT2, SUBWDAT3);
+        SUBRDAT0 <= sub_read_words(0); SUBRDAT1 <= sub_read_words(1);
+        SUBRDAT2 <= sub_read_words(2); SUBRDAT3 <= sub_read_words(3);
+    end generate;
 
     cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
     write_bundle : if CPU_WRITE_BUNDLE generate
@@ -1315,7 +1363,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not SUBBSEL(1) & not SUBBSEL(0);
 						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
-						MEMDAT		<=SUBWDAT0;
+						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -1384,7 +1432,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(0) and SUBBSEL(1)) & not (SUBPSEL(0) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 2) & "00";
-						MEMDAT		<=SUBWDAT0;
+						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--2nd word
 						MEMCKE		<='1';
@@ -1398,7 +1446,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(1) and SUBBSEL(1)) & not (SUBPSEL(1) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT1;
+						MEMDAT		<=sub_write_words(1);
 						MEMDATOE	<='1';
 					when 4 =>		--3rd word
 						MEMCKE		<='1';
@@ -1412,7 +1460,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(2) and SUBBSEL(1)) & not (SUBPSEL(2) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT2;
+						MEMDAT		<=sub_write_words(2);
 						MEMDATOE	<='1';
 					when 5 =>		--4th word
 						MEMCKE		<='1';
@@ -1426,7 +1474,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(3) and SUBBSEL(1)) & not (SUBPSEL(3) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT3;
+						MEMDAT		<=sub_write_words(3);
 						MEMDATOE	<='1';
 					when 6 =>		--precharge all
 						MEMCKE		<='1';
@@ -1520,7 +1568,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not SUBBSEL(1) & not SUBBSEL(0);
 						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
-						MEMDAT		<=SUBWDAT0;
+						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -1613,7 +1661,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(0) and SUBBSEL(1)) & not (SUBPSEL(0) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
-						MEMDAT		<=SUBWDAT0;
+						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 12 =>		--2nd word
 						MEMCKE		<='1';
@@ -1627,7 +1675,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(1) and SUBBSEL(1)) & not (SUBPSEL(1) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT1;
+						MEMDAT		<=sub_write_words(1);
 						MEMDATOE	<='1';
 					when 13 =>		--3rd word
 						MEMCKE		<='1';
@@ -1641,7 +1689,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(2) and SUBBSEL(1)) & not (SUBPSEL(2) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT2;
+						MEMDAT		<=sub_write_words(2);
 						MEMDATOE	<='1';
 					when 14 =>		--4th word
 						MEMCKE		<='1';
@@ -1655,7 +1703,7 @@ begin
 						MEMBA0		<=SUBBNK(0);
 						MEMADR(12 downto 11)	<=not (SUBPSEL(3) and SUBBSEL(1)) & not (SUBPSEL(3) and SUBBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=SUBWDAT3;
+						MEMDAT		<=sub_write_words(3);
 						MEMDATOE	<='1';
 					when 15 =>		--precharge all
 						MEMCKE		<='1';
@@ -2207,10 +2255,10 @@ begin
 			cpu_read_words(1)	<=(others=>'0');
 			cpu_read_words(2)	<=(others=>'0');
 			cpu_read_words(3)	<=(others=>'0');
-			SUBRDAT0	<=(others=>'0');
-			SUBRDAT1	<=(others=>'0');
-			SUBRDAT2	<=(others=>'0');
-			SUBRDAT3	<=(others=>'0');
+			sub_read_words(0)	<=(others=>'0');
+			sub_read_words(1)	<=(others=>'0');
+			sub_read_words(2)	<=(others=>'0');
+			sub_read_words(3)	<=(others=>'0');
 			VIDDAT0		<=(others=>'0');
 			VIDDAT1		<=(others=>'0');
 			VIDDAT2		<=(others=>'0');
@@ -2239,18 +2287,18 @@ begin
 				end case;
 			when ST_SUBREAD |ST_SUBRMW =>
 				if(lclkcount=6)then
-					SUBRDAT0<=SMEMDAT;
+					sub_read_words(0)<=SMEMDAT;
 				end if;
 			when ST_SUBREAD4 | ST_SUBRMW4 =>
 				case lclkcount is
 				when 6 =>
-					SUBRDAT0<=SMEMDAT;
+					sub_read_words(0)<=SMEMDAT;
 				when 7 =>
-					SUBRDAT1<=SMEMDAT;
+					sub_read_words(1)<=SMEMDAT;
 				when 8 =>
-					SUBRDAT2<=SMEMDAT;
+					sub_read_words(2)<=SMEMDAT;
 				when 9 =>
-					SUBRDAT3<=SMEMDAT;
+					sub_read_words(3)<=SMEMDAT;
 				when others =>
 				end case;
 			when ST_VIDREAD =>

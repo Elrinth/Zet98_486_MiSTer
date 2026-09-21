@@ -64,6 +64,7 @@ It selects the full HIMEMX profile, `LIMITED.SYS` (14 MB including HMA),
 `CONV.SYS` (conventional memory only), or the existing bare shell. It keeps
 the same backup and byte-comparison workflow. HIMEMX's `/MAX=14336` limits
 what the memory manager exposes; it does not change the FPGA's physical RAM
-map. The limited/conventional profile boot checks are still pending.
+map. LIMITED now boots on Bundle50 and passes direct XMS allocation/copy/free
+with 14,272 KB free. The conventional-only profile boot check is pending.
 The emulator-oriented EMM386/VEM menu should not be installed with the
 current resident HDD BIOS.

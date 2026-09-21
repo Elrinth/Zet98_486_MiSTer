@@ -283,7 +283,8 @@ component SDRAMC
 		ADRWIDTH		:integer	:=23;
 		CLKMHZ			:integer	:=100;			--MHz
 		REFCYC			:integer	:=64000/8192;	--usec
-        CPU_WRITE_BUNDLE : boolean := false
+        CPU_WRITE_BUNDLE : boolean := false;
+        SUB_WRITE_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -331,6 +332,7 @@ component SDRAMC
 		SUBWDAT1		:in std_logic_vector(15 downto 0);
 		SUBWDAT2		:in std_logic_vector(15 downto 0);
 		SUBWDAT3		:in std_logic_vector(15 downto 0);
+        SUBPRESERVE :in std_logic_vector(15 downto 0) := x"0000";
 		SUBWR1			:in std_logic;
 		SUBWR4			:in std_logic;
 		SUBRD1			:in std_logic;
@@ -1931,6 +1933,7 @@ signal	GCG_GDC_WDAT0	:std_logic_vector(15 downto 0);
 signal	GCG_GDC_WDAT1	:std_logic_vector(15 downto 0);
 signal	GCG_GDC_WDAT2	:std_logic_vector(15 downto 0);
 signal	GCG_GDC_WDAT3	:std_logic_vector(15 downto 0);
+signal GCG_GDC_WMASK :std_logic_vector(15 downto 0);
 signal	GCG_GDC_WPSEL	:std_logic_vector(3 downto 0);
 
 --interrupt controller
@@ -2282,7 +2285,7 @@ begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
 
-	ram	:SDRAMC generic map(22,100,64000/8192,true) port map(
+	ram	:SDRAMC generic map(22,100,64000/8192,true,true) port map(
 		-- SDRAM PORTS
 		PMEMCKE			=>pMemCke,
 		PMEMCS_N			=>pMemCs_n,
@@ -2328,6 +2331,7 @@ begin
 		SUBWDAT1			=>GCG_GDC_WDAT1,
 		SUBWDAT2			=>GCG_GDC_WDAT2,
 		SUBWDAT3			=>GCG_GDC_WDAT3,
+        SUBPRESERVE=>GCG_GDC_WMASK,
 		SUBWR1			=>GCG_GDC_WR1,
 		SUBWR4			=>GCG_GDC_WR4,
 		SUBRD1			=>GCG_GDC_RD1,
@@ -3218,7 +3222,7 @@ DBIO_ODAT<=(others=>'1');
 		RAMADDR		=>GDC_RAMADDR
 	);
 
-	gcggdc	:grcg port map(
+	gcggdc	:grcg generic map(SPLIT_RMW=>true) port map(
 		iocs		=>GCG_IOCS,
 		ioaddr		=>ioaddr(1),
 		iowr		=>iowr,
@@ -3242,7 +3246,7 @@ DBIO_ODAT<=(others=>'1');
 		memrdat1		=>GCG_GDC_RDAT1,
 		memrdat2		=>GCG_GDC_RDAT2,
 		memrdat3		=>GCG_GDC_RDAT3,
-        memwmask=>open,
+        memwmask=>GCG_GDC_WMASK,
 		memwdat0		=>GCG_GDC_WDAT0,
 		memwdat1		=>GCG_GDC_WDAT1,
 		memwdat2		=>GCG_GDC_WDAT2,
