@@ -38,3 +38,13 @@ floppy. It requires exactly a 1 MB raw image containing the literal
 `Z98 IDE DIAGNOSTIC ONLY` followed by CR/LF at byte zero before issuing its
 single write to sector 17. It then reads that sector back, verifies all 256
 words and expects four IRQ9 deliveries. This diagnostic is not a disk BIOS.
+
+Hardware verification on SuperStation One, 2026-09-21: the initial 50 MHz
+controller build passed IDENTIFY, guarded sector write/read, the full 256-word
+checksum and all four IRQ9 deliveries. A host-side comparison confirmed that
+only sector 17 changed. RBF SHA-256:
+`24ba511f10d5779908221cabdb8af3212bae358e65493cc21847544c496eac69`.
+This build still had video timing violations; it is diagnostic evidence, not
+a timing-clean release. The subsequent shared-write-port RAM optimization
+has passed simulation and infers 4096 block-RAM bits in Quartus; hardware
+confirmation of that optimization remains pending.

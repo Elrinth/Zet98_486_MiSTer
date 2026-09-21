@@ -76,28 +76,31 @@ module pc98_ide (
         endcase
     end
 
-    (* ramstyle="M10K" *) reg [7:0] data_low[0:255], data_high[0:255];
+    // CPU writes and host reads are separate command phases; likewise host
+    // writes and CPU reads. Share the only RAM write port rather than asking
+    // Quartus for two old-data write ports (which expanded 4 Kbits into LUTs).
+    // Read-during-write values are deliberately unused by either consumer.
+    (* ramstyle="M10K, no_rw_check" *) reg [7:0] data_low[0:255], data_high[0:255];
     reg [7:0] cpu_low, cpu_high, host_low, host_high;
     reg host_byte;
     wire cpu_buffer_write = !reset && selected && !control[2] &&
         write_start && io_address==16'h0640 && state==WRITE_DATA;
+    wire host_buffer_write = sd_buff_wr && sd_ack && host_busy && !host_write;
+    wire [7:0] buffer_address = host_buffer_write ? sd_buff_addr[8:1] : word_index;
     always @(posedge clk) begin
-        cpu_low <= data_low[word_index];
-        cpu_high <= data_high[word_index];
-        if(cpu_buffer_write) begin
-            data_low[word_index] <= io_writedata[7:0];
+        cpu_low <= data_low[buffer_address];
+        cpu_high <= data_high[buffer_address];
+        if(host_buffer_write) begin
+            if(sd_buff_addr[0]) data_high[buffer_address] <= sd_buff_dout;
+            else data_low[buffer_address] <= sd_buff_dout;
+        end else if(cpu_buffer_write) begin
+            data_low[buffer_address] <= io_writedata[7:0];
             // An 8-bit OUT consumes a word, with the unselected byte zero.
-            data_high[word_index] <= io_select[1] ? io_writedata[15:8] : 8'b0;
+            data_high[buffer_address] <= io_select[1] ? io_writedata[15:8] : 8'b0;
         end
-    end
-    always @(posedge clk) begin
         host_low <= data_low[sd_buff_addr[8:1]];
         host_high <= data_high[sd_buff_addr[8:1]];
         host_byte <= sd_buff_addr[0];
-        if(sd_buff_wr && sd_ack && host_busy && !host_write) begin
-            if(sd_buff_addr[0]) data_high[sd_buff_addr[8:1]] <= sd_buff_dout;
-            else data_low[sd_buff_addr[8:1]] <= sd_buff_dout;
-        end
     end
     assign sd_buff_din = host_byte ? host_high : host_low;
 

@@ -258,8 +258,8 @@ port(
 	
 	GBASEADDR0	:in std_logic_vector(13 downto 0);
 	GBASEADDR1	:in std_logic_vector(13 downto 0);
-	GLINENUM0	:in std_logic_vector(8 downto 0);
-	GLINENUM1	:in std_logic_vector(8 downto 0);
+	GLINENUM0	:in std_logic_vector(9 downto 0);
+	GLINENUM1	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
 
 	EMUMODE		:in std_logic;
@@ -2982,8 +2982,8 @@ DBIO_ODAT<=(others=>'1');
 
 		GBASEADDR0	=>gGDC_BASEADDR0(13 downto 0),
 		GBASEADDR1	=>gGDC_BASEADDR1(13 downto 0),
-		GLINENUM0	=>gGDC_LINENUM0(8 downto 0),
-		GLINENUM1	=>gGDC_LINENUM1(8 downto 0),
+		GLINENUM0	=>gGDC_LINENUM0,
+		GLINENUM1	=>gGDC_LINENUM1,
 		GPITCH		=>gGDC_PITCH,
 
 		EMUMODE		=>'0',

@@ -4,7 +4,7 @@
 module floppy_overlay #(
     parameter HOLD_FRAMES=15,
     parameter ANIMATION_CYCLES=3000000, // 40 ms at the 75 MHz video clock.
-    parameter ROM_FILE="../../rtl/assets/floppy-animation.hex"
+    parameter ROM_FILE="../../rtl/assets/floppy-animation.mem"
 ) (
     input wire clk, reset, enabled,
     input wire [1:0] activity,
@@ -32,7 +32,7 @@ module floppy_overlay #(
     wire [17:0] rom_address=disk_pixel ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
     (* ramstyle="M10K" *) reg [1:0] pixels[0:165199];
     reg [1:0] rom_pixel;
-    initial $readmemh(ROM_FILE,pixels);
+    initial $readmemb(ROM_FILE,pixels);
     always @(posedge clk) rom_pixel<=pixels[rom_address];
 
     // Five-column, seven-row caption font. Space and unused columns are blank.

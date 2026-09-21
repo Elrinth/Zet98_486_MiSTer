@@ -17,6 +17,9 @@ module pc98_ide_tb;
     reg [7:0] sd_buff_dout=0;
     wire [7:0] sd_buff_din;
     pc98_ide dut(.*);
+    // The shared RAM port depends on mutually exclusive command ownership.
+    always @(posedge clk) if(dut.cpu_buffer_write && dut.host_buffer_write)
+        $fatal(1,"CPU and host attempted to write the buffer together");
     reg [7:0] disk[0:524287];
     integer reads=0,writes=0,host_index,host_delay;
     reg [31:0] host_lba;

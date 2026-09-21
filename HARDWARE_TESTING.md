@@ -699,9 +699,21 @@ worst -0.647 ns; it is not deployed. Source now also pipelines cursor settings
 into the pixel domain, with all original cursor paths still timed. Rendered
 text tests cover cursor on/off, font/attribute alignment and late-data rejection.
 
-The raw IDE hardware probe and the later integer-scaling/animated-overlay
-builds are in preparation. See `rtl/storage/README.md` and `VIDEO_OUTPUT.md`
-for exactly what has been implemented versus verified on hardware.
+The raw IDE build `quartus-20260921-080409-c14854` fits with 38865 ALMs,
+435 RAM blocks and 65 DSPs, but fails three timing checks, worst -0.896 ns.
+It was loaded at 08:38:24. `rawide50-probe-return-1.d88` reports PASS for
+IDENTIFY, the exact 1 MB image signature, sector 17 write/read checksum and
+four IRQ9 deliveries. Host-side comparison of `rawide50-disk-return-1.vhd`
+confirms only sector 17 changed, with all 256 expected words. This verifies
+PIO/IRQ plumbing on hardware, not bootable hard-disk support.
+
+The IDE buffer initially consumed 5083 ALMs because Quartus could not infer
+its dual old-data write ports. The shared-write-port version passes the
+sector and real-HPS regressions and synthesizes to 4096 RAM bits / 171
+registers in an isolated controller build. Integrated fit/hardware validation
+is still pending. Integer scaling, the supplied animated overlay, the global
+pixel-clock assignment and corrected graphics row addressing are also under
+FPGA validation. See `rtl/storage/README.md` and `VIDEO_OUTPUT.md` for limits.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable unmodified intro-to-game loading, repeatable gameplay

@@ -56,8 +56,8 @@ port(
 	
 	GBASEADDR0	:in std_logic_vector(13 downto 0);
 	GBASEADDR1	:in std_logic_vector(13 downto 0);
-	GLINENUM0	:in std_logic_vector(8 downto 0);
-	GLINENUM1	:in std_logic_vector(8 downto 0);
+	GLINENUM0	:in std_logic_vector(9 downto 0);
+	GLINENUM1	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
 	
 	EMUMODE		:in std_logic;
@@ -170,8 +170,8 @@ port(
 
 	BASEADDR0	:in std_logic_vector(13 downto 0);
 	BASEADDR1	:in std_logic_vector(13 downto 0);
-	LINENUM0	:in std_logic_vector(8 downto 0);
-	LINENUM1	:in std_logic_vector(8 downto 0);
+	LINENUM0	:in std_logic_vector(9 downto 0);
+	LINENUM1	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;

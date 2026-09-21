@@ -203,3 +203,9 @@ a synthetic throughput test, not a game frame-rate test.
 `run-text-pixel-memory.sh` checks rendered Latin and two-cell Kanji pixels,
 colors, reverse and underline with synchronous pixel-clock text/font memories.
 It sweeps 0/12/25 ns RAM delay and rejects a 200 ns late-data negative control.
+
+`run-graphics-address.sh` verifies two full graphics frames at seven partition
+lengths and four repeat settings, including high length bits, 14-bit address
+wrap and no SDRAM requests during vertical blank. It reproduced the original
+backwards-counter bug before correction; the existing video/SDRAM test still
+checks six clock phases and intentionally rejects late data.

@@ -131,7 +131,7 @@ begin
         GRAMDAT2=>delayed_data(2), GRAMDAT3=>delayed_data(3), DOTOUT=>open, DOTE=>open,
         GRAPHEN=>'1', DOTPLINE=>"00000", BLANK=>'0', UCOUNT=>uc, HUCOUNT=>hc,
         VCOUNT=>vc, HCOMP=>'0', VCOMP=>'0', BASEADDR0=>(others=>'0'),
-        BASEADDR1=>(others=>'0'), LINENUM0=>"111111111",
+        BASEADDR1=>(others=>'0'), LINENUM0=>"0111111111",
         LINENUM1=>(others=>'0'), PITCH=>x"28", clk=>pixelclk, rstn=>rstn);
     process
         variable row : unsigned(12 downto 0) := (others=>'0');

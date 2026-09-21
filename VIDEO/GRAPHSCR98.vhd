@@ -29,8 +29,8 @@ port(
 	
 	BASEADDR0	:in std_logic_vector(13 downto 0);
 	BASEADDR1	:in std_logic_vector(13 downto 0);
-	LINENUM0	:in std_logic_vector(8 downto 0);
-	LINENUM1	:in std_logic_vector(8 downto 0);
+	LINENUM0	:in std_logic_vector(9 downto 0);
+	LINENUM1	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
@@ -102,6 +102,12 @@ signal	MONOFL2	:std_logic_vector(7 downto 0);
 signal	C0ADDR	:std_logic_vector(13 downto 0);
 signal	iLINENUM0	:integer range 0 to 1023;
 signal	lvcount	:std_logic_vector(9 downto 0);
+-- Related system/pixel clocks remain fully timed. Register GDC settings
+-- before address/count arithmetic, without asynchronous-path exceptions.
+signal base0_pixel, base1_pixel : std_logic_vector(13 downto 0);
+signal length0_pixel : std_logic_vector(9 downto 0);
+signal pitch_pixel : std_logic_vector(7 downto 0);
+signal repeat_pixel : std_logic_vector(4 downto 0);
 
 begin
 	buf0	:graphbuf816 port map(clk,GRAMDAT0,RADR,WADR,BUFWE,RDAT0);
@@ -113,10 +119,20 @@ begin
 	
 	GRAMADR<=GRAMADRb;
 	
-	iLINENUM0<=conv_integer(LINENUM0);
+	iLINENUM0<=conv_integer(length0_pixel);
+    process(clk,rstn) begin
+        if rstn='0' then
+            base0_pixel<=(others=>'0');base1_pixel<=(others=>'0');
+            length0_pixel<=(others=>'0');pitch_pixel<=(others=>'0');repeat_pixel<=(others=>'0');
+        elsif rising_edge(clk) then
+            base0_pixel<=BASEADDR0;base1_pixel<=BASEADDR1;
+            length0_pixel<=LINENUM0;pitch_pixel<=PITCH;repeat_pixel<=DOTPLINE;
+        end if;
+    end process;
 	
 	process(clk,rstn)
 	variable LINENUM	:integer range 0 to 1023;
+    variable first_partition : boolean;
 	begin
 		if(rstn='0')then
 			BUFSTATE<=BS_IDLE;
@@ -127,37 +143,39 @@ begin
 			BUFWE<='0';
 			BUFCNT<=0;
 			LINEEN<='1';
-			LINENUM:=0;
+			LINENUM:=1;
+            first_partition:=true;
 			LINECOUNT<="00000";
 		elsif(clk' event and clk='1')then
 			BUFWE<='0';
 			case BUFSTATE is
 			when BS_IDLE =>
-				if(HUCOUNT=0 and UCOUNT=0)then
+				if(HUCOUNT=0 and UCOUNT=0 and VCOUNT>=VIV)then
 					if(VCOUNT=VIV)then
-						GRAMADRb<=BASEADDR0;
-						C0ADDR<=BASEADDR0;
-						LINEEN<='1';
-						LINENUM:=0;
-						LINECOUNT<=DOTPLINE;
-						BUFSTATE<=BS_READ;
-						GRAMRD<='1';
-					elsif(LINENUM=(iLINENUM0))then
-						GRAMADRb<=BASEADDR1;
-						C0ADDR<=BASEADDR1;
-						LINEEN<='1';
-						BUFSTATE<=BS_READ;
-						LINECOUNT<=DOTPLINE;
-						GRAMRD<='1';
-						LINENUM:=(LINENUM+1) mod 1024;
-					elsif(LINECOUNT="00000")then
-						GRAMADRb<=C0ADDR+PITCH;
-						C0ADDR<=C0ADDR+PITCH;
-						BUFSTATE<=BS_READ;
-						GRAMRD<='1';
-						LINENUM:=(LINENUM+1023) mod 1024;
-						LINECOUNT<=DOTPLINE;
-						LINEEN<='1';
+                        GRAMADRb<=base0_pixel;
+                        C0ADDR<=base0_pixel;
+                        LINEEN<='1';
+                        LINENUM:=1;
+                        first_partition:=true;
+                        LINECOUNT<=repeat_pixel;
+                        BUFSTATE<=BS_READ;
+                        GRAMRD<='1';
+                    elsif(LINECOUNT="00000")then
+                        -- Count logical rows upwards; repeated raster lines
+                        -- neither consume a partition row nor request SDRAM.
+                        if first_partition and LINENUM=iLINENUM0 then
+                            GRAMADRb<=base1_pixel;
+                            C0ADDR<=base1_pixel;
+                            first_partition:=false;
+                        else
+                            GRAMADRb<=C0ADDR+pitch_pixel;
+                            C0ADDR<=C0ADDR+pitch_pixel;
+                        end if;
+                        BUFSTATE<=BS_READ;
+                        GRAMRD<='1';
+                        LINENUM:=(LINENUM+1) mod 1024;
+                        LINECOUNT<=repeat_pixel;
+                        LINEEN<='1';
 					else
 						LINECOUNT<=LINECOUNT-1;
 						LINEEN<='0';
@@ -191,7 +209,7 @@ begin
 	Vdelay	:delayer generic map(4) port map(VCOMP,DVCOMP,clk,rstn);
 	
 	process (clk,rstn)
-	variable VVISCOUNT :integer range 0 to VIV-1;
+	variable VVISCOUNT :integer range 0 to VVIS-1;
 	variable VVISCV	:std_logic_vector(8 downto 0);
 	variable BNXTDOT	:std_logic_vector(7 downto 0);
 	begin

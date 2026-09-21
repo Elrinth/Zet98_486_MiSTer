@@ -49,3 +49,28 @@ FDC-selected drive activity is combined with each drive's HPS transfers.
 If both request service together, the last uniquely active drive is retained.
 It expires after 15 idle frames. It never draws into blanking; RGB, DE, sync
 and clock enable have the same two-clock pipeline latency.
+
+## Graphics scanout correction
+
+The graphics row counter now advances toward the first partition boundary,
+checks that boundary only after completing a logical row, and preserves all
+ten GDC length bits. Previously it counted down from zero and could not reach
+a normal positive split position within the visible picture. Repeated raster
+lines reuse the line buffer. Vertical blank no longer issues graphics reads.
+For a 400-row picture without repetition this removes 125 of 525 line fetches
+per frame, about 24% of graphics fetches; it is not a measured CPU-speed gain.
+
+Only the two existing starting-address windows are exposed. The second window
+continues to the bottom of the screen; additional parameter-RAM partitions,
+wrapping through drawing-pattern RAM, and display zoom remain unsupported.
+GDC settings are registered before pixel-domain address arithmetic with their
+clock crossings still timed. A global clock-network assignment for the pixel
+divider is under FPGA-fit evaluation.
+
+`tests/run-graphics-address.sh` checks both complete frames at split lengths
+1, 3, 200, 400, 513, 1023 and zero, repeat counts 0/1/3/31, 14-bit VRAM wrap,
+and zero fetches during blanking. The original code fails at row 3 in the
+three-row split case. Partition semantics were checked against NEC's
+[uPD7220/7220A user manual](https://www.bitsavers.org/components/nec/uPD7220/uPD7220-uPD7220A_User_Manual_Dec85.pdf),
+section 4 (PRAM), and the NP2kai scanout reference. Zero does not switch within
+the supported 400-line raster; behavior after 1024 logical rows is not tested.

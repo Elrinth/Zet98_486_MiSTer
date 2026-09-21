@@ -8,9 +8,9 @@ module floppy_overlay_tb;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
     floppy_overlay #(.HOLD_FRAMES(3),.ANIMATION_CYCLES(0),
-        .ROM_FILE("rtl/assets/floppy-animation.hex")) dut(.*);
+        .ROM_FILE("rtl/assets/floppy-animation.mem")) dut(.*);
     reg [1:0] reference_pixels[0:165199];
-    initial $readmemh("rtl/assets/floppy-animation.hex",reference_pixels);
+    initial $readmemb("rtl/assets/floppy-animation.mem",reference_pixels);
     reg [23:0] screen[0:12287];
     reg [26:0] held;
     integer changed,px,py,frames=0,frame_number=0;

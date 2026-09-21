@@ -1,6 +1,6 @@
 # Disk activity animation
 
-`floppy-animation.hex` contains the disk-only rectangle from the animation
+`floppy-animation.mem` contains the disk-only rectangle from the animation
 provided by the project owner in the development conversation:
 
 https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgTeU5X9xseDfNfLzypBFnRIOZmwix1P1Od8q8_lIOBZyybvO9po10VuWaKQ084rrU6MhxUTmFP5tkvsUUbE_DobOz26hNndEmdFju9o8aad7NIH-1JhbYtdTvUA2W9NpCOPzSIg8DqE4E/s1600/Amiga_disk_screens_30.gif

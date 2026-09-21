@@ -17,7 +17,7 @@ BOX = (136, 94, 186, 150)
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('gif', type=Path)
-    parser.add_argument('--output', type=Path, default=Path('rtl/assets/floppy-animation.hex'))
+    parser.add_argument('--output', type=Path, default=Path('rtl/assets/floppy-animation.mem'))
     args = parser.parse_args()
     source = Image.open(args.gif)
     if source.size != (320, 240) or source.n_frames != 59:
@@ -31,7 +31,9 @@ def main():
                     (color[c] - PALETTE[n][c]) ** 2 for c in range(3)))
             indices.append(color_map[color])
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(('\n'.join(format(i, 'x') for i in indices) + '\n').encode())
+    tokens = [format(i, '02b') for i in indices]
+    rows = [' '.join(tokens[n:n+32]) for n in range(0, len(tokens), 32)]
+    args.output.write_bytes(('\n'.join(rows) + '\n').encode())
     print(f'{len(indices)} pixels / {len(indices)*2} bits; source SHA256 '
           f'{hashlib.sha256(args.gif.read_bytes()).hexdigest()}')
 
