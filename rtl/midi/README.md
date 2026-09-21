@@ -56,3 +56,12 @@ ACK IRQ reaches the machine input, and MPU accesses do not select IDE.
 The actual VHDL bus expressions pass low-byte/CPU priority tests, and the
 existing PIC simulation checks 32 IRQ6/EOI cycles plus simultaneous MIDI and
 cascaded sound interrupts. Hardware game/driver compatibility is pending.
+
+The silent `tests/hardware/mpu_uart_probe.asm` diagnostic is prepared for a
+disposable DOS boot disk. It checks 100 reset/UART pairs (200 IRQ6 ACKs),
+restores the prior PIC mask/vector, and queues an exact 134-byte SysEx packet
+for independent HPS serial capture. Its saved `Z98MPU.TXT` result covers
+command IRQs and successful enqueueing, not the physical serial stream.
+`tests/mpu_probe_unicorn.py` checks that program's normal flow and missing-IRQ,
+wrong-ACK and stuck-busy failures against an independent x86/DOS/MPU model.
+Hardware execution is pending a fitted MIDI-enabled core.
