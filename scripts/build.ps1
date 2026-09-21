@@ -3,6 +3,8 @@ param(
     [string]$DockerContext = 'desktop-linux',
     [ValidateRange(1, 16)]
     [int]$BuildCpus = 3,
+    [ValidateRange(4, 64)]
+    [int]$BuildMemoryGB = 8,
     [ValidateRange(1, 3)]
     [int]$MaxConcurrentBuilds = 1,
     [ValidateSet(20, 40, 50, 60)]
@@ -66,6 +68,7 @@ try {
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
     $BuildCpus | Set-Content -LiteralPath (Join-Path $buildRoot 'build-cpus.txt')
+    $BuildMemoryGB | Set-Content -LiteralPath (Join-Path $buildRoot 'build-memory-gb.txt')
     Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
         -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
     if ($MidiUart) {
@@ -121,7 +124,8 @@ try {
     $requireUart = if ($MidiUart) { 1 } else { 0 }
     $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
     $containerId = & docker --context $DockerContext create --name $containerName `
-        --cpus $BuildCpus --network none --workdir /project/Zet98/v17 $Image bash -lc `
+        --cpus $BuildCpus --memory "${BuildMemoryGB}g" --memory-swap "${BuildMemoryGB}g" `
+        --network none --workdir /project/Zet98/v17 $Image bash -lc `
         $compileCommand
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated Quartus container.' }
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
