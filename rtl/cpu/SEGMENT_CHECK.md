@@ -54,3 +54,27 @@ setup path, but the complete core still fails. The slow/cold corner's
 -0.583 ns path runs from DMA address selection through the PC-98 memory map
 and cache invalidation into instruction decoding. Palette-to-video transfer
 also fails by -0.179 ns. This build was not loaded on hardware.
+
+## Registered stack-pop selector
+
+The PaletteTransfer60 complete-core fit reports a -0.198 ns CPU path from
+`rd_cmd[4]` through the next-stack selector and segment checks into the TLB
+linear address. `read.v` now predecodes the command-only part of that selector
+beside the existing command register. Its two flag bits have the same reset,
+flush, load, ready and hold priorities. Protected-mode gating remains live.
+There is no additional instruction cycle or memory-interface change.
+
+`tests/prove-stack-pop-predecode.py` checks the actual read-command decoder
+against the new expression with unconstrained inputs, then uses temporal
+induction on the actual command/flag register update blocks. Negative controls
+with incorrect protected-mode gating and a missing flush both fail. The
+simulation-only assertion also compares the registered result against the
+original decoder on every CPU edge.
+
+Cached and uncached full-CPU smoke tests pass with 576 bus transfers each.
+The full-CPU cache regression passes configurations 00/10/11, including DMA
+writes, CPU self-modification, upper-window bypass and ALU/VRAM/stack checksums.
+The disconnected-DMA negative control fails as expected. With both caches,
+the three kernels take 6392/3720/5268 cycles and 17/162/145 transfers, unchanged
+from the prior implementation. This is a candidate timing improvement, not
+a measured instruction-speed increase. Physical fitting remains pending.

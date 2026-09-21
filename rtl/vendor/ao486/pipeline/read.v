@@ -323,6 +323,7 @@ wire address_bits_transform;
 wire address_stack_pop;
 wire address_stack_pop_speedup;
 wire address_stack_pop_next;
+wire address_stack_pop_next_reference;
 wire address_stack_pop_esp_prev;
 wire address_stack_pop_for_call;
 wire address_stack_save;
@@ -405,6 +406,53 @@ always @(posedge clk) begin
     else if(r_load)     rd_cmd <= micro_cmd;
     else if(rd_ready)   rd_cmd <= `CMD_NULL;
 end
+
+// Predecode the command-only stack selector beside rd_cmd. protected_mode
+// remains live because mode changes are not part of the command packet.
+function [1:0] stack_pop_next_decode;
+    input [6:0] command;
+    input [3:0] extension;
+    begin
+        stack_pop_next_decode = 2'b00;
+        case (command)
+            `CMD_CALL_3: stack_pop_next_decode[0] =
+                extension == `CMDEX_CALL_3_call_gate_more_STEP_4 ||
+                extension == `CMDEX_CALL_3_call_gate_more_STEP_5;
+            `CMD_IRET: stack_pop_next_decode[0] =
+                (extension >= `CMDEX_IRET_protected_STEP_1 &&
+                 extension <= `CMDEX_IRET_protected_STEP_3) ||
+                 extension >= `CMDEX_IRET_protected_to_v86_STEP_0;
+            `CMD_IRET_2: stack_pop_next_decode[0] =
+                extension == `CMDEX_IRET_2_protected_outer_STEP_0 ||
+                (extension >= `CMDEX_IRET_2_protected_outer_STEP_1 &&
+                 extension <= `CMDEX_IRET_2_protected_outer_STEP_3);
+            `CMD_RET_far: begin
+                stack_pop_next_decode[0] =
+                    extension == `CMDEX_RET_far_outer_STEP_3 ||
+                    extension == `CMDEX_RET_far_outer_STEP_4;
+                stack_pop_next_decode[1] =
+                    extension == `CMDEX_RET_far_STEP_1 ||
+                    extension == `CMDEX_RET_far_STEP_2;
+            end
+        endcase
+    end
+endfunction
+
+(* preserve *) reg [1:0] stack_pop_next_flags;
+always @(posedge clk) begin
+    if(rst_n == 1'b0)       stack_pop_next_flags <= 2'b00;
+    else if(rd_reset)       stack_pop_next_flags <= 2'b00;
+    else if(r_load)         stack_pop_next_flags <= stack_pop_next_decode(micro_cmd, micro_cmdex);
+    else if(rd_ready)       stack_pop_next_flags <= 2'b00;
+end
+assign address_stack_pop_next = stack_pop_next_flags[0] ||
+                              (stack_pop_next_flags[1] && protected_mode);
+
+// synthesis translate_off
+always @(posedge clk) if (rst_n &&
+    (address_stack_pop_next !== address_stack_pop_next_reference))
+    $fatal(1, "Registered stack-pop selector differs from command decoder");
+// synthesis translate_on
 
 //------------------------------------------------------------------------------
 
@@ -893,7 +941,7 @@ read_commands read_commands_inst(
     .address_stack_pop                  (address_stack_pop),                    //output
     .address_stack_pop_speedup          (address_stack_pop_speedup),            //output
     
-    .address_stack_pop_next             (address_stack_pop_next),               //output
+    .address_stack_pop_next             (address_stack_pop_next_reference),     //output
     .address_stack_pop_esp_prev         (address_stack_pop_esp_prev),           //output
     .address_stack_pop_for_call         (address_stack_pop_for_call),           //output
     .address_stack_save                 (address_stack_save),                   //output

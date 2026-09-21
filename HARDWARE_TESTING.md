@@ -1448,3 +1448,12 @@ integer-scaling and actual wrapper viewport tests (73 rectangles per rate).
 The first attempt stopped because the old HDL image lacked Python. The
 Dockerfile now installs Python and the complete run passes in the rebuilt
 image. The scaler-mode change still needs full-core fitting and hardware checks.
+
+PaletteCaption50 was loaded at 22:14:24 with MPU disabled and the earlier
+software synth stopped. The DOS menu and 640x400 source / 1728x1080 viewport
+were verified at 22:18:20; Rusty was selected at 22:19:21. Its correctly colored
+castle intro is visible at 22:21:18. After Space/Z at 22:28:54, a screenshot
+three seconds later is black; the core was left running. At 22:47:35 the Rusty
+title/logo is visible. Menu text rendering needs closer comparison, and no
+frame-rate improvement is inferred from these still images. Space selected
+the first menu item at 22:48:42 for the next gameplay check.

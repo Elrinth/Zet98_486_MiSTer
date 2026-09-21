@@ -34,3 +34,9 @@ intentionally wrong byte length. Run it with the separate
 memory/I/O, interrupt/IRET and reset regressions pass. Physical frequency
 improvement still requires a fitted timing report. Original license notices
 are retained.
+
+The next-stack selector is also predecoded into two flags alongside `rd_cmd`,
+with identical register enables and flush/reset priorities. Protected-mode
+gating remains live. `tests/prove-stack-pop-predecode.py` proves combinational
+and sequential equivalence against the real decoder/update blocks and rejects
+two deliberate faults. Full CPU/cache regressions pass; fitted timing is pending.
