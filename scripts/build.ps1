@@ -1,7 +1,7 @@
 param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
     [string]$DockerContext = 'desktop-linux',
-    [ValidateSet(20, 40)]
+    [ValidateSet(20, 40, 50)]
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486')]
     [string]$Cpu = 'Zet',
@@ -53,9 +53,9 @@ try {
             'set_global_assignment -name QIP_FILE ../../rtl/cpu/ao486_pc98.qip'
         )
     }
-    if ($SystemClockMHz -eq 40) {
+    if ($SystemClockMHz -ne 20) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
-            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO40=1"
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO$SystemClockMHz=1"
     }
     if ($PrepareOnly) {
         Write-Host "Prepared $SystemClockMHz MHz source snapshot: $sourceRoot"

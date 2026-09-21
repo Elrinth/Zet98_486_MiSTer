@@ -437,6 +437,32 @@ and can be disabled. All adapter tests pass, including long-beep/later-tone
 behavior and eleven overlay frames with timing, rotation and mode-size checks.
 Hardware verification and complete fits of these changes are pending.
 
+The completed Opt20 build (`quartus-20260921-040034-eb1e55`) uses 32,375 ALMs,
+395 RAM blocks and 63 DSP blocks. It has five negative timing checks, worst
+-2.731 ns, and CPU setup +22.467 ns. The Opt40 build
+(`quartus-20260921-040055-563579`) uses 32,780 ALMs with the same RAM/DSP use;
+14 timing checks fail, worst -5.404 ns, while CPU setup is +4.146 ns and
+system-to-system setup is +3.243 ns. Pixel audits still fail. These are
+experimental hardware diagnostics, not timing-qualified releases.
+
+Opt20 was hash-verified and launched at 04:31:53 CEST. Its saved DOS benchmark
+reports ALU 106 blocks and RAM copy 46 blocks, each in 1000 hundredths, both
+checksums passing. That is 15% higher RAM-copy throughput than Cache20's 40
+blocks, with unchanged arithmetic. Opt40 was launched at 04:35:09 CEST and
+reports ALU 202 / RAM copy 83 blocks in the same elapsed time, both passing:
+about 1.91x / 1.80x Opt20 throughput. These remain synthetic throughput
+measurements, not Rusty frame rates. Authoritative results are the returned
+`cpu-bench-v2-opt20-return-1.d88` and `cpu-bench-v2-opt40-return-2.d88` under
+`build/hardware`, with extracted text logs. SHA-256:
+
+- Opt20: `d7b7a7a9f6f47024d20d213c6079b615caf62264b712ff1044a41a9ba436d3e6`
+- Opt40: `0e1959ab75b09f9af2b7cb18b57e6f4229c6372731f888b913fa713164563406`
+
+An optional 50 MHz setting now preserves OPNA/PIT rates and 100 ns VFO pulses
+in simulation. PS/2 scaling multiplies before dividing, avoiding truncation
+at a non-integer multiple of 20 MHz. Its complete fit and hardware results are
+pending. No 50 MHz or faster usability claim follows from this build option.
+
 The next source change registers horizontal/vertical retrace status in the
 video domain, then synchronizes the two independent levels into the CPU
 domain before GDC status reads and PIC IRQ2. This removes the decoded raster

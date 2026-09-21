@@ -20,6 +20,7 @@ ghdl -a --std=08 -fsynopsys --workdir="$out" \
     LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb --assert-level=error
+ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=50000 --assert-level=error
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/z8259.vhd tests/pc98_pic_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" pc98_pic_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" pc98_pic_tb --assert-level=error
