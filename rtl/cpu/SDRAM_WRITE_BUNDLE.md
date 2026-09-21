@@ -122,3 +122,25 @@ All 9216 buffered CPU transactions pass with 15 ns injected delay and at
 least 5 ns stability at admission, plus late-payload/read-capture negatives.
 The 1536 legacy CPU transactions, GDC buffered/legacy tests and floppy-port
 regressions also pass. Full fitting and hardware validation remain pending.
+
+### Completed read transfer bound
+
+The OSD-stage 60 MHz fit exposes a remaining -0.265 ns route from memory-domain
+return words into the CPU/GDC completion registers. This is a held-data
+transfer: single-word data is captured at current memory count 7 and completion
+is asserted at count 8; the last four-word datum is captured at count 10 and
+completion is asserted at count 11. The memory period is 10 ns. CPU capture
+occurs only after that completion, and RMW completion is later still.
+
+`pc98-read-transfer.sdc` bounds only these held return-data routes to 5 ns,
+leaving at least 5 ns before capture. Normal hold and completion/control
+constraints remain, and live memory-domain RMW data is not relaxed. Explicit
+transport aliases allow the regression to inject route delays without changing
+the production logic. Data and ACK are still registered on the same original
+edge; transaction latency is unchanged. Fitting and hardware validation remain
+required.
+
+The delayed-route regression passes 110,592 single/four-plane read, write
+and RMW transactions across both ports, six CPU rates and 24 memory phases,
+with 5 ns route delay and another 5 ns of required stability. Deliberately
+late 80 ns return data fails independently on both ports.

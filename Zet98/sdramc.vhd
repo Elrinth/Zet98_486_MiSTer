@@ -167,6 +167,7 @@ signal	lCPUBNK,lCPUBSEL :std_logic_vector(1 downto 0);
 signal	lCPUPSEL :std_logic_vector(3 downto 0);
 type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
 signal cpu_read_words, cpu_write_words : cpu_words_t;
+signal cpu_read_crossing, sub_read_crossing : cpu_words_t;
 signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(ADRWIDTH+87 downto 0);
 signal cpu_address : std_logic_vector(ADRWIDTH-1 downto 0);
 signal cpu_bank, cpu_bytes : std_logic_vector(1 downto 0);
@@ -295,6 +296,9 @@ begin
         fde_write_data <= FDEWDAT; fec_write_data <= FECWDAT;
     end generate;
 
+    cpu_read_crossing <= cpu_read_words; -- CPU_READ_BUNDLE_TRANSPORT
+    sub_read_crossing <= sub_read_words; -- SUB_READ_BUNDLE_TRANSPORT
+
     sub_write_crossing <= sub_write_source; -- SUB_WRITE_BUNDLE_TRANSPORT
     sub_bundle : if SUB_WRITE_BUNDLE generate
         -- The GDC drawing port has its own request/ACK handshake. Capture
@@ -329,10 +333,10 @@ begin
                 SUBRDAT2 <= (others=>'0'); SUBRDAT3 <= (others=>'0');
             elsif rising_edge(SUBCLK) then
                 if subend='1' then -- SUB_READ_COMPLETION_CAPTURE
-                    SUBRDAT0 <= sub_read_words(0);
-                    SUBRDAT1 <= sub_read_words(1);
-                    SUBRDAT2 <= sub_read_words(2);
-                    SUBRDAT3 <= sub_read_words(3);
+                    SUBRDAT0 <= sub_read_crossing(0);
+                    SUBRDAT1 <= sub_read_crossing(1);
+                    SUBRDAT2 <= sub_read_crossing(2);
+                    SUBRDAT3 <= sub_read_crossing(3);
                 end if;
             end if;
         end process;
@@ -357,10 +361,10 @@ begin
                 CPURDAT2 <= (others=>'0'); CPURDAT3 <= (others=>'0');
             elsif rising_edge(CPUCLK) then
                 if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE
-                    CPURDAT0 <= cpu_read_words(0);
-                    CPURDAT1 <= cpu_read_words(1);
-                    CPURDAT2 <= cpu_read_words(2);
-                    CPURDAT3 <= cpu_read_words(3);
+                    CPURDAT0 <= cpu_read_crossing(0);
+                    CPURDAT1 <= cpu_read_crossing(1);
+                    CPURDAT2 <= cpu_read_crossing(2);
+                    CPURDAT3 <= cpu_read_crossing(3);
                 end if;
             end if;
         end process;
