@@ -29,6 +29,9 @@ ghdl -r --std=08 --workdir="$out" text_row_counter_tb --assert-level=error
 ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/VTIMING.vhd tests/video_line_timing_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_line_timing_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" video_line_timing_tb --assert-level=error
+ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/synccont2.vhd rtl/video_retrace_cdc.vhd tests/video_retrace_cdc_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" video_retrace_cdc_tb
+ghdl -r --std=08 -fsynopsys --workdir="$out" video_retrace_cdc_tb --assert-level=error
 iverilog -g2012 -Wall -s video_output_tb -o "$out/video.vvp" rtl/video_output.sv tests/video_output_tb.sv
 vvp "$out/video.vvp"
 iverilog -g2012 -Wall -s floppy_overlay_tb -o "$out/floppy-overlay.vvp" rtl/floppy_overlay.sv tests/floppy_overlay_tb.sv

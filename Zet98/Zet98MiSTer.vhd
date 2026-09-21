@@ -1931,6 +1931,7 @@ signal	VID_KNJSEL	:std_logic_vector(1 downto 0);
 signal	GADDR		:std_logic_vector(13 downto 0);
 signal	VRTC		:std_logic;
 signal	HRTC		:std_logic;
+signal VRTC_video, HRTC_video : std_logic;
 signal	GLOWBLK		:std_logic;
 signal	VidR4		:std_logic_vector(3 downto 0);
 signal	VidG4		:std_logic_vector(3 downto 0);
@@ -2960,8 +2961,8 @@ DBIO_ODAT<=(others=>'1');
 
 		EMUMODE		=>'0',
 
-		VRTC		=>VRTC,
-		HRTC		=>HRTC,
+		VRTC		=>VRTC_video,
+		HRTC		=>HRTC_video,
 
 		GPALNO		=>GPAL_NO,
 		GPALR		=>GPAL_R,
@@ -2973,6 +2974,13 @@ DBIO_ODAT<=(others=>'1');
 		rstn		=>vrstn
 	);
 	
+	-- Keep retrace decoding out of the CPU read mux and PIC priority path.
+	retrace_status : entity work.video_retrace_cdc port map (
+		video_clk => vidclk, video_rstn => vrstn,
+		cpu_clk => cpuclk, cpu_rstn => srstn,
+		vrtc_in => VRTC_video, hrtc_in => HRTC_video,
+		vrtc_out => VRTC, hrtc_out => HRTC
+	);
 	pVideoClk<=grpclk;
 	pVideoR<=VidR4 & VidR4;
 	pVideoG<=VidG4 & VidG4;

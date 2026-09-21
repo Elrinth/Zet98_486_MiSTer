@@ -437,6 +437,14 @@ and can be disabled. All adapter tests pass, including long-beep/later-tone
 behavior and eleven overlay frames with timing, rotation and mode-size checks.
 Hardware verification and complete fits of these changes are pending.
 
+The next source change registers horizontal/vertical retrace status in the
+video domain, then synchronizes the two independent levels into the CPU
+domain before GDC status reads and PIC IRQ2. This removes the decoded raster
+counter from those long combinational paths. The actual raster regression
+passes at 20/40 MHz with bounded status latency and no extra edges. Video
+output timing is unchanged; no timing exceptions have been added. Its first
+complete fit also enables the optional 16 MB DDR map for hardware diagnosis.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the

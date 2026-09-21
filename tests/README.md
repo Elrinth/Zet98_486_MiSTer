@@ -64,6 +64,10 @@ enable. These are logic tests; they do not establish hardware video stability.
 An integration test with the original `VTIMING` generator also checks row
 alignment for 1,247,400 pixels across 16-, 20- and 32-scanline text modes,
 after its initial partial scanline on reset.
+The retrace-domain test drives the original raster and checks horizontal and
+vertical status at both 20 and 40 MHz: edges arrive within 120 ns, change only
+on destination clock edges, and clear on reset across more than two frames.
+It verifies logical synchronization, not physical metastability or timing.
 
 The floppy-overlay test verifies rotation, the lower-right position at two
 raster sizes, idle/disabled passthrough, activity hold/expiry and unchanged
