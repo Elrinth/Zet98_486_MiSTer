@@ -6,7 +6,8 @@ use std.env.all;
 -- Check physical SDRAM pins and WAIT/data on both floppy buffer ports.
 entity floppy_sdram_tb is
     generic (CPU_MHZ : positive := 50; BUFFERED : boolean := true;
-             MEM_PHASE_PS : natural := 0; USE_FEC : boolean := false);
+             MEM_PHASE_PS : natural := 0; USE_FEC : boolean := false;
+             CONTINUOUS : boolean := false);
 end entity;
 architecture test of floppy_sdram_tb is
     constant AW : positive := 22;
@@ -92,21 +93,23 @@ begin
         end if;
     end process;
     process
-        variable a, c : natural;
+        variable a, c, address_index : natural;
     begin
         wait for 137 ns; rstn<='1'; wait until ready='1'; wait for 300 ns;
         for n in 0 to 255 loop
             wait until falling_edge(cpuclk);
-            address_all<=std_logic_vector(to_unsigned((n*130071+911) mod 2**(AW+2),AW+2));
-            expected_address<=std_logic_vector(to_unsigned((n*130071+911) mod 2**(AW+2),AW+2));
+            if CONTINUOUS then address_index:=n/2; else address_index:=n; end if;
+            address_all<=std_logic_vector(to_unsigned((address_index*130071+911) mod 2**(AW+2),AW+2));
+            expected_address<=std_logic_vector(to_unsigned((address_index*130071+911) mod 2**(AW+2),AW+2));
             wd(0)<=std_logic_vector(to_unsigned((n*8191+349) mod 65536,16));
             expected_data<=std_logic_vector(to_unsigned((n*8191+349) mod 65536,16));
             reading<=n mod 2=0; active<=true; a:=activations; c:=commands;
-            if n mod 2=0 then read_req<='1'; else write_req<='1'; end if;
+            if n mod 2=0 then read_req<='1'; write_req<='0';
+            else read_req<='0'; write_req<='1'; end if;
             wait until busy='1' for 1 us;
             assert busy='1' report "floppy request not accepted" severity failure;
             -- After acceptance a buffered request no longer reads live pins.
-            if BUFFERED then
+            if BUFFERED and not CONTINUOUS then
                 wait until falling_edge(cpuclk);
                 read_req<='0'; write_req<='0';
                 address_all<=not expected_address; wd(0)<=not expected_data;
@@ -118,12 +121,18 @@ begin
             if n mod 2=0 then
                 assert returned_data=expected_data report "floppy read data missing on WAIT completion" severity failure;
             end if;
-            wait until falling_edge(cpuclk);
-            read_req<='0'; write_req<='0'; active<=false;
-            wait until falling_edge(cpuclk);
+            if not CONTINUOUS then
+                wait until falling_edge(cpuclk);
+                read_req<='0'; write_req<='0'; active<=false;
+                wait until falling_edge(cpuclk);
+            end if;
         end loop;
+        -- A held strobe for the completed tuple must not duplicate the job.
+        wait for 500 ns;
+        assert commands=256 and activations=256 report "Repeated held floppy request" severity failure;
+        read_req<='0'; write_req<='0'; active<=false;
         report "PASS: 256 floppy requests, FEC=" & boolean'image(USE_FEC) &
-            " buffered=" & boolean'image(BUFFERED) & " MHz=" & integer'image(CPU_MHZ);
+            " buffered=" & boolean'image(BUFFERED) & " continuous=" & boolean'image(CONTINUOUS) & " MHz=" & integer'image(CPU_MHZ);
         finish;
     end process;
     process begin wait for 3 ms; assert false report "floppy SDRAM watchdog" severity failure; end process;

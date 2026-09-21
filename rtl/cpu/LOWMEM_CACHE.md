@@ -78,7 +78,11 @@ remain 6392 / 17 and 3720 / 162. These compare otherwise identical current
 CPU sources. They are simulation results, not Rusty FPS or hardware results.
 The full CPU sweep also passes with both caches disabled and with only the
 instruction cache enabled, including the same stack and coherence checks.
-The new allocation policy still needs full FPGA timing and hardware tests.
+The 50 MHz FPGA build passes all sixteen timing-corner checks, minimum
++0.084 ns. DOS benchmark v3 on the SuperStation returns 102 stack blocks
+per ten seconds, versus 80 on the preceding UART1-50 build (27.5% higher
+throughput). RAM copy remains 125 blocks; ALU is 247 versus 246. Both builds
+pass the benchmark's checksums. This does not measure Rusty frame rate.
 
 
 ## Banked-write invalidation decode

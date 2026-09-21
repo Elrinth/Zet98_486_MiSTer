@@ -201,7 +201,7 @@ signal	CPUJOB,nCPUJOB	:job_t;
 signal	SUBJOB,nSUBJOB	:job_t;
 signal	VIDJOB	:job_t;
 signal	FDEJOB,nFDEJOB,lFDEJOB	:job_t;
-signal	FECJOB,nFECJOB	:job_t;
+signal	FECJOB,nFECJOB,lFECJOB	:job_t;
 signal	CPUREQ,CPUREC	:std_logic;
 signal	SUBREQ,SUBREC	:std_logic;
 -- One outstanding graphics transfer. Request and completion are toggles,
@@ -216,8 +216,12 @@ attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
 attribute altera_attribute : string;
 attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
     "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
-signal	FDEREQ,FDEREC	:std_logic;
-signal	FECREQ,FECREC	:std_logic;
+-- A completion toggle identifies exactly one outstanding floppy transfer.
+signal FDEREQ, FECREQ, FDEbusy, FECbusy, FDEaccept, FECaccept : std_logic;
+signal FDEdone_sync, FECdone_sync : std_logic_vector(1 downto 0);
+attribute preserve of lFDEREQ, lFECREQ, FDEdone_sync, FECdone_sync : signal is true;
+attribute altera_attribute of lFDEREQ, lFECREQ, FDEdone_sync, FECdone_sync : signal is
+    "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 
 signal	isCPU		:std_logic;
 
@@ -237,6 +241,15 @@ signal	MEMDATOE	:STD_LOGIC;
 signal	SUBREQS	:std_logic;
 begin
 
+    FDEWAIT <= FDEbusy;
+    FECWAIT <= FECbusy;
+    FDEaccept <= '1' when FDEbusy='0' and
+        ((FDEWR='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_WR)) or
+         (FDEWR='0' and FDERD='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_RD))) else '0';
+    FECaccept <= '1' when FECbusy='0' and
+        ((FECWR='1' and (lfecstb='0' or lFECADR/=FECADR or lFECJOB/=JOB_WR)) or
+         (FECWR='0' and FECRD='1' and (lfecstb='0' or lFECADR/=FECADR or lFECJOB/=JOB_RD))) else '0';
+
     fde_request_crossing <= fde_request_source; -- FDE_REQUEST_BUNDLE_TRANSPORT
     fec_request_crossing <= fec_request_source; -- FEC_REQUEST_BUNDLE_TRANSPORT
     floppy_bundle : if FLOPPY_REQUEST_BUNDLE generate
@@ -244,25 +257,24 @@ begin
         -- The held address/data reach memory with the corresponding JOB.
         process(FDECLK) begin
             if rising_edge(FDECLK) then
-                if (FDEWR='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_WR)) or
-                   (FDEWR='0' and FDERD='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_RD)) then
+                if FDEaccept='1' then
                     fde_request_source <= FDEADR & FDEWDAT;
                 end if;
             end if;
         end process;
         process(FECCLK) begin
             if rising_edge(FECCLK) then
-                if (FECWR='1' or FECRD='1') and (lfecstb='0' or lFECADR/=FECADR) then
+                if FECaccept='1' then
                     fec_request_source <= FECADR & FECWDAT;
                 end if;
             end if;
         end process;
         process(memclk) begin
             if rising_edge(memclk) then
-                if lFDEREQ="011" then -- FDE_REQUEST_BUNDLE_ADMISSION
+                if lFDEREQ(2)/=lFDEREQ(1) then -- FDE_REQUEST_BUNDLE_ADMISSION
                     fde_request_memory <= fde_request_crossing;
                 end if;
-                if lFECREQ="011" then -- FEC_REQUEST_BUNDLE_ADMISSION
+                if lFECREQ(2)/=lFECREQ(1) then -- FEC_REQUEST_BUNDLE_ADMISSION
                     fec_request_memory <= fec_request_crossing;
                 end if;
             end if;
@@ -271,7 +283,7 @@ begin
             if rstn='0' then
                 FDERDAT <= (others=>'0');
             elsif rising_edge(FDECLK) then
-                if fdeend='1' then -- FDE_READ_COMPLETION_CAPTURE
+                if FDEbusy='1' and FDEdone_sync(1)=FDEREQ then -- FDE_READ_COMPLETION_CAPTURE
                     FDERDAT <= fde_read_data;
                 end if;
             end if;
@@ -280,7 +292,7 @@ begin
             if rstn='0' then
                 FECRDAT <= (others=>'0');
             elsif rising_edge(FECCLK) then
-                if fecend='1' then -- FEC_READ_COMPLETION_CAPTURE
+                if FECbusy='1' and FECdone_sync(1)=FECREQ then -- FEC_READ_COMPLETION_CAPTURE
                     FECRDAT <= fec_read_data;
                 end if;
             end if;
@@ -445,8 +457,8 @@ begin
 			lFECREQ<=(others=>'0');
 			CPUREC<='0';
 			SUBREC<='0';
-			FDEREC<='0';
-			FECREC<='0';
+			fdeend<='0';
+			fecend<='0';
 			mem_inidone<='0';
 		elsif(memclk' event and memclk='1')then
 			lCPUREQ<=lCPUREQ(1 downto 0) & CPUREQ;
@@ -473,17 +485,11 @@ begin
 			if(lVIDREQ(2)/=lVIDREQ(1))then
 				VIDJOB<=JOB_RD;
 			end if;
-			if(lFDEREQ="011")then
+			if(lFDEREQ(2)/=lFDEREQ(1))then
 				FDEJOB<=nFDEJOB;
-				FDEREC<='1';
-			elsif(FDEREQ='0')then
-				FDEREC<='0';
 			end if;
-			if(lFECREQ="011")then
+			if(lFECREQ(2)/=lFECREQ(1))then
 				FECJOB<=nFECJOB;
-				FECREC<='1';
-			elsif(FECREQ='0')then
-				FECREC<='0';
 			end if;
 			
 --			if(nCPUJOB/=JOB_NOP)then
@@ -517,12 +523,6 @@ begin
 				subend<='0';
 			end if;
 
-			if(FDEACKb='1')then
-				fdeend<='0';
-			end if;
-			if(FECACKb='1')then
-				fecend<='0';
-			end if;
 			
 			if(INITTIMER>0)then
 				if(INITTIMER=1)then
@@ -2235,9 +2235,9 @@ begin
 					when ST_VIDREAD =>
 						vidend<=lVIDREQ(2);
 					when ST_FDEREAD | ST_FDEWRITE =>
-						fdeend<='1';
+						fdeend<=lFDEREQ(2);
 					when ST_FECREAD | ST_FECWRITE =>
-						fecend<='1';
+						fecend<=lFECREQ(2);
 					when others =>
 					end case;
 					case STATE is
@@ -2604,90 +2604,57 @@ begin
 		end if;
 	end process;
 
-	process(FDECLK,rstn)begin
-		if(rstn='0')then
-			lFDEADR<=(others=>'0');
-			nFDEJOB<=JOB_NOP;
-			lFDEJOB<=JOB_NOP;
-			lfdestb<='0';
-			FDEACKb<='0';
-			FDEREQ<='0';
-			FDEWAIT<='0';
-		elsif(FDECLK' event and FDECLK='1')then
-			if(FDEWR='1')then
-				lfdestb<='1';
-				if(lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_WR)then
-					lFDEADR<=FDEADR;
-					nFDEJOB<=JOB_WR;
-					lFDEJOB<=JOB_WR;
-					FDEREQ<='1';
-					FDEWAIT<='1';
-				end if;
-			elsif(FDERD='1')then
-				lfdestb<='1';
-				if(lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_RD)then
-					lFDEADR<=FDEADR;
-					nFDEJOB<=JOB_RD;
-					lFDEJOB<=JOB_RD;
-					FDEREQ<='1';
-					FDEWAIT<='1';
-				end if;
-			else
-				lfdestb<='0';
-			end if;
-			if(FDEREC='1')then
-				nFDEJOB<=JOB_NOP;
-				FDEREQ<='0';
-			end if;
-			if(fdeend='1')then
-				FDEACKb<='1';
-				FDEWAIT<='0';
-			else
-				FDEACKb<='0';
-			end if;
-		end if;
-	end process;
+    process(FDECLK,rstn) begin
+        if rstn='0' then
+            lFDEADR<=(others=>'0'); nFDEJOB<=JOB_NOP; lFDEJOB<=JOB_NOP;
+            lfdestb<='0'; FDEACKb<='0'; FDEREQ<='0'; FDEbusy<='0';
+            FDEdone_sync<=(others=>'0');
+        elsif rising_edge(FDECLK) then
+            FDEdone_sync<=FDEdone_sync(0) & fdeend;
+            lfdestb<=FDEWR or FDERD;
+            FDEACKb<='0';
+            if FDEaccept='1' then
+                lFDEADR<=FDEADR;
+                if FDEWR='1' then
+                    nFDEJOB<=JOB_WR; lFDEJOB<=JOB_WR;
+                else
+                    nFDEJOB<=JOB_RD; lFDEJOB<=JOB_RD;
+                end if;
+                FDEREQ<=not FDEREQ;
+                FDEbusy<='1';
+            elsif FDEbusy='1' and FDEdone_sync(1)=FDEREQ then
+                -- Capture returned data on this same completion edge.
+                FDEACKb<='1';
+                FDEbusy<='0';
+            end if;
+        end if;
+    end process;
 
-	process(FECCLK,rstn)begin
-		if(rstn='0')then
-			lFECADR<=(others=>'0');
-			nFECJOB<=JOB_NOP;
-			lfecstb<='0';
-			FECACKb<='0';
-			FECREQ<='0';
-			FECWAIT<='0';
-		elsif(FECCLK' event and FECCLK='1')then
-			if(FECWR='1')then
-				lfecstb<='1';
-				if(lfecstb='0' or lFECADR/=FECADR)then
-					lFECADR<=FECADR;
-					nFECJOB<=JOB_WR;
-					FECREQ<='1';
-					FECWAIT<='1';
-				end if;
-			elsif(FECRD='1')then
-				lfecstb<='1';
-				if(lfecstb='0' or lFECADR/=FECADR)then
-					lFECADR<=FECADR;
-					nFECJOB<=JOB_RD;
-					FECREQ<='1';
-					FECWAIT<='1';
-				end if;
-			else
-				lfecstb<='0';
-			end if;
-			if(FECREC='1')then
-				nFECJOB<=JOB_NOP;
-				FECREQ<='0';
-			end if;
-			if(fecend='1')then
-				FECACKb<='1';
-				FECWAIT<='0';
-			else
-				FECACKb<='0';
-			end if;
-		end if;
-	end process;
+    process(FECCLK,rstn) begin
+        if rstn='0' then
+            lFECADR<=(others=>'0'); nFECJOB<=JOB_NOP; lFECJOB<=JOB_NOP;
+            lfecstb<='0'; FECACKb<='0'; FECREQ<='0'; FECbusy<='0';
+            FECdone_sync<=(others=>'0');
+        elsif rising_edge(FECCLK) then
+            FECdone_sync<=FECdone_sync(0) & fecend;
+            lfecstb<=FECWR or FECRD;
+            FECACKb<='0';
+            if FECaccept='1' then
+                lFECADR<=FECADR;
+                if FECWR='1' then
+                    nFECJOB<=JOB_WR; lFECJOB<=JOB_WR;
+                else
+                    nFECJOB<=JOB_RD; lFECJOB<=JOB_RD;
+                end if;
+                FECREQ<=not FECREQ;
+                FECbusy<='1';
+            elsif FECbusy='1' and FECdone_sync(1)=FECREQ then
+                -- Capture returned data on this same completion edge.
+                FECACKb<='1';
+                FECbusy<='0';
+            end if;
+        end if;
+    end process;
 
 	CPUACK<=CPUACKb;
 	SUBACK<=SUBACKb;
