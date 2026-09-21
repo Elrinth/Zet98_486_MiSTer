@@ -7,7 +7,10 @@
 // physical address bits here; PC-98 address decoding/BIOS aliases belong outside.
 // ao486 emits read bursts of 1..8 DWORDs and only SINGLE-beat writes. On writes
 // burstcount can reflect a pending read, so it must be ignored. Its code
-// fetch byte enables are not reliable, so reads always return complete DWORDs.
+// fetches always use eight DWORDs and their byte enables are not reliable.
+// Multi-beat data reads also share one initial mask across the whole burst.
+// Only single-beat reads have a usable mask: omit an unused halfword there.
+// Return FFFF in an omitted halfword. A zero mask retains the full-read fallback.
 // Writes honour every byte enable, including skipping empty halfwords.
 //
 // One command is outstanding at a time. Writes are accepted into this module
@@ -16,7 +19,9 @@
 // ACK must fall between legacy transfers. All ports share clk; this module
 // does not provide CDC, arbitration, cache/DMA coherence or address mapping.
 // Used by the opt-in ao486 build; the default CPU remains Zet.
-module ao486_memory_bridge (
+module ao486_memory_bridge #(
+    parameter NARROW_READS = 1'b1
+) (
     input  wire        clk,
     input  wire        reset,
     input  wire [29:0] avm_address,
@@ -48,7 +53,7 @@ module ao486_memory_bridge (
     reg high_half;
     reg [15:0] read_low;
     wire [1:0] half_select = high_half ? byte_enable[3:2] : byte_enable[1:0];
-    wire skip_half = write_request && (half_select == 0);
+    wire skip_half = half_select == 0;
 
     assign busy = state != IDLE;
     assign avm_waitrequest = reset || busy || bus_ack;
@@ -76,7 +81,9 @@ module ao486_memory_bridge (
                 IDLE: if ((avm_read || avm_write) && !avm_waitrequest) begin
                     address <= avm_address;
                     write_data <= avm_writedata;
-                    byte_enable <= avm_byteenable;
+                    byte_enable <= avm_write ||
+                        (NARROW_READS && avm_burstcount == 1 && avm_byteenable != 0)
+                        ? avm_byteenable : 4'b1111;
                     remaining <= avm_write ? 4'd1 : avm_burstcount;
                     write_request <= avm_write;
                     high_half <= 0;
@@ -84,9 +91,9 @@ module ao486_memory_bridge (
                 end
                 TRANSFER: if (skip_half || bus_ack) begin
                     if (!write_request) begin
-                        if (!high_half) read_low <= bus_readdata;
+                        if (!high_half) read_low <= skip_half ? 16'hffff : bus_readdata;
                         else begin
-                            avm_readdata <= {bus_readdata, read_low};
+                            avm_readdata <= {skip_half ? 16'hffff : bus_readdata, read_low};
                             avm_readdatavalid <= 1;
                         end
                     end

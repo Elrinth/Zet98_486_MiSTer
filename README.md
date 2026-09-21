@@ -13,8 +13,9 @@ build passes the hardware arithmetic/RAM checksums and substantially improves
 small-loop throughput at the same clock; Rusty gameplay speed remains unverified.
 Earlier severe video corruption affected Console Mode too and cleared
 after a full power cycle. The isolated DOS probe now reads both System and
-Opening disks and persists its log to the host image. There is no Rusty speedup
-or DX4-100 performance claim yet.
+Opening disks and persists its log to the host image. Rusty's cached-build
+animation now looks somewhat better to the user; there is no measured gameplay
+frame-rate or DX4-100 performance claim yet.
 The source now fixes a truncated HPS disk acknowledgement that prevented
 slots 1–3 from completing transfers. The regression reproduces the old failure
 and passes with the fix. Hardware also requires waiting for image loading
@@ -24,18 +25,23 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
 
-1. Establish stable video from a cold start and isolate the corruption observed
-   in original cores, experimental cores and subsequently Console Mode. Then
-   measure the same Rusty gameplay scene on hardware.
-2. Integrate the ao486 CPU with PC-98 I/O byte lanes, memory transfers, interrupts,
-   DMA, reset behavior and BIOS mapping; retain a baseline for comparison.
+1. Optimize Rusty gameplay with PC-9801-86 sound, preserving video, audio and
+   disk timing. Increase CPU clock only with FPGA timing and hardware evidence.
+2. Develop the ao486 integration toward a faster PC-9821-class machine, including
+   extended RAM (16 MB first, then assess 64 MB), interrupts, DMA and BIOS support.
+   The current CPU integration maps only the lowest 1 MB; it does not yet
+   implement extended RAM or claim complete PC-9821 compatibility.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with
    a working disk controller and BIOS path. Dynamic VHD/VHDX containers are a
    separate format and are not promised by a `.vhd` file selector.
+   Provide a bootable, user-supplied DOS setup with documented CONFIG.SYS and
+   AUTOEXEC.BAT settings for a multi-game disk.
 4. Add the PC-98 MIDI interface used by games and route it through MiSTer MidiLink
    for local MUNT/FluidSynth synthesis and USB MIDI hardware. External MT32-pi
    support is a further option, not a requirement for listening to MIDI.
-5. Improve display scaling, including a full-screen option.
+5. Keep full-screen scaling and provide an optional rotating floppy activity
+   icon, enabled by default. Assess the SuperStation One optical drive as a
+   later storage extension once its host interface is established.
 
 ## Current source and build
 
@@ -135,12 +141,20 @@ Hardware observations and the isolated test setup are recorded in
 [HARDWARE_TESTING.md](HARDWARE_TESTING.md).
 
 `Startup mute: 10s / Off` defaults to **10s** (status bit 4 clear). It silences
-the PC-98 speaker for ten seconds after core start/reset, then restores it
-automatically. FM/PSG audio paths and mixer gain are preserved. Select **Off**
+the PC-98 speaker for at least ten seconds after core start/reset, then restores
+it when the speaker becomes inactive. An ongoing boot beep stays muted to its
+end; later software tones are allowed. FM/PSG audio paths and mixer gain are
+preserved. Select **Off**
 to hear startup beeps immediately. This is a fixed timer, not BIOS-completion
 detection; early software speaker tones within those ten seconds are also
-muted. It is included in the experimental `Zet98_486_DiskFix_20260921` test RBF;
-the audible hardware check is pending.
+muted. Earlier test RBFs use a fixed ten-second timer that can expose a long
+beep's tail. The revised behavior passes simulation; hardware checks are pending.
+
+`Floppy icon: On / Off` defaults to **On** (status bit 5 clear). A small rotating
+floppy appears at the lower right during controller activity and floppy image
+transfers, with a short hold for visibility. It follows the measured active
+raster, leaves blanking/sync unchanged, and disappears when idle. This is new
+source functionality, not present in the earlier Cache hardware test RBF.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

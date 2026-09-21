@@ -143,7 +143,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0) (
     input [7:0] mist_buffdout,
     output [7:0] mist_buffdin,
     input mist_buffwr,
-    output pLed, input [1:0] pDip1, input [7:0] pDip2,
+    output pLed, pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
     input pSramld, pSramst,
     output [7:0] pVideoR, pVideoG, pVideoB,
     output pVideoHS, pVideoVS, pVideoEN, pVideoClk,
@@ -152,6 +152,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0) (
 );
     assign mist_buffdin = mist_buffaddr[7:0] ^ 8'ha5;
     assign LDR_ACK = 0;
+    assign pFloppyAccess = 0;
     assign {pVideoR, pVideoG, pVideoB, pVideoHS, pVideoVS, pVideoEN, pVideoClk} = 0;
     assign {pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout} = 4'b1111;
 endmodule

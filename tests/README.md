@@ -13,8 +13,11 @@ bridge is still required for independent CPU and peripheral rates.
 The memory adapter converts DWORD-addressed reads of up to eight beats and
 single writes into acknowledged 16-bit transfers. It preserves all 32 physical
 address bits; BIOS aliases and PC-98 memory mapping are deliberately left to
-the system integration. Reads return full DWORDs because ao486 instruction
-fetches can carry byte enables left over from unrelated data reads. Write
+the system integration. Multi-beat reads return full DWORDs because ao486
+instruction fetches can carry byte enables left over from unrelated data reads.
+Single-beat byte/word reads omit an unused halfword, returning FFFF there. The
+real upstream-master integration checks that these reads use one transfer and
+that instruction fetches still use sixteen transfers per eight-DWORD burst. Write
 burst counts can likewise reflect a pending read; each write is still a single
 DWORD command, split according to its actual byte enables.
 
@@ -62,8 +65,13 @@ An integration test with the original `VTIMING` generator also checks row
 alignment for 1,247,400 pixels across 16-, 20- and 32-scanline text modes,
 after its initial partial scanline on reset.
 
-The startup-speaker mute test verifies exact expiry, automatic restoration,
-timer saturation, reset rearming and the menu bypass. Changing the bypass
+The floppy-overlay test verifies rotation, the lower-right position at two
+raster sizes, idle/disabled passthrough, activity hold/expiry and unchanged
+sync/blanking/pixel-enable timing across eleven frames.
+
+The startup-speaker mute test verifies minimum expiry, deferred restoration
+until a long boot beep ends, later software tones, timer saturation, reset
+rearming and the menu bypass. Changing the bypass
 after the startup interval must not mute later speaker audio. Clock and duration
 generics are reduced for simulation; the core uses its system clock frequency
 and a 10,000 ms interval.

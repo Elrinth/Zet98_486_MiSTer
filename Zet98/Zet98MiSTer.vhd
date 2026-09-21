@@ -80,6 +80,7 @@ port(
 	pDip1			: in std_logic_vector(1 downto 0);
 	pDip2			: in std_logic_vector(7 downto 0);
 	pLed			: out std_logic;
+	pFloppyAccess : out std_logic;
 
 	-- Video, Audio/CMT ports
 	pVideoR     : out	std_logic_vector( 7 downto 0);  -- RGB_Red / Svideo_C
@@ -3457,6 +3458,7 @@ DBIO_ODAT<=(others=>'1');
 						"1011" when FDC_USEL="10" else
 						"1000" when FDC_USEL="11" else
 						"1111";
+	pFloppyAccess <= FDC_BUSY;
 	
 	DISKE	:component diskemu_mister 	generic map(SYSFREQ,SYSFREQ,10) port map(
 	--SASI
@@ -3863,7 +3865,8 @@ DBIO_ODAT<=(others=>'1');
 	
 	startup_sound : entity work.startup_mute
 		generic map(CLOCK_KHZ => SYSFREQ)
-		port map(clk => cpuclk, rstn => srstn, bypass => pStartupBeeps, muted => startup_muted);
+		port map(clk => cpuclk, rstn => srstn, bypass => pStartupBeeps,
+			muted => startup_muted, speaker_on => BEEPON);
 
 	BEEP_snd<=	(others=>'0') when BEEPON='0' or startup_muted='1' else
 				x"1fff" when PTC_CNTOUT(1)='1' else

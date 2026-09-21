@@ -482,6 +482,7 @@ set_global_assignment -name VHDL_FILE ../../VIDEO/VTIMING.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/synccont2.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/text_row_counter.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/video_output.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/floppy_overlay.sv
 set_global_assignment -name VHDL_FILE ../../rtl/startup_mute.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd

@@ -7,12 +7,13 @@ architecture test of startup_mute_tb is
     signal clk : std_logic := '0';
     signal rstn : std_logic := '0';
     signal bypass : std_logic := '0';
+    signal speaker_on : std_logic := '0';
     signal muted, no_mute : std_logic;
 begin
     clk <= not clk after 5 ns;
     dut : entity work.startup_mute
         generic map(CLOCK_KHZ => 4, MUTE_MS => 3)
-        port map(clk, rstn, bypass, muted);
+        port map(clk, rstn, bypass, muted, speaker_on);
     zero_interval : entity work.startup_mute
         generic map(CLOCK_KHZ => 1, MUTE_MS => 0)
         port map(clk, rstn, bypass, no_mute);
@@ -66,7 +67,25 @@ begin
         bypass <= '0';
         cycle;
         assert muted = '0' report "Post-boot menu change muted later audio" severity failure;
-        report "PASS: startup mute duration, automatic restore, reset, bypass, and saturation" severity note;
+        wait until falling_edge(clk);
+        rstn <= '0'; speaker_on <= '1';
+        wait until falling_edge(clk); rstn <= '1';
+        for i in 1 to 40 loop
+            cycle;
+            assert muted = '1' report "Timer exposed the tail of a long boot beep" severity failure;
+        end loop;
+        bypass <= '1'; cycle;
+        assert muted = '0' report "Bypass did not enable an ongoing boot beep" severity failure;
+        bypass <= '0'; cycle;
+        assert muted = '1' report "Bypass cancelled the pending startup mute" severity failure;
+        speaker_on <= '0'; cycle;
+        assert muted = '0' report "Speaker did not restore after the boot beep ended" severity failure;
+        speaker_on <= '1';
+        for i in 1 to 40 loop
+            cycle;
+            assert muted = '0' report "A later software speaker tone was muted" severity failure;
+        end loop;
+        report "PASS: startup mute duration, long-beep suppression, later tones, reset, bypass, and saturation" severity note;
         finish;
     end process;
 end architecture;

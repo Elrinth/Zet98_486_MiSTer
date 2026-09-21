@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
-module ao486_memory_bridge_tb;
+module ao486_memory_bridge_tb #(
+    parameter NARROW_READS = 1'b1
+);
     reg clk = 0;
     always #5 clk = !clk;
     reg reset = 1;
@@ -16,7 +18,7 @@ module ao486_memory_bridge_tb;
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_memory_bridge dut (.*);
+    ao486_memory_bridge #(.NARROW_READS(NARROW_READS)) dut (.*);
 
     reg [7:0] memory [0:8191];
     reg [7:0] expected_memory [0:8191];
@@ -114,7 +116,9 @@ module ao486_memory_bridge_tb;
             for (beat = 0; beat < beats; beat = beat + 1) begin
                 a = addr + beat * 4;
                 for (halfword = 0; halfword < 2; halfword = halfword + 1) begin
-                    sel = wr ? ((be >> (halfword * 2)) & 3) : 3;
+                    sel = wr ? ((be >> (halfword * 2)) & 3) :
+                        (NARROW_READS && beats == 1 && be != 0 &&
+                         ((be >> (halfword * 2)) & 3) == 0) ? 0 : 3;
                     if (sel != 0) begin
                         expected_address[bus_tail] = a + halfword * 2;
                         expected_select[bus_tail] = sel;
@@ -128,6 +132,12 @@ module ao486_memory_bridge_tb;
                     rd[lane*8 +: 8] = expected_memory[index_of(a + lane)];
                 end
                 if (!wr) begin
+                    // Only bytes requested by the single-beat master are
+                    // meaningful; the bridge specifies FFFF for an omitted half.
+                    if (NARROW_READS && beats == 1 && be != 0) begin
+                        if (be[1:0] == 0) rd[15:0] = 16'hffff;
+                        if (be[3:2] == 0) rd[31:16] = 16'hffff;
+                    end
                     expected_read[read_tail] = rd;
                     read_tail = read_tail + 1;
                 end
@@ -222,7 +232,8 @@ module ao486_memory_bridge_tb;
         issue(1, 32'h12345678, 15, 32'h90abcdef, 1);
         issue(0, 32'h12345678, 0, 0, 1);
         drain();
-        $display("PASS: ao486 memory bridge: %0d commands, byte masks, bursts, high addresses, stalls, reset", requests);
+        $display("PASS: ao486 memory bridge: %0d commands, %0d transfers, narrow=%0d, byte masks, bursts, high addresses, stalls, reset",
+                 requests, bus_tail, NARROW_READS);
         $finish;
     end
     initial begin

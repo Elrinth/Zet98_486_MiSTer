@@ -395,6 +395,30 @@ tile comparison. It now compares both bytes, with distinct high/low matches
 tested on all four planes. A fresh complete build is in progress; these
 changes are not on the device yet.
 
+### Short-read optimization and usability changes
+
+The memory bridge now omits an unused halfword on single-DWORD data reads.
+The unmodified ao486 Avalon generator supplies meaningful byte enables for
+these requests. Eight-DWORD instruction fetches and multi-DWORD data reads
+retain full reads, because their shared mask cannot describe each beat.
+The upstream-master integration passes 156 commands and verifies the transfer
+counts directly; the adapter tests cover all masks, bursts and stalls.
+The full CPU smoke test passes with 576 transfers (previously 590).
+
+With the same eight-wait-cycle simulation, the cached CPU VRAM-copy kernel
+changes from 6,463 cycles / 417 transfers to 5,309 / 289, about 21.7% higher
+throughput. Arithmetic is unchanged at 6,361 / 17. Cache coherence, self-modifying
+code, upper-window bypass and output checksums still pass, including the
+disconnected-invalidation negative control. This is a synthetic simulation
+result, not a Rusty or complete SDRAM-controller measurement.
+
+The revised startup mute waits for an ongoing speaker tone to end before
+restoring audio after its ten-second minimum. A rotating floppy overlay uses
+actual FDC busy plus HPS floppy-slot traffic, defaults on at status bit 5 clear,
+and can be disabled. All adapter tests pass, including long-beep/later-tone
+behavior and eleven overlay frames with timing, rotation and mode-size checks.
+Hardware verification and complete fits of these changes are pending.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the

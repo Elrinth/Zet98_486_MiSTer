@@ -202,7 +202,7 @@ module ao486_memory_integration_tb;
         end
     endtask
 
-    integer i, offset, len, pass;
+    integer i, offset, len, pass, before_transfers;
     initial begin
         for (i = 0; i < 65536; i = i + 1) begin
             memory[i] = (i * 43) ^ (i >> 8);
@@ -211,6 +211,27 @@ module ao486_memory_integration_tb;
         end
         repeat (3) @(posedge clk);
         @(negedge clk); reset = 0;
+        // The real ao486 master must fetch a byte or aligned word in ONE
+        // legacy transfer. Check counts separately from pending write traffic.
+        for (offset = 0; offset < 4; offset = offset + 1) begin
+            before_transfers = transfers;
+            read_bytes(32'h00002000 + offset, 1);
+            @(posedge clk); while (busy) @(posedge clk);
+            if (transfers - before_transfers != 1)
+                $fatal(1, "byte read did not omit its unused halfword");
+            if (!(offset & 1)) begin
+                before_transfers = transfers;
+                read_bytes(32'h00002000 + offset, 2);
+                @(posedge clk); while (busy) @(posedge clk);
+                if (transfers - before_transfers != 1)
+                    $fatal(1, "aligned word read did not omit its unused halfword");
+            end
+        end
+        before_transfers = transfers;
+        fetch_line(32'h00002000);
+        @(posedge clk); while (busy) @(posedge clk);
+        if (transfers - before_transfers != 16)
+            $fatal(1, "instruction fetch did not retain all sixteen halfwords");
         for (pass = 0; pass < 2; pass = pass + 1) begin
             for (offset = 0; offset < 4; offset = offset + 1) begin
                 for (len = 1; len <= 4; len = len + 1) begin

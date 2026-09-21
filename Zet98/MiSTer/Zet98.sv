@@ -158,6 +158,7 @@ parameter CONF_STR = {
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
+	"O5,Floppy icon,On,Off;",
 	"-;",
 	"R6,Reset;",
 	"-;",
@@ -368,15 +369,26 @@ assign CLK_VIDEO = clk_vid;
 assign AUDIO_S = 1;
 
 wire disk_led;
+wire floppy_access;
 wire native_ce, native_hs, native_vs, native_de;
 wire [7:0] native_r, native_g, native_b;
+wire output_ce, output_hs, output_vs, output_de;
+wire [7:0] output_r, output_g, output_b;
 
 video_output video_out (
 	.clk(clk_vid), .reset(!pll_locked), .test_pattern(status[3]),
 	.native_ce(native_ce), .native_r(native_r), .native_g(native_g), .native_b(native_b),
 	.native_hs(native_hs), .native_vs(native_vs), .native_de(native_de),
-	.ce(CE_PIXEL), .r(VGA_R), .g(VGA_G), .b(VGA_B),
-	.hs(VGA_HS), .vs(VGA_VS), .de(VGA_DE)
+	.ce(output_ce), .r(output_r), .g(output_g), .b(output_b),
+	.hs(output_hs), .vs(output_vs), .de(output_de)
+);
+floppy_overlay floppy_icon (
+	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
+	.activity(floppy_access | (|sd_rd[1:0]) | (|sd_wr[1:0])),
+	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
+	.in_r(output_r), .in_g(output_g), .in_b(output_b),
+	.out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
+	.out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
 );
 
 Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
@@ -440,6 +452,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 	.mist_buffwr(sd_buff_wr),
 
 	.pLed(disk_led),
+	.pFloppyAccess(floppy_access),
 	.pDip1(pdip1),
 	.pDip2(pdip2),
 	.pSramld(sramld),

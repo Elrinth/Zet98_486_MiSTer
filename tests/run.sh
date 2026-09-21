@@ -29,6 +29,8 @@ ghdl -e --std=08 -fsynopsys --workdir="$out" video_line_timing_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" video_line_timing_tb --assert-level=error
 iverilog -g2012 -Wall -s video_output_tb -o "$out/video.vvp" rtl/video_output.sv tests/video_output_tb.sv
 vvp "$out/video.vvp"
+iverilog -g2012 -Wall -s floppy_overlay_tb -o "$out/floppy-overlay.vvp" rtl/floppy_overlay.sv tests/floppy_overlay_tb.sv
+vvp "$out/floppy-overlay.vvp"
 bash tests/run-disk-interface.sh
 bash tests/run-data-bus.sh
 bash tests/run-cache-map.sh
