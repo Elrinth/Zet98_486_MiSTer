@@ -51,3 +51,13 @@ exception: read data and completion controls remain normally timed.
 Varied per-transaction/per-plane read data is checked at ACK assertion;
 a deliberately one-cycle-late capture must fail. Integrated fitting and
 hardware validation of this read change remain pending.
+
+The write-bundle/prefetch combination at 50 MHz completes in
+`quartus-20260921-135403-d6bfcb` with no reported negative timing check
+(minimum +0.056 ns), 34160 ALMs and 453 RAM blocks. Board-I/O constraints
+remain incomplete. Its Bundle50 hardware test passes 100 FM timer interrupts.
+This build precedes the read-capture change. The latter's 60 MHz fit in
+`quartus-20260921-141137-e39c88` has 17 reported failing checks, worst setup
+-2.289 ns from the separate GDC drawing write path. CPU-internal setup
+passes at +0.256 ns; CPU-clock-domain setup still fails by -0.033 ns.
+Other video/hold/removal failures remain. Neither 60 MHz RBF was deployed.

@@ -1,11 +1,11 @@
-# Experimental PC-98 ATA read service
+# Experimental PC-98 ATA disk service
 
-`pc98_ide_read_bios.inc` implements the read side of a PC-98 INT 1Bh disk
-service on the core's raw ATA master. It is **not yet an installable option
+`pc98_ide_read_bios.inc` implements PC-98 INT 1Bh reads and optional bounded
+writes on the core's raw ATA master. It is **not yet an installable option
 ROM**. A separate BIOS-first diagnostic floppy now boots the private DOS 6.20
 VHD on Native50 and reaches its game menu and Rusty's illustrated intro.
 The existing D0000h disk-ROM window still returns FFFFh in the FPGA. ROM
-discovery, mount/geometry discovery, writes and complete DOS compatibility
+discovery, mount/geometry discovery and complete DOS compatibility
 remain work in progress.
 
 The embedding 386-or-later program supplies `bios_previous_vector`, a far
@@ -39,8 +39,57 @@ The routine preserves registers, including their upper halves, and caller
 flags other than the documented AH/CF results and geometry outputs. It polls
 PIO with ATA interrupts disabled and acknowledges the ATA status before
 re-enabling interrupts. This is not an asynchronous disk driver, and it cannot
-share the channel with another active ATA driver. No write/format command is
-issued by the service.
+share the channel with another active ATA driver. Default builds issue no
+write/format command. Formatting remains unsupported in all builds.
+
+## Optional bounded writes
+
+`BIOS_ALLOW_WRITES=1` enables AH=05h/85h with the same CHS/LBA, byte-count and
+buffer conventions. Both `BIOS_WRITE_FIRST_LBA` and `BIOS_WRITE_LAST_LBA`
+must explicitly define an inclusive window inside the configured image.
+Out-of-window writes return AH=70h before any disk command. These compile-time
+limits complement image identification; they do not identify a disk by themselves.
+
+Full sectors use a stack bounce buffer and PIO OUTSW. A partial final sector
+is read first, overlaid with only the requested bytes, then written back.
+The service waits for completion with BSY and DRQ clear and checks ERR/DF
+before reporting success. Caller registers and flags retain the read ABI.
+The default bootloader remains read-only unless explicitly built with these
+defines. Use a separate disposable image for write validation.
+
+The independent Unicorn test covers 21 cases: full/partial writes, a 64 KB
+transfer, CHS and linear addressing, a segment crossing, exact BIOS readback,
+protected neighbors, bounds, device chaining, register/flag preservation,
+absent/busy media, command and completion errors, stuck DRQ and device loss.
+`BIOS_WRITE_TEST=1 tests/run-ide-bios.sh` also passes on the actual ao486 RTL:
+three reads, three write commands (one rejected by the ATA model), 9952 bus
+transfers, segmented OUTSW, readback and preserved partial-sector tail.
+An intentionally broken version that skips write completion fails the
+independent test with `write returned before completion`.
+The default read-only RTL regression still passes seven reads / 12291 bus
+transfers after factoring the task-file setup into a shared routine.
+
+`tests/hardware/ide_write_probe.asm` additionally checks an exact 1 MB media
+capacity and diagnostic signature before writing, with its BIOS window
+restricted to sector 17. On Native50, loaded at 14:24:33 CEST on 2026-09-21,
+it passes full and 31-byte partial writes/readback, CHS/LBA, and rejection of
+neighboring sectors. The returned image differs only in sector 17, with the
+exact expected pattern and unchanged tail. This establishes sector writes;
+The next file-level test passes on Bundle50 with a separate writable game
+VHD. `hdd_file_probe.asm` uses create-new semantics for `A:\Z98WRITE.BIN`,
+writes 70,001 bytes, flushes/closes, reopens and verifies every byte and EOF.
+The 14:46:08 hardware capture confirms PASS. `verify_hdd_file.py` independently
+compares all 568,336,384 image bytes against the pristine staging archive:
+only 140 sectors change, inside FAT/root metadata and the five new clusters.
+Both FATs agree, every unrelated FAT/root entry is unchanged, and the
+returned payload matches on the host. Individual games' save behavior and
+power-loss recovery are not established by this diagnostic.
+
+```sh
+nasm -f bin tests/pc98_ide_write_bios.asm -o build/ide-write-test.bin
+python tests/pc98_ide_write_unicorn.py build/ide-write-test.bin
+BIOS_WRITE_TEST=1 bash tests/run-ide-bios.sh
+```
 
 ## Verification
 

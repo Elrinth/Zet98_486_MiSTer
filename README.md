@@ -26,8 +26,8 @@ or a certification of gameplay stability and audio quality.
 An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
 50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
 with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
-The latest 60 MHz fit still fails timing, including CPU-internal setup and
-clock crossings. It has not been deployed.
+The latest 60 MHz fit passes CPU-internal setup but still fails full-design
+setup, hold and removal checks. It has not been deployed.
 Optional extended RAM and 86 PCM playback are described in
 [extended RAM](rtl/cpu/EXTENDED_RAM.md) and [PCM86](rtl/PCM86.md).
 The source now fixes a truncated HPS disk acknowledgement that prevented
@@ -50,9 +50,11 @@ Audible music quality remains unverified. A separate
 [prefetch queue optimization](rtl/cpu/PREFETCH_STORE.md) passes CPU simulation
 without adding cycles; its first fit passes CPU-internal setup at 60 MHz.
 The subsequent [SDRAM write-path change](rtl/cpu/SDRAM_WRITE_BUNDLE.md) reduces
-the worst full-design violation from -5.898 to -3.120 ns, but CPU-internal
-setup regresses to -0.202 ns with the changed placement. Read-path work is
-under validation; the tested hardware baseline remains Native50.
+the worst full-design violation from -5.898 to -3.120 ns. Capturing completed
+reads at CPU ACK reduces the next fit's worst setup violation to -2.289 ns
+and CPU-internal setup passes at +0.256 ns, but other timing failures remain.
+The preceding write-bundle/prefetch source passes reported timing at 50 MHz;
+its Bundle50 hardware build passes the FM IRQ and DOS file-persistence tests.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -78,8 +80,12 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    [read BIOS prototype](software/DISK_BIOS.md) passes hardware geometry,
    partition, cylinder-crossing and 64 KB read checks against the private VHD.
    A BIOS-first diagnostic floppy now boots that VHD into DOS 6.20 on Native50
-   and launches Rusty's illustrated intro. ROM integration, HDD writes and
-   general image/geometry discovery remain unfinished.
+   and launches Rusty's illustrated intro. An optional bounded write BIOS
+   passes sector-level hardware checks. Bundle50 also creates, flushes and
+   reopens a 70,001-byte file on a separate game VHD; independent comparison
+   verifies the data and limits all changes to that file's allocation and
+   directory entry. ROM integration and general image/geometry discovery
+   remain unfinished.
    A disposable hardware diagnostic passes IDENTIFY,
    sector write/read checksum and four IRQ9 deliveries; only the designated
    test sector changed in the returned image.

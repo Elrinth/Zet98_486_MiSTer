@@ -821,3 +821,55 @@ simulation completion times exactly match the prior regression runs.
 Deliberately late write admission and a one-cycle-late read capture both
 fail as intended. Graphics arbitration and GRCG/data-bus regressions pass.
 FPGA fitting and hardware validation of this read change are pending.
+
+The write-bundle/prefetch source at 50 MHz, snapshot
+`quartus-20260921-135403-d6bfcb` / commit `61f80ff`, completes in 33m46s with
+34160 ALMs, 453 RAM blocks and 66 DSPs. No reported timing check is negative;
+minimum slack is +0.056 ns. Board-I/O constraint limitations still apply.
+It excludes the subsequent CPU read-capture change. The separately named
+Bundle50 RBF has SHA-256
+`d6df5d57b53ad208f053bd1efb55ba8238052e53f42487830d69750924950bc6`.
+Its first FM diagnostic was loaded at 14:31:47. The returned floppy and
+14:33:51 capture confirm 100 timer-B IRQ12 deliveries, status assertion/clear
+and cascaded PIC EOI. This silent test does not measure audible music quality.
+
+### Bounded BIOS sector writes on Native50
+
+Loaded at 14:24:33, `Zet98_BIOSWrite_Native50.mgl` uses a newly generated
+1 MB diagnostic VHD and a floppy with `ide_write_probe.asm` as its shell.
+The probe checks IDENTIFY capacity and the exact marker before writing;
+the BIOS write window admits only sector 17. The returned floppy reports
+PASS for full/partial writes, readback, CHS/LBA and protected neighbors.
+Host comparison confirms only sector 17 changed, with all 512 expected
+bytes including the preserved tail after the 31-byte update. No game VHD
+was written by this test.
+
+### DOS file persistence on Bundle50
+
+`Zet98_HD_RW_Bundle50.mgl` was loaded at 14:41:21 using a separate game-image
+copy and a write-enabled BIOS-first loader. The initial image SHA-256 is
+`ad572500a2ffd6559aca3371d6f14811c044e42e8d683487777ca3deb58720f7`; the
+loader D88 SHA-256 is
+`8493b35ed46b448200904acfdc6a78f1e922d2797a824f0e1a7e5085cf870ae3`.
+It preserves 2030 previous files except PROFILE.BAT and adds compatible
+FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
+
+FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
+closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
+shows PASS. An independent full-image comparison at 14:48:25 finds exactly
+140 changed sectors, confined to FAT/root metadata and clusters 7026–7030.
+A stricter metadata audit confirms all unrelated FAT and directory entries
+are identical to the pristine archive. Both FAT copies agree. The extracted
+payload also matches on the host, SHA-256
+`f3484c7e4e06abc4978a08c7947518521c0e5017a95728d39bc04be091a67141`.
+This is a DOS file-persistence result, not a game-save or power-loss test.
+
+### CPU read capture at 60 MHz
+
+`quartus-20260921-141137-e39c88` completes in 29m41s with 34731 ALMs, 453
+RAM blocks and 66 DSPs. Seventeen reported checks fail, worst setup
+-2.289 ns from the separate GDC drawing path into SDRAM. CPU-internal setup
+passes at +0.256 ns; the full CPU-clock domain still fails by -0.033 ns.
+Video setup, pixel hold/removal and other hold checks also fail. This build
+was not deployed. The post-fit reporter now includes incoming memory/video
+paths so a CPU improvement cannot obscure the remaining peripheral limits.

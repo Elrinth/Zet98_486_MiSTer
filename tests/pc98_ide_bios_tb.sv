@@ -3,6 +3,8 @@
 module pc98_ide_bios_tb;
     parameter LOWMEM_CACHE=0;
     parameter EXPECT_READS=7;
+    parameter WRITE_TEST=0;
+    parameter EXPECT_WRITES=0;
     reg clk = 0;
     always #5 clk = !clk;
     reg reset = 1;
@@ -35,6 +37,10 @@ module pc98_ide_bios_tb;
     integer ide_index=0, ide_delay=0, ide_fault=0, ide_reads=0;
     reg [27:0] ide_lba=0;
     reg [7:0] ide_status=8'h50;
+    reg [7:0] ide_next_status=8'h58, ide_command=0;
+    integer ide_writes=0;
+    reg [15:0] ide_written[0:511];
+    reg [1:0] ide_written_valid=0;
     always @(negedge clk) begin
         if (reset) begin phase = 0; bus_ack = 0; end
         else case (phase)
@@ -60,18 +66,36 @@ module pc98_ide_bios_tb;
                                ide_status=ide_fault==1 ? 0 : ide_fault==2 ? 8'h80 : 8'h50;
                            end
                            if (held_addr == 20'h0064e) begin
-                               if (held_data[7:0]!=8'h20) $fatal(1,"Read-only BIOS issued non-read command %h",held_data);
+                               if (held_data[7:0]!=8'h20 && !(WRITE_TEST && held_data[7:0]==8'h30))
+                                   $fatal(1,"Unsupported BIOS ATA command %h",held_data);
                                if (ports[16'h644]!=1) $fatal(1,"Expected single-sector PIO");
                                ide_lba={ports[16'h64c][3:0],ports[16'h64a],ports[16'h648],ports[16'h646]};
-                               ide_index=0;ide_delay=3;ide_status=8'h80;ide_reads=ide_reads+1;
+                               ide_command=held_data[7:0];
+                               ide_index=0;ide_delay=3;ide_status=8'h80;
+                               ide_next_status=ide_fault==3 ? 8'h51 : 8'h58;
+                               if (ide_command==8'h20) ide_reads=ide_reads+1;
+                               else ide_writes=ide_writes+1;
                                if(ide_reads==1 || ide_reads%32==0) $display("BIOS progress: sector %0d, LBA %0d",ide_reads,ide_lba);
+                           end
+                           if (held_addr == 20'h00640) begin
+                               if (!WRITE_TEST || ide_command!=8'h30 || ide_status!=8'h58 || held_select!=3)
+                                   $fatal(1,"Invalid ATA data write");
+                               if (ide_lba!=17 && ide_lba!=18) $fatal(1,"Unexpected disk write target");
+                               ide_written[(ide_lba-17)*256+ide_index]=held_data;
+                               ide_index=ide_index+1;
+                               if (ide_index==256) begin
+                                   ide_written_valid[ide_lba-17]=1;
+                                   ide_status=8'h80; ide_delay=4; ide_next_status=8'h50;
+                               end
                            end
                            if (held_addr == 20'h07ff0) begin
                                if (held_data == 16'hdead) $fatal(1,"BIOS test reported failure at EIP=%h",dut.cpu.eip);
                                if (held_data == 16'h600d) begin
                                    if(ide_reads!=EXPECT_READS) $fatal(1,"Unexpected sector read count: %0d",ide_reads);
+                                   if(ide_writes!=EXPECT_WRITES) $fatal(1,"Unexpected sector write count: %0d",ide_writes);
                                    if(ports[16'h74c]!=0) $fatal(1,"PIO left IRQ disabled");
-                                   $display("PASS actual ao486 PC-98 read BIOS: CHS/LBA, geometry, partial sector, segmented buffer, registers/DF, VERIFY, read-only/errors/chaining; %0d reads, %0d transfers",ide_reads,transactions);
+                                   if(WRITE_TEST) $display("PASS actual ao486 write BIOS: OUTSW, readback, segment crossing, partial-tail preservation, ABI, write bounds and ATA error; %0d reads, %0d writes, %0d transfers",ide_reads,ide_writes,transactions);
+                                   else $display("PASS actual ao486 PC-98 read BIOS: CHS/LBA, geometry, partial sector, segmented buffer, registers/DF, VERIFY, read-only/errors/chaining; %0d reads, %0d transfers",ide_reads,transactions);
                                    $finish;
                                end
                            end
@@ -80,13 +104,15 @@ module pc98_ide_bios_tb;
                        if(!held_write && (held_addr==20'h0074c || held_addr==20'h0064e)) begin
                            if(ide_delay>0) begin
                                ide_delay=ide_delay-1;
-                               if(ide_delay==0) ide_status=ide_fault==3 ? 8'h51 : 8'h58;
+                               if(ide_delay==0) ide_status=ide_next_status;
                            end
                            bus_readdata={8'hff,ide_status};
                        end
                        if(!held_write && held_addr==20'h00640) begin
                            if(ide_status!=8'h58 || held_select!=3) $fatal(1,"Invalid ATA data read");
                            bus_readdata=16'ha55a ^ ide_lba[15:0] ^ ide_index;
+                           if(WRITE_TEST && ide_lba>=17 && ide_lba<=18 && ide_written_valid[ide_lba-17])
+                               bus_readdata=ide_written[(ide_lba-17)*256+ide_index];
                            ide_index=ide_index+1;
                            if(ide_index==256) ide_status=8'h50;
                        end

@@ -5,7 +5,8 @@
 ; Caller ABI follows NP2kai bios/sxsibios.c: AL=80h CHS (zero-based sector),
 ; AL=00h linear DL:CX, BX byte count (0=64K), ES:BP buffer, AH low nibble command.
 ; Only drive zero is intercepted; other devices chain to the previous handler.
-; Writes/format are deliberately unsupported in this first read-only service.
+; Default builds reject writes. BIOS_ALLOW_WRITES requires an explicit inclusive
+; LBA write window; use a disposable image until the embedding BIOS is tested.
 bits 16
 cpu 386
 %ifndef BIOS_HEADS
@@ -15,6 +16,17 @@ cpu 386
 %define BIOS_POLL_LIMIT 1000000
 %endif
 %define BIOS_TOTAL (BIOS_HEADS * BIOS_SECTORS * BIOS_CYLINDERS)
+%ifdef BIOS_ALLOW_WRITES
+%ifndef BIOS_WRITE_FIRST_LBA
+%error Define an explicit BIOS_WRITE_FIRST_LBA / BIOS_WRITE_LAST_LBA window
+%endif
+%ifndef BIOS_WRITE_LAST_LBA
+%error Define an explicit BIOS_WRITE_FIRST_LBA / BIOS_WRITE_LAST_LBA window
+%endif
+%if BIOS_WRITE_FIRST_LBA < 0 || BIOS_WRITE_LAST_LBA < BIOS_WRITE_FIRST_LBA || BIOS_WRITE_LAST_LBA >= BIOS_TOTAL
+%error Write window is outside the configured image
+%endif
+%endif
 %if BIOS_HEADS < 1 || BIOS_HEADS > 255 || BIOS_SECTORS < 1 || BIOS_SECTORS > 255 || BIOS_CYLINDERS < 1 || BIOS_CYLINDERS > 65535 || BIOS_TOTAL > 0x10000000
 %error Geometry is outside the supported PC-98/LBA28 range
 %endif
@@ -44,7 +56,11 @@ bios_int1b:
     cmp al,4
     je .sense
     cmp al,5
+%ifdef BIOS_ALLOW_WRITES
+    je .position
+%else
     je .protected
+%endif
     cmp al,7
     je .success
     cmp al,0fh
@@ -86,6 +102,17 @@ bios_int1b:
     add eax,esi
     cmp eax,BIOS_TOTAL
     ja .range
+%ifdef BIOS_ALLOW_WRITES
+    mov dl,[ss:bp+29]
+    and dl,0fh
+    cmp dl,5
+    jne .buffer_range
+    cmp esi,BIOS_WRITE_FIRST_LBA
+    jb .protected
+    cmp eax,BIOS_WRITE_LAST_LBA+1
+    ja .protected
+.buffer_range:
+%endif
     movzx edi,word [ss:bp+32]
     shl edi,4
     movzx eax,word [ss:bp+8]
@@ -105,24 +132,17 @@ bios_int1b:
 .sector:
     call bios_wait_idle
     jc .io_failed
-    mov eax,esi
-    shr eax,24
-    or al,0e0h
-    mov dx,064ch
-    out dx,al
-    mov dx,0644h
-    mov al,1
-    out dx,al
-    mov eax,esi
-    mov dx,0646h
-    out dx,al
-    shr eax,8
-    add dx,2
-    out dx,al
-    shr eax,8
-    add dx,2
-    out dx,al
-    mov dx,064eh
+%ifdef BIOS_ALLOW_WRITES
+    mov al,[ss:bp+29]
+    and al,0fh
+    cmp al,5
+    jne .read_sector
+    ; A partial final write first reads its sector to preserve the tail.
+    cmp ebx,512
+    jae .write_sector
+.read_sector:
+%endif
+    call bios_program_sector
     mov al,20h
     out dx,al
     call bios_wait_data
@@ -143,6 +163,10 @@ bios_int1b:
     jnz .io_failed
     mov al,[ss:bp+29]
     and al,0fh
+%ifdef BIOS_ALLOW_WRITES
+    cmp al,5
+    je .write_sector
+%endif
     cmp al,1                 ; VERIFY reads the sector but leaves memory alone
     je .advance
     push esi
@@ -162,6 +186,47 @@ bios_int1b:
     rep movsb
     pop edi
     pop esi
+%ifdef BIOS_ALLOW_WRITES
+    jmp .advance
+.write_sector:
+    ; Copy from the caller's physical buffer into the stack bounce buffer.
+    ; Normalizing DS:SI per sector also handles a caller's 64K offset wrap.
+    push esi
+    push edi
+    mov eax,edi
+    shr eax,4
+    mov ds,ax
+    mov esi,edi
+    and si,15
+    push ss
+    pop es
+    lea di,[bp-512]
+    mov ecx,ebx
+    cmp ecx,512
+    jbe .write_copy
+    mov cx,512
+.write_copy:
+    rep movsb
+    pop edi
+    pop esi
+    call bios_wait_idle
+    jc .io_failed
+    call bios_program_sector
+    mov al,30h
+    out dx,al
+    call bios_wait_data
+    jc .io_failed
+    push esi
+    push ss
+    pop ds
+    lea si,[bp-512]
+    mov cx,256
+    mov dx,0640h
+    rep outsw
+    pop esi
+    call bios_wait_write_complete
+    jc .io_failed
+%endif
 .advance:
     mov eax,ebx
     cmp eax,512
@@ -225,6 +290,51 @@ bios_int1b:
     pop es
     pop ds
     iret
+
+bios_program_sector:
+    mov eax,esi
+    shr eax,24
+    or al,0e0h
+    mov dx,064ch
+    out dx,al
+    mov dx,0644h
+    mov al,1
+    out dx,al
+    mov eax,esi
+    mov dx,0646h
+    out dx,al
+    shr eax,8
+    add dx,2
+    out dx,al
+    shr eax,8
+    add dx,2
+    out dx,al
+    mov dx,064eh
+    ret
+
+%ifdef BIOS_ALLOW_WRITES
+bios_wait_write_complete:
+    mov ecx,BIOS_POLL_LIMIT
+    mov dx,074ch
+.poll:
+    in al,dx
+    test al,80h
+    jnz .again
+    test al,21h
+    jnz .failed
+    test al,8
+    jnz .again
+    test al,40h
+    jz .failed
+    clc
+    ret
+.again:
+    dec ecx
+    jnz .poll
+.failed:
+    stc
+    ret
+%endif
 
 bios_present:
     mov dx,0432h

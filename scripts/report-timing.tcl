@@ -13,6 +13,15 @@ if {[get_collection_size $system_clock] != 1} {
     error "Expected exactly one core system clock"
 }
 report_timing -setup -from_clock $system_clock -to_clock $system_clock -npaths 6 -nworst 1 -detail full_path -file output_files/system-setup-paths.txt
+# Overall worst paths can all end in the CPU. Also expose the worst incoming
+# paths for each peripheral clock so CPU improvements do not hide other limits.
+foreach {domain pattern} {memory {*emu*general?0?*divclk} video {*emu*general?2?*divclk}} {
+    set domain_clock [get_clocks $pattern]
+    if {[get_collection_size $domain_clock] != 1} {
+        error "Expected exactly one $domain clock"
+    }
+    report_timing -setup -to_clock $domain_clock -npaths 6 -nworst 1 -detail full_path -file output_files/${domain}-setup-paths.txt
+}
 set cpu_registers [get_registers {*|cpu|* *|*zet_cpu:cpu|*}]
 if {[get_collection_size $cpu_registers] == 0} {
     error "CPU registers were not found"

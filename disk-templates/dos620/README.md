@@ -47,7 +47,9 @@ initialization driver is automatically installed by these templates.
 A BIOS-first diagnostic floppy now boots the private DOS 6.20 VHD on Native50
 and reaches this menu and Rusty's illustrated intro. This is still a fixed-image
 read-only experiment, not general ROM-based HDD boot. Profile changes and game
-saves cannot work until the disk BIOS implements writes.
+saves cannot work with that read-only loader. A separate write-enabled
+Bundle50 test now passes DOS file creation and independent image comparison;
+individual games' save behavior remains to be tested.
 
 The additional `PROFILES/FPGA.SYS` uses `Z98MEM.SYS` and the PC-98 HIMEMX
 driver instead of the old BIOS's memory report. It requires the optional
@@ -56,3 +58,12 @@ separate private VHD copy boots with a 608,912-byte largest conventional
 block and passes direct 17 MB XMS allocation, copy, verification and free.
 NEC MEM reports zero XMS despite this passing API check. Keep EMM386/VEM disabled with the
 current resident disk BIOS; they may reuse its D8000-DFFFF RAM area.
+
+For a writable FPGA test image, install `FPGA_MENU.BAT` as `PROFILE.BAT`.
+It selects the full HIMEMX profile, `LIMITED.SYS` (14 MB including HMA),
+`CONV.SYS` (conventional memory only), or the existing bare shell. It keeps
+the same backup and byte-comparison workflow. HIMEMX's `/MAX=14336` limits
+what the memory manager exposes; it does not change the FPGA's physical RAM
+map. The limited/conventional profile boot checks are still pending.
+The emulator-oriented EMM386/VEM menu should not be installed with the
+current resident HDD BIOS.
