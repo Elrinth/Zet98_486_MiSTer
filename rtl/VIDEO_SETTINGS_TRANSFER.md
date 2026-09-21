@@ -38,3 +38,19 @@ controls fail. The separate top-level mapping test compares 10,122 vectors
 across all 19 fields, including one-hot bits, and rejects swapped graphics
 and text pitch. These tests do not establish full-core operation at those
 clock rates. Full-core fitting and hardware game validation remain pending.
+
+The MiSTer wrapper also uses this transfer with WIDTH=2 for the scaler's
+low-latency and filter-mode bits. It samples the original host framebuffer/
+filter selection in `clk_sys`, then supplies `ascal.mode[3:2]` from the input
+video clock (`clk_ihdmi`, 75 MHz in this core). Mode bits 4 and 1..0 remain
+zero. Host configuration gains the same bounded latency; image dimensions,
+pixel data and selected filtering are unchanged. A separate, root-instance
+constraint bounds those two held payload bits, the two control synchronizers
+and the four reset-release CLRN pins. It does not relax other scaler paths.
+
+The transfer regression now runs the two-bit and 121-bit instances together
+and compares their matching bits on every video edge, including delayed data
+and reset. The existing integer-scaling and actual wrapper viewport tests
+also pass. The default HDL Docker image now includes Python for the top-level
+mapping check. Physical timing and hardware validation of the scaler-mode
+instance are pending.

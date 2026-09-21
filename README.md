@@ -45,8 +45,12 @@ An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
 acknowledgements and exact capture of a 134-byte packet on HPS ttyS1 in hardware.
 The first capture exposed a missing HPS UART1 location assignment; correcting
 and verifying that placement fixed the transport. Local MidiLink/FluidSynth
-starts with GeneralUser GS and an offline note/release rendering test passes;
-actual game MIDI playback remains pending. It is off by default and does not implement intelligent-mode
+starts with GeneralUser GS. The corrected MIDI build passes polled-ACK
+withdrawal, 200 IRQ acknowledgements and the 134-byte UART capture on hardware.
+Nightslave progresses into its intro with MIDI selected; its instrument
+programs, ongoing UART traffic and changing FluidSynth voice counts confirm
+active software synthesis. TV audio quality and complete soundtrack timing
+remain unverified. It is off by default and does not implement intelligent-mode
 sequencing. A private Nightslave UART trace passes RTL replay; that alone does
 not establish hardware music compatibility.
 

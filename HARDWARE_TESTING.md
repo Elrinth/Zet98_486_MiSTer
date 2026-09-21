@@ -1426,3 +1426,25 @@ guard checks all 111 consumed bits individually in both banks and passes
 mapped-design validation using the original reset instance names. Its local
 reset instances now have unique names so the legacy video-reset constraint
 does not accidentally collect the new chain. Full fitting remains pending.
+
+At 22:03:05-22:03:17, ten FluidSynth status samples report active voices
+1,4,3,6,11,21,11,9,6,2 while UART receive count rises from 16181 to 17246.
+At 22:08:32 the count is 58889 and a screenshot shows Nightslave's illustrated
+intro. The first screenshot download caught a partial PNG; the completed
+file was downloaded separately and inspected. No claim of measured music
+tempo or audible quality follows from these status observations.
+
+PaletteCaption50 (`4e66fe6`) passes all sixteen detailed corner checks with
+minimum +0.040 ns and all three HPS placement guards. Its RBF SHA-256 is
+`b04640907e255db1810c721eebe74296a2b2b0d593f83c9bae8b8e28c28b0fbc`.
+This candidate includes the held palette and shorter caption arithmetic;
+hardware graphics checks are next. Two further GDC builds at 50/60 MHz use
+the corrected guard and unique reset labels (`348029d`).
+
+The source now reuses the held transfer for the two host scaler-mode bits,
+addressing the LFB_EN/filter mux to input-video path. The two-bit/121-bit
+transfer comparison and delay/negative regressions pass, as do the existing
+integer-scaling and actual wrapper viewport tests (73 rectangles per rate).
+The first attempt stopped because the old HDL image lacked Python. The
+Dockerfile now installs Python and the complete run passes in the rebuilt
+image. The scaler-mode change still needs full-core fitting and hardware checks.

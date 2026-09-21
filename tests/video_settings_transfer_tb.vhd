@@ -8,6 +8,7 @@ end;
 architecture test of video_settings_transfer_tb is
     signal cpu_clk,video_clk,rstn:std_logic:='0';
     signal source_data,result_data:std_logic_vector(120 downto 0):=(others=>'0');
+    signal result_pair:std_logic_vector(1 downto 0);
     signal checks:natural:=0;
     function pattern(n:natural) return std_logic_vector is
         variable v:std_logic_vector(15 downto 0):=std_logic_vector(to_unsigned(n,16));
@@ -27,12 +28,16 @@ begin
         loop wait for 6667 ps;video_clk<=not video_clk;end loop;
     end process;
     dut:entity work.video_settings_transfer port map(cpu_clk,video_clk,rstn,source_data,result_data);
+    pair:entity work.video_settings_transfer generic map(WIDTH=>2)
+        port map(cpu_clk,video_clk,rstn,source_data(1 downto 0),result_pair);
     process
         variable snapshot:std_logic_vector(120 downto 0);
         variable serial_number,previous:natural:=0;
     begin
         wait until rising_edge(video_clk);wait for 1 ps;
         snapshot:=result_data;
+        assert result_pair=result_data(1 downto 0)
+            report "two-bit scaler settings capture differs from full snapshot" severity failure;
         if rstn='0' then previous:=0;
         elsif result_data/=(result_data'range=>'0') then
             serial_number:=to_integer(unsigned(result_data(15 downto 0)));

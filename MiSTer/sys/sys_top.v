@@ -631,6 +631,18 @@ wire         freeze;
 `ifndef MISTER_DEBUG_NOHDMI
 wire clk_hdmi  = hdmi_clk_out;
 
+// Hold host scaler options across the system/input-video clock boundary.
+// Do not feed the CPU-domain framebuffer/filter mux directly to i_mode.
+wire [1:0] scaler_mode_video;
+video_settings_transfer #(.WIDTH(2)) scaler_settings
+(
+    .cpu_clk(clk_sys),
+    .video_clk(clk_ihdmi),
+    .rstn(~reset_req),
+    .settings_in({~lowlat,LFB_EN ? LFB_FLT : |scaler_flt}),
+    .settings_out(scaler_mode_video)
+);
+
 ascal 
 #(
 	.RAMBASE(32'h20000000),
@@ -696,7 +708,7 @@ ascal
 	.vmin     (vmin),
 	.vmax     (vmax),
 
-	.mode     ({~lowlat,LFB_EN ? LFB_FLT : |scaler_flt,2'b00}),
+	.mode     ({1'b0,scaler_mode_video,2'b00}),
 	.poly_clk (clk_sys),
 	.poly_a   (coef_addr),
 	.poly_dw  (coef_data),
