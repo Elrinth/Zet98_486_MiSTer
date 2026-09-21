@@ -38,11 +38,14 @@ set_max_delay -from $graphics_data -to $graphics_capture 20.000
 # stages, edge detection, completion comparison and ACK/BUFWE logic are timed.
 set graphics_request [get_registers {*|ram|VIDREQ*}]
 set graphics_request_meta [get_registers {*|ram|lVIDREQ[0]}]
+# TimeQuest includes fitter-created ~DUPLICATE copies of an exact source
+# register match. Each is the same completion source; all can feed the one
+# first-stage synchronizer. Require that source to exist, not to be singular.
 set graphics_done [get_registers {*|ram|vidend}]
 set graphics_done_meta [get_registers {*|ram|VIDdone_sync[0]}]
 if {[get_collection_size $graphics_request] < 1 ||
     [get_collection_size $graphics_request_meta] != 1 ||
-    [get_collection_size $graphics_done] != 1 ||
+    [get_collection_size $graphics_done] < 1 ||
     [get_collection_size $graphics_done_meta] != 1} {
     error "Expected both graphics control synchronizers"
 }
