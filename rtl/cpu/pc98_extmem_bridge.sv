@@ -5,7 +5,8 @@
 // RAM_MB is the top of the physical RAM map, not conventional DOS memory.
 // This bridge shares the CPU clock with MiSter's DDR user interface.
 module pc98_extmem_bridge #(
-    parameter RAM_MB = 16
+    parameter RAM_MB = 16,
+    parameter READ_CACHE = 1'b1
 ) (
     input wire clk, reset,
     input wire [31:1] address,
@@ -28,6 +29,10 @@ module pc98_extmem_bridge #(
     reg [15:0] held_data;
     reg [1:0] held_select;
     reg held_write, cancelled;
+    reg line_valid;
+    reg [31:3] line_address;
+    reg [63:0] line_data;
+    integer byte_lane;
     wire [31:0] byte_address = {address,1'b0};
     assign mapped = byte_address >= 32'h00100000 &&
         byte_address < RAM_MB * 32'h00100000 &&
@@ -45,6 +50,7 @@ module pc98_extmem_bridge #(
     always @(posedge clk) begin
         if (reset) begin
             cancelled <= 1;
+            line_valid <= 0;
             // A read accepted by DDR cannot be withdrawn. Drain its response
             // even across a soft reset, before allowing any new request.
             if (state != READ_DATA || ddr_readdatavalid) state <= IDLE;
@@ -55,13 +61,27 @@ module pc98_extmem_bridge #(
                 held_select<=select;
                 held_write<=write;
                 cancelled<=0;
-                state<=ISSUE;
+                if(READ_CACHE && !write && line_valid && line_address==address[31:3]) begin
+                    readdata<=line_data[{address[2:1],4'b0} +:16];
+                    state<=ACK;
+                end else state<=ISSUE;
             end
             ISSUE: if (!strobe) state<=IDLE;
             else if (!ddr_busy) begin
-                if (held_write) state<=ACK;
+                if (held_write) begin
+                    state<=ACK;
+                    // CPU is the only writer to this DDR region. Update a
+                    // resident word only after DDR accepts the byte write.
+                    if(READ_CACHE && line_valid && line_address==held_address[31:3])
+                        for(byte_lane=0;byte_lane<2;byte_lane=byte_lane+1)
+                            if(held_select[byte_lane])
+                                line_data[({held_address[2:1],4'b0}+byte_lane*8) +:8]<=held_data[byte_lane*8+:8];
+                end
                 else if (ddr_readdatavalid) begin
                     readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
+                    line_valid<=READ_CACHE;
+                    line_address<=held_address[31:3];
+                    line_data<=ddr_readdata;
                     state<=ACK;
                 end else state<=READ_DATA;
             end
@@ -69,6 +89,11 @@ module pc98_extmem_bridge #(
                 if (!strobe) cancelled<=1;
                 if (ddr_readdatavalid) begin
                     readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
+                    if(!cancelled && strobe) begin
+                        line_valid<=READ_CACHE;
+                        line_address<=held_address[31:3];
+                        line_data<=ddr_readdata;
+                    end
                     state<=cancelled || !strobe ? IDLE : ACK;
                 end
             end

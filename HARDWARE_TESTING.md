@@ -404,7 +404,8 @@ SHA-256 `662d1a75dbbb2e83408ad9c3d669d5d5e16c8114e336e8a03eead20f9a60cdd5`.
 
 The optional 16/64 MB DDR map passes real-CPU simulation, and the 16 MB mixed
 VHDL/SystemVerilog integration passes Quartus analysis/elaboration. It has
-not been tested on hardware. See `rtl/cpu/EXTENDED_RAM.md` for the memory hole,
+now passed the disposable DOS physical-memory probe on hardware at both sizes.
+See `rtl/cpu/EXTENDED_RAM.md` for the memory hole,
 cache limitations and outstanding BIOS/XMS work. Default builds still use
 the original low-memory map.
 
@@ -412,6 +413,25 @@ Read-only inspection of the SuperStation's Linux device tree finds `/dev/sr0`,
 an HL-DT-ST DVDRAM GUD1N behind an Initio USB bridge. This establishes host
 visibility only. No PC-98 optical controller, guest driver or media transport
 has been implemented or tested, and no disc was read, written or ejected.
+
+RAM16 at 40 MHz (`quartus-20260921-042706-f51ef0`) fits at 32,826 ALMs,
+395 RAM blocks and 63 DSP blocks. It fails 12 timing checks, worst -4.684 ns;
+CPU setup passes at +2.936 ns. Pixel setup remains -6.043 / -5.486 ns from/to.
+The worst reported paths now concern SDRAM requests, not raw retrace status.
+SHA-256: `fff5a1cc35b9cd1e392bb97793ff77f9d88d2700735f13f87298b58ccde41c88`.
+Launched at 04:57:47 CEST; `ram-probe-16-return-1.d88` contains a passing
+`Z98RAM.TXT` for the 16 MB map (14 MB extended RAM).
+
+RAM64 at 40 MHz (`quartus-20260921-043344-4171e7`) fits at 32,917 ALMs with
+the same RAM/DSP use. It fails 18 timing checks, worst -4.383 ns; CPU setup
+passes at +4.364 ns. Pixel setup remains -7.475 / -6.816 ns from/to.
+SHA-256: `00332526633b443f2d1a89e5e0cf7cbd8274d21cb42f489a45104007bdf92584`.
+Launched at 05:03:48 CEST; `ram-probe-64-return-1.d88` contains a passing
+`Z98RAM.TXT` for the 64 MB map (62 MB extended RAM). Both probes check distinct
+sentinels at both ends of every mapped MB, partial/unaligned writes and return
+to DOS from protected mode. They do not test BIOS/XMS discovery, every byte of
+RAM, long-term stability or game compatibility. Default build options remain
+unchanged pending that work.
 
 ### Short-read optimization and usability changes
 

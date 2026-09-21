@@ -33,10 +33,11 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
 1. Optimize Rusty gameplay with PC-9801-86 sound, preserving video, audio and
    disk timing. Increase CPU clock only with FPGA timing and hardware evidence.
 2. Develop the ao486 integration toward a faster PC-9821-class machine, including
-   extended RAM (16 MB first, then assess 64 MB), interrupts, DMA and BIOS support.
+   extended RAM (16/64 MB), interrupts, DMA and BIOS support.
    Normal builds retain the lowest-1-MB map. An optional DDR-backed 16/64 MB
-   map passes CPU simulation; BIOS/XMS discovery and hardware validation are
-   still required. This does not establish complete PC-9821 compatibility.
+   map passes CPU simulation and physical-memory diagnostics on the SuperStation
+   at both sizes. BIOS/XMS discovery remains required before DOS can use it
+   normally. This does not establish complete PC-9821 compatibility.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with
    a working disk controller and BIOS path. Dynamic VHD/VHDX containers are a
    separate format and are not promised by a `.vhd` file selector.

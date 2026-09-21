@@ -2,6 +2,7 @@
 module ao486_extmem_tb;
     parameter RAM_MB=16;
     parameter DOS_PROBE=0;
+    parameter READ_CACHE=1;
     reg clk=0,reset=1;
     always #5 clk=!clk;
     wire cache_invalidate=0,interrupt_do=0;
@@ -19,7 +20,7 @@ module ao486_extmem_tb;
     wire ddr_read,ddr_write;
     reg ddr_busy=0,ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
-    pc98_ao486 #(.EXT_RAM_MB(RAM_MB)) dut(.*);
+    pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE)) dut(.*);
     reg [7:0] memory[0:1048575];
     reg [28:0] keys[0:255];
     reg [63:0] words[0:255];
@@ -74,12 +75,12 @@ module ao486_extmem_tb;
                     if(held_write && held_address==20'h7ff0) begin
                         if(held_data!=16'h600d) $fatal(1,"protected-mode extended memory program failed");
                         if(DOS_PROBE) begin
-                            if(boots!=1 || ddr_commands<100 || !dut.cpu.real_mode)
+                            if(boots!=1 || ddr_commands<80 || !dut.cpu.real_mode)
                                 $fatal(1,"DOS probe did not return to real-mode code");
                             $display("PASS: DOS RAM probe protected-mode tests and real-mode return, %0d MB, %0d DDR commands",RAM_MB,ddr_commands);
                             $finish;
                         end
-                        if(boots!=2 || ddr_commands<300) $fatal(1,"missing CPU reset or DDR traffic");
+                        if(boots!=2 || ddr_commands<150) $fatal(1,"missing CPU reset or DDR traffic");
                         $display("PASS: actual ao486 %0d MB RAM: protected mode, partial/unaligned writes, REP MOVSD, DDR code execution, CPU reset; %0d DDR commands",RAM_MB,ddr_commands);
                         $finish;
                     end

@@ -15,17 +15,31 @@ The DDR byte address is `0x30000000 + guest_physical_address`, following the
 core-owned region used by the MiSTer ao486 reference. No request can escape the
 selected guest range. Commands hold through DDR backpressure, use byte enables
 for all four 16-bit lanes, and drain an outstanding read across a soft reset.
-CPU-only F0 reset retains RAM. Extended memory currently bypasses instruction
-caching and has no data cache; this is a capacity implementation, not a speed
-claim. There is no full-core resource or timing result for it yet.
+CPU-only F0 reset retains RAM. Extended memory bypasses the CPU's instruction
+cache. A new one-word DDR read buffer reuses each fetched 64-bit word across
+nearby reads; accepted byte writes update resident data. Reset invalidates it.
+Only the CPU currently writes this region; a future external DMA writer must
+invalidate or update this buffer. It is not a general CPU data cache.
 
 `tests/run-extmem.sh` executes the actual ao486 in protected mode for both
 sizes: byte/word/unaligned DWORD writes, boundary and aperture isolation,
 `REP MOVSD` in both directions, code execution from DDR and RAM retention
-through CPU reset. Both configurations pass, with 372 and 402 DDR commands.
+through CPU reset. Both configurations pass, with 372 and 402 DDR commands
+before read buffering and 208 and 224 with it. These are transaction counts,
+not measured throughput. Buffer on/off bridge tests explicitly verify four
+successive halfwords need one DDR read instead of four, and a negative control
+with byte-write updates removed must fail on stale data.
 The bridge test separately checks all byte masks/word lanes, stalls and a
 late read response across reset. Quartus analysis/elaboration passes for the
-16 MB integration; physical fitting and real hardware tests remain pending.
+16 MB integration. The pre-buffer 16 MB / 40 MHz build fits at 32,826 ALMs,
+395 RAM blocks and 63 DSP blocks; it still fails full-design timing. Its
+disposable DOS probe passes on the SuperStation, checking sentinels at both
+ends of every mapped MB, partial writes and protected-to-real-mode return.
+The 64 MB / 40 MHz build also passes the same physical-memory probe on hardware,
+checking 62 mapped MB of extended RAM. It fits at 32,917 ALMs with the same
+RAM/DSP use and also fails full-design timing. The new read buffer's fitting
+and hardware check remain pending. Neither hardware probe establishes BIOS/XMS
+memory discovery or exhaustive RAM stability.
 
 The supplied old PC-98 BIOS does not automatically know about this extension.
 Do not report 16/64 MB as usable in DOS until BIOS memory-size fields and an

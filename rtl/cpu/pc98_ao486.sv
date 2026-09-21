@@ -6,7 +6,8 @@
 // Instruction caching is limited to fixed low RAM, with external invalidation.
 module pc98_ao486 #(
     parameter ICACHE_ENABLE = 1'b1,
-    parameter EXT_RAM_MB = 0
+    parameter EXT_RAM_MB = 0,
+    parameter EXT_RAM_READ_CACHE = 1'b1
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -86,7 +87,7 @@ module pc98_ao486 #(
     assign unmapped_access = physical_strobe && !mapped;
 
     generate if (EXT_RAM_MB != 0) begin : extended_ram
-        pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB)) ram (
+        pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB), .READ_CACHE(EXT_RAM_READ_CACHE)) ram (
             .clk(clk), .reset(reset), .address(physical_address),
             .select(bus_select), .writedata(bus_writedata), .write(bus_write),
             .strobe(physical_strobe && !legacy_mapped),
