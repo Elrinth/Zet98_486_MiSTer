@@ -1105,3 +1105,23 @@ the new and original lengths equal for every command input whenever segment
 checking is active; a wrong byte length produces a counterexample. Cached
 and uncached full-CPU regressions pass (576 bus transfers each). A new fit
 is needed to measure the effect on the read-command-to-TLB critical path.
+
+### Stack-memory optimization and benchmark v3
+
+The conventional-RAM cache now allocates completed full-word writes, while
+partial writes still invalidate their slot and every write reaches SDRAM.
+Standalone 8/32/64 KB tests and full-CPU coherence/ALU/VRAM/stack checks pass.
+Against the previous policy on the same CPU source, the 128-iteration stack
+kernel improves from 6420 cycles / 273 bus transfers to 5268 / 145; ALU and
+VRAM measurements are unchanged. This is simulation evidence, not Rusty FPS.
+The new 50 MHz fit includes this change and has not yet been hardware-tested.
+
+DOS benchmark v3 adds a 131072-iteration stack block to the unchanged ALU and
+RAM-copy kernels, checking every popped value and the final stack pointer.
+It retains at least ten reported seconds per kernel. An independent x86/DOS
+model verifies all three checksums, exact log saving and hour rollover, and
+rejects a deliberately wrong POP instruction. The 843-byte program fits the
+existing disposable BOOT.COM allocation. No source disk sectors outside that
+file were changed. The Metadata50 baseline was loaded at 19:15:16 device time;
+its result remains pending. The core had previously returned to the DOS 6.20
+game menu at 19:02:19, confirmed by the 19:06:37 screenshot.

@@ -90,6 +90,36 @@ start:
     pop dx
     mov si, ram_text
     call result
+
+    call start_timer
+    mov [stack_top], sp
+.stack_next:
+    xor bx, bx
+    mov bp, 128
+.stack_outer:
+    mov cx, 1024
+.stack:
+    push bx
+    pop di
+    cmp di, bx
+    jne fail
+    inc bx
+    loop .stack
+    dec bp
+    jnz .stack_outer
+    or bx, bx
+    jnz fail
+    cmp sp, [stack_top]
+    jne fail
+    call elapsed
+    inc word [batches]
+    or dx, dx
+    jnz .stack_done
+    cmp ax, 1000
+    jb .stack_next
+.stack_done:
+    mov si, stack_text
+    call result
     mov si, passed
     call puts
     jmp save
@@ -269,12 +299,13 @@ puts:
     pop si
     pop ax
     ret
-title: db 13,10,'Zet98 CPU benchmark v2',13,10,'131072 iterations/block; at least 10s/kernel.',13,10,0
+title: db 13,10,'Zet98 CPU benchmark v3',13,10,'131072 iterations/block; at least 10s/kernel.',13,10,0
 alu_text: db 'ALU blocks=',0
 ram_text: db 'RAM copy blocks=',0
+stack_text: db 'Stack blocks=',0
 elapsed_text: db ' elapsed=',0
 units: db ' hundredths',13,10,0
-passed: db 'PASS: ALU and RAM checksums.',13,10,0
+passed: db 'PASS: ALU, RAM and stack checksums.',13,10,0
 failed: db 'FAIL: kernel checksum.',13,10,0
 finished: db 'Saved Z98PERF.TXT. Benchmark finished.',13,10,0
 save_failed: db 'ERROR saving Z98PERF.TXT.',13,10,0
@@ -284,5 +315,6 @@ start_lo: dw 0
 start_hi: dw 0
 write_length: dw 0
 batches: dw 0
+stack_top: dw 0
 times 0 * (1 / (($ - $$) <= 2011)) db 0
 log_buffer equ 0x2000

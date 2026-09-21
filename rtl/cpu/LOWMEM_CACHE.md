@@ -76,5 +76,6 @@ and eight external bus wait cycles, the previous cache takes 6420 cycles /
 (21.9% greater throughput) for that kernel. The matching ALU and VRAM kernels
 remain 6392 / 17 and 3720 / 162. These compare otherwise identical current
 CPU sources. They are simulation results, not Rusty FPS or hardware results.
-The broad instruction-cache-disabled sweep is separate and not yet complete.
+The full CPU sweep also passes with both caches disabled and with only the
+instruction cache enabled, including the same stack and coherence checks.
 The new allocation policy still needs full FPGA timing and hardware tests.
