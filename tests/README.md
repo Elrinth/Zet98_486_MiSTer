@@ -84,6 +84,9 @@ removal, preserved under `reference/`. It compares 57,748 cases: every pair
 of device enables, all byte-lane masks, CPU/DMA ownership, interrupt-acknowledge
 gating, sparse random selections, and both DMA byte-routing directions.
 Directed FDC-to-memory and memory-to-FDC cases check even/odd byte placement.
+It also compares each selected CPU I/O write byte (including loader precedence)
+against the historical shared bus. This verifies the direct write path while
+unrelated peripheral read enables and DMA ownership vary.
 This verifies mux behavior; it does not simulate the complete DMA controller.
 
 `hardware/disk_probe.asm` is a small DOS shell for real-hardware disk diagnosis.

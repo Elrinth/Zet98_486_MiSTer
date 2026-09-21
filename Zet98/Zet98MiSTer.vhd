@@ -1825,6 +1825,7 @@ signal	DMAUM_CS:std_logic;
 --general bus
 signal	abus	:std_logic_vector(19 downto 1);
 signal	dbus	:std_logic_vector(15 downto 0);
+signal io_wdata :std_logic_vector(15 downto 0);
 signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
 signal cache_invalidate :std_logic;
 signal	bussel	:std_logic_vector(1 downto 0);
@@ -2425,6 +2426,10 @@ begin
 
 	dbus(15 downto 8)<=dbus_high(7 downto 0) when dbus_high(8)='1' or DMA_L2H='0' else dbus_low(7 downto 0);
 	dbus(7 downto 0)<=dbus_low(7 downto 0) when dbus_low(8)='1' or DMA_H2L='0' else dbus_high(7 downto 0);
+	-- CPU I/O writes never need peripheral read data. A selected lane already
+	-- has CPU priority in the shared bus; preserve loader override separately.
+	-- Keep memory writes and FDC DMA on dbus for byte routing and GRCG RMW.
+	io_wdata <= LDR_WDAT & LDR_WDAT when LDR_OE='1' else cpuod;
 	-- END PC98 DATA BUS
 		
 	CB_WR1<=
@@ -2510,7 +2515,7 @@ begin
 		PRD		=>iord,
 		PWR		=>iowr,
 		PRDATA	=>DMA_ODAT,
-		PWDATA	=>dbus(15 downto 8),
+		PWDATA	=>io_wdata(15 downto 8),
 		PDOE	=>DMA_DOE,
 		INT		=>open,
 		
@@ -2582,7 +2587,7 @@ begin
 		ADDR	=>ioaddr(2 downto 1),
 		CSMODE	=>DMAUM_CS,
 		WR		=>iowr,
-		WDATA	=>dbus(15 downto 8),
+		WDATA	=>io_wdata(15 downto 8),
 		
 		CURCH	=>DMA_CURCH,
 		CARRY	=>DMA_ACARRY,
@@ -2666,7 +2671,7 @@ DBIO_ODAT<=(others=>'1');
 		iocs		=>GCG_IOCS,
 		ioaddr		=>ioaddr(1),
 		iowr		=>iowr,
-		iowdat		=>dbus(7 downto 0),
+		iowdat		=>io_wdata(7 downto 0),
 		
 		pmemcs		=>GCG_MCS,
 		ppsel		=>abus(2 downto 1),
@@ -2704,7 +2709,7 @@ DBIO_ODAT<=(others=>'1');
 	IO43F	:IO043F port map(
 		CS		=>IO043F_CS,
 		WR		=>iowr,
-		WDAT	=>dbus(15 downto 8),
+		WDAT	=>io_wdata(15 downto 8),
 		
 		NECEMSSEL	=>NECEMSSEL,
 		BNK89SEL	=>open,
@@ -2720,7 +2725,7 @@ DBIO_ODAT<=(others=>'1');
 		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
-		DATIN	=>dbus(15 downto 8),
+		DATIN	=>io_wdata(15 downto 8),
 		DATOUT	=>open,
 		DATOE	=>open,
 		
@@ -2742,7 +2747,7 @@ DBIO_ODAT<=(others=>'1');
 		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
-		DATIN	=>dbus(15 downto 8),
+		DATIN	=>io_wdata(15 downto 8),
 		DATOUT	=>BNK89_ODAT,
 		DATOE	=>BNK89_DOE,
 		
@@ -2763,7 +2768,7 @@ DBIO_ODAT<=(others=>'1');
 		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		WR		=>iowr,
-		DATIN	=>dbus(15 downto 8),
+		DATIN	=>io_wdata(15 downto 8),
 		DATOUT	=>BNKAB_ODAT,
 		DATOE	=>BNKAB_DOE,
 		
@@ -2784,7 +2789,7 @@ DBIO_ODAT<=(others=>'1');
 	INT_M	:z8259 port map(
 		CS		=>INTM_CS,
 		ADDR	=>ioaddr(1),
-		DIN		=>dbus(7 downto 0),
+		DIN		=>io_wdata(7 downto 0),
 		DOUT	=>INTM_ODAT,
 		DOE		=>INTM_OE,
 		RD		=>iord,
@@ -2821,7 +2826,7 @@ DBIO_ODAT<=(others=>'1');
 	INT_S	:z8259 port map(
 		CS		=>INTS_CS,
 		ADDR	=>ioaddr(1),
-		DIN		=>dbus(7 downto 0),
+		DIN		=>io_wdata(7 downto 0),
 		DOUT	=>INTS_ODAT,
 		DOE		=>INTS_OE,
 		RD		=>iord,
@@ -2942,7 +2947,7 @@ DBIO_ODAT<=(others=>'1');
 		ioaddr		=>ioaddr_odd,
 		iowr		=>iowr,
 		iord		=>iord,
-		wrdat		=>dbus(15 downto 8),
+		wrdat		=>io_wdata(15 downto 8),
 
 		KNJRAMSEL	=>KNJ_RAMSEL,
 		KNJRAMADDR	=>KNJ_ADDR,
@@ -3015,7 +3020,7 @@ DBIO_ODAT<=(others=>'1');
 	
 	prncsn<='0' when ioaddr_even(15 downto 3)="0000000001000" and ioaddr_even(0)='0' else '1';
 	dat42<="100" & pDip1 & "100";
-	prnppi	:ppi8255 port map(prncsn,not iord,not iowr,ioaddr(2 downto 1),dbus(7 downto 0),prnod,prnoe,(others=>'0'),open,open,dat42,open,open,(others=>'0'),open,open,(others=>'0'),open,open,cpuclk,srstn);
+	prnppi	:ppi8255 port map(prncsn,not iord,not iowr,ioaddr(2 downto 1),io_wdata(7 downto 0),prnod,prnoe,(others=>'0'),open,open,dat42,open,open,(others=>'0'),open,open,(others=>'0'),open,open,cpuclk,srstn);
 	
 	tGDCcs<='1' when ioaddr_even(15 downto 4)="000000000110" and ioaddr_even(0)='0' else '0';
 
@@ -3024,7 +3029,7 @@ DBIO_ODAT<=(others=>'1');
 		ADDR	=>ioaddr(3 downto 1),
 		RD		=>iord,
 		WR		=>iowr,
-		DIN		=>dbus(7 downto 0),
+		DIN		=>io_wdata(7 downto 0),
 		DOUT	=>tGDCod,
 		DOE		=>tGDCoe,
 		
@@ -3075,7 +3080,7 @@ DBIO_ODAT<=(others=>'1');
 		ADDR	=>ioaddr(2 downto 1),
 		RD		=>iord,
 		WR		=>iowr,
-		DIN		=>dbus(7 downto 0),
+		DIN		=>io_wdata(7 downto 0),
 		DOUT	=>gGDCod,
 		DOE		=>gGDCoe,
 		
@@ -3120,7 +3125,7 @@ DBIO_ODAT<=(others=>'1');
 		iocs		=>GCG_IOCS,
 		ioaddr		=>ioaddr(1),
 		iowr		=>iowr,
-		iowdat		=>dbus(7 downto 0),
+		iowdat		=>io_wdata(7 downto 0),
 		
 		pmemcs		=>'1',
 		ppsel		=>GDC_RAMADDR(1 downto 0),
@@ -3156,7 +3161,7 @@ DBIO_ODAT<=(others=>'1');
 		ADDR		=>ioaddr(2 downto 1),
 		WR			=>iowr,
 		RD			=>iord,
-		WRDAT		=>dbus(7 downto 0),
+		WRDAT		=>io_wdata(7 downto 0),
 		RDDAT		=>GPAL_ODAT,
 		DOE			=>GPAL_DOE,
 		
@@ -3171,7 +3176,7 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	ITFswcs<='1' when ioaddr_odd=x"043d" else '0';
-	ITFs	:ITFSW port map(ITFswcs,iowr,dbus(15 downto 8),ITFen,cpuclk,srstn);
+	ITFs	:ITFSW port map(ITFswcs,iowr,io_wdata(15 downto 8),ITFen,cpuclk,srstn);
 	
 	nv	:nvram98 port map(
 		addr		=>NVR_ADDR,
@@ -3211,7 +3216,7 @@ DBIO_ODAT<=(others=>'1');
 		RD		=>iord,
 		WR		=>iowr,
 		RDAT	=>KBod,
-		WDAT	=>dbus(15 downto 8),
+		WDAT	=>io_wdata(15 downto 8),
 		OE		=>KBoe,
 		INT		=>KBINT,
 
@@ -3237,7 +3242,7 @@ DBIO_ODAT<=(others=>'1');
 		RDn		=>not iord,
 		WRn		=>not iowr,
 		ADR		=>ioaddr(2 downto 1),
-		DATIN	=>dbus(15 downto 8),
+		DATIN	=>io_wdata(15 downto 8),
 		DATOUT	=>SYSP_RDAT,
 		DATOE	=>SYSP_DOE,
 		
@@ -3266,7 +3271,7 @@ DBIO_ODAT<=(others=>'1');
 	WR20	:IO_WR generic map(x"0020") port map(
 		ADR		=>ioaddr_even,
 		WR		=>iowr,
-		DAT		=>dbus(7 downto 0),
+		DAT		=>io_wdata(7 downto 0),
 		
 		bit7	=>open,
 		bit6	=>open,
@@ -3299,7 +3304,7 @@ DBIO_ODAT<=(others=>'1');
 	O439	:IO_WR generic map(x"0439") port map(
 		ADR		=>ioaddr_odd,
 		WR		=>iowr,
-		DAT		=>dbus(15 downto 8),
+		DAT		=>io_wdata(15 downto 8),
 		
 		bit7	=>open,
 		bit6	=>open,
@@ -3557,7 +3562,7 @@ DBIO_ODAT<=(others=>'1');
 	FDCNT_WR	:IO_WRP port map(
 		CS		=>FDCNT_CS,
 		WR		=>iowr,
-		DAT	=>dbus(7 downto 0),
+		DAT	=>io_wdata(7 downto 0),
 		
 		bit7	=>FDC_RESET,
 		bit6	=>FDC_FREADY,
@@ -3595,7 +3600,7 @@ DBIO_ODAT<=(others=>'1');
 	fdcifsw	:IO_WR generic map(x"00be") port map(
 		ADR	=>ioaddr_even,
 		WR		=>iowr,
-		DAT	=>dbus(7 downto 0),
+		DAT	=>io_wdata(7 downto 0),
 		
 		bit7	=>open,
 		bit6	=>open,
@@ -3630,7 +3635,7 @@ DBIO_ODAT<=(others=>'1');
 		RD	=>iord,
 		WR	=>iowr,
 		
-		WRDAT	=>dbus(7 downto 0),
+		WRDAT	=>io_wdata(7 downto 0),
 		RDDAT	=>FDIBM_ODAT,
 		DOE		=>FDIBM_DOE,
 		
@@ -3697,7 +3702,7 @@ DBIO_ODAT<=(others=>'1');
 		RDn		=>not iord,
 		C_Dn	=>ioaddr(1),
 		CSn		=>not COM_CS,
-		DATIN	=>dbus(7 downto 0),
+		DATIN	=>io_wdata(7 downto 0),
 		DATOUT	=>COM_ODAT,
 		DATOE	=>COM_DOE,
 		INTn	=>COM_INTn,
@@ -3739,7 +3744,7 @@ DBIO_ODAT<=(others=>'1');
 		RD		=>iord,
 		WR		=>iowr,
 		RDAT	=>PTC_ODAT,
-		WDAT	=>dbus(15 downto 8),
+		WDAT	=>io_wdata(15 downto 8),
 		DOE		=>PTC_DOE,
 		
 		CNTIN	=>PTC_SFT & PTC_SFT & PTC_SFT,
@@ -3771,7 +3776,7 @@ DBIO_ODAT<=(others=>'1');
 		RDn		=>not iord,
 		WRn		=>not iowr,
 		ADR		=>ioaddr(2 downto 1),
-		DATIN	=>dbus(15 downto 8),
+		DATIN	=>io_wdata(15 downto 8),
 		DATOUT	=>MOUS_ODAT,
 		DATOE	=>MOUS_DOE,
 		
@@ -3818,7 +3823,7 @@ DBIO_ODAT<=(others=>'1');
 	MOUSI	:mouseint generic map(SYSFREQ) port map(
 		cs		=>MOUINT_CS,
 		wr		=>iowr,
-		wrdat	=>dbus(15 downto 8),
+		wrdat	=>io_wdata(15 downto 8),
 		
 		int	=>MOUS_INTp,
 		
@@ -3860,7 +3865,7 @@ DBIO_ODAT<=(others=>'1');
 		OPN_CS<=	'1' when ioaddr_even(15 downto 3)="0000000110001" and ioaddr_even(0)='0' else '0';
 		
 		FMS	:OPNA generic map(16) port map(
-			DIN		=>dbus(7 downto 0),
+			DIN		=>io_wdata(7 downto 0),
 			DOUT		=>OPN_ODAT,
 			DOE		=>OPN_DOE,
 			CSn		=>not OPN_CS,
@@ -3897,7 +3902,7 @@ DBIO_ODAT<=(others=>'1');
 		monoa	:average generic map(16) port map(BEEP_snd,OPN_sndPSG,SND_MONO);
 		MIXL	:average generic map(16) port map(OPN_sndL,SND_MONO,pSndL);
 		MIXR	:average generic map(16) port map(OPN_sndR,SND_MONO,pSndR);
-		SID	:sndid generic map(x"2") port map(SNDID_CS,IORD,IOWR,SNDID_ODAT,SNDID_OE,dbus(7 downto 0),open,open,cpuclk,rstn);
+		SID	:sndid generic map(x"2") port map(SNDID_CS,IORD,IOWR,SNDID_ODAT,SNDID_OE,io_wdata(7 downto 0),open,open,cpuclk,rstn);
 		
 	end generate;
 	
@@ -3905,7 +3910,7 @@ DBIO_ODAT<=(others=>'1');
 		OPN_CS<=	'1' when ioaddr_even(15 downto 2)="00000001100010" and ioaddr_even(0)='0' else '0';
 		
 		FMS	:OPN generic map(16) port map(
-			DIN		=>dbus(7 downto 0),
+			DIN		=>io_wdata(7 downto 0),
 			DOUT	=>OPN_ODAT,
 			DOE		=>OPN_DOE,
 			CSn		=>not OPN_CS,

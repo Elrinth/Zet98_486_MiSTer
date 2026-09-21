@@ -76,6 +76,7 @@ architecture test of pc98_data_bus_tb is
     alias cpuoe : std_logic is enables(29);
     signal cpusel : std_logic_Vector(1 downto 0) := (others => '0');
     signal dbus : std_logic_vector(15 downto 0) := (others => '0');
+    signal io_wdata : std_logic_vector(15 downto 0);
     signal dbus_high : std_logic_vector(8 downto 0) := (others => '0');
     signal dbus_low : std_logic_vector(8 downto 0) := (others => '0');
     signal gGDCod : std_logic_vector(7 downto 0) := (others => '0');
@@ -93,6 +94,7 @@ begin
     process
         variable random : unsigned(31 downto 0) := x"98c0ffee";
         variable cases : natural := 0;
+        variable write_lanes : natural := 0;
         procedure advance is
         begin
             random := random xor shift_left(random, 13);
@@ -186,6 +188,24 @@ begin
         begin
             wait for 1 ns;
             assert dbus = legacy_bus report "Data bus differs from legacy priority/routing" severity failure;
+            -- Peripheral writes sample only their selected CPU lane. Check
+            -- that bypassing all read devices preserves those sampled bytes,
+            -- including simultaneous even/odd writes and loader precedence.
+            if LDR_OE='1' then
+                assert io_wdata = legacy_bus report "I/O loader override changed" severity failure;
+                write_lanes := write_lanes + 2;
+            elsif cpuoe='1' and DMAen='0' then
+                if cpusel(0)='1' then
+                    assert io_wdata(7 downto 0) = legacy_bus(7 downto 0)
+                        report "Even I/O write byte changed" severity failure;
+                    write_lanes := write_lanes + 1;
+                end if;
+                if cpusel(1)='1' then
+                    assert io_wdata(15 downto 8) = legacy_bus(15 downto 8)
+                        report "Odd I/O write byte changed" severity failure;
+                    write_lanes := write_lanes + 1;
+                end if;
+            end if;
             cases := cases + 1;
         end procedure;
         procedure routes is
@@ -236,6 +256,8 @@ begin
         bussel <= "10"; DMA_L2H <= '0'; DMA_H2L <= '1'; check;
         assert dbus = x"b6b6" severity failure;
         report "PASS: actual PC-98 bus versus legacy: " & natural'image(cases) & " cases, device priority and DMA byte routing" severity note;
+        assert write_lanes > 1000 report "Insufficient selected write-lane coverage" severity failure;
+        report "PASS: direct CPU I/O write path: " & natural'image(write_lanes) & " selected bytes match historical shared bus" severity note;
         finish;
     end process;
     -- The runner appends the production mux and historical reference here.

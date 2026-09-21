@@ -335,6 +335,18 @@ The isolated Rusty cache launcher uses the same System/Opening images and
 60-second reset delay. Game A and Game B are both available in the test folder
 for later swaps. User confirmation of cached-build gameplay remains pending.
 
+During this first Rusty comparison the user initially reported a black screen
+and long beeps, then reported that Rusty did boot after a long wait. A rollback
+to DiskFix had already been requested in response to the first report and
+interrupted the intro the user was watching. The exact build responsible for
+the visible intro is therefore not established. A temporary split in the intro
+graphics reportedly corrected itself. Do not count this as either a confirmed
+cached-build boot failure or a successful Rusty speed comparison. The current
+run was left on DiskFix; the next comparison needs an identified build and a
+longer uninterrupted observation window. The ten-second speaker timer also
+does not establish a quiet complete boot; the source of the later beeps remains
+unconfirmed.
+
 An independent CPU/adapter 66 MHz feasibility fit completed under
 `build/cpu-probe-66-20260921`. `scripts/probe-cpu.tcl` uses virtual pins and
 one-nanosecond input/output delays; it is not a board design or a deployable RBF.
@@ -345,6 +357,17 @@ register hold passes at +0.363 ns and the isolated design is fully constrained
 for setup/hold. The worst setup path runs from execute operand-size state into
 the prefetch FIFO count. Same-clock Fmax is estimated at 59.32 MHz for this fit;
 that estimate is not validation of a complete core at 59, 66 or 100 MHz.
+
+### Direct CPU I/O write path
+
+The next source change supplies 30 CPU-only I/O write inputs directly from
+the CPU output, retaining the loader override. Previously, peripheral read
+outputs (including video timing) fed those inputs through the shared priority
+mux even though selected CPU writes override them. The FDC DMA data path and
+memory/GRCG read-modify-write paths retain the shared bus. All adapter tests
+pass; the data-bus regression compares 8,556 selected write bytes against the
+historical mux, and a deliberately swapped-lane control fails. Full compilation
+and timing measurement are pending; this change is not yet on the device.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
