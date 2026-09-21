@@ -43,8 +43,13 @@ and hardware check remain pending. Neither hardware probe establishes BIOS/XMS
 memory discovery or exhaustive RAM stability.
 
 The supplied old PC-98 BIOS does not automatically know about this extension.
-Do not report 16/64 MB as usable in DOS until BIOS memory-size fields and an
-appropriate PC-98 XMS driver have been verified. Reference behavior includes
+The [experimental DOS setup](../../software/README.md) now supplies a probing
+initializer followed by HIMEMX(98). Both sizes pass hardware XMS tests:
+the 16 MB map reports 14272 KB free, and the 64 MB map reports 63424 KB free.
+A 17 MB allocation on the latter begins at physical 01000000h, above the
+reserved aperture; copying at both ends and freeing it pass. This requires
+those drivers on the boot disk and does not add EMS/UMB or a complete BIOS.
+Reference behavior includes
 the count in 128 KB units at BIOS work address 0401h and memory above 16 MB at
 0594h. Merely writing those fields is not a substitute for RAM and driver tests.
 

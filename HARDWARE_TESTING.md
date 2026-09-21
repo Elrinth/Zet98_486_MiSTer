@@ -528,6 +528,42 @@ status, acknowledgement and PIC EOI. Returned disk: `pcm86-probe-return-1.d88`.
 PCM is muted throughout; actual sound quality and game-driver compatibility
 remain unverified. See `rtl/PCM86.md` for explicit limitations.
 
+### Combined 50 MHz hardware and usable XMS
+
+`quartus-20260921-051952-cb3951` combines 50 MHz ao486, 64 MB DDR, PCM86, the
+coherent DDR word buffer and registered SDRAM request metadata. It compiles in
+25m43s with 33292 ALMs, 427 RAM blocks and 65 DSP blocks. The original timing
+summary has no negative slack (minimum +0.084 ns), and CPU setup is +1.917 ns.
+However, the added pixel-clock audit fails setup -6.907 / -3.869 ns and hold
++0.141 / -2.532 ns from/to. It is not timing closed. New source includes those
+three alternative pixel-clock phases in production SDC, so future fitting can
+optimize them; it does not suppress paths to other clocks.
+RBF SHA-256: `8a45c465a682d4128b216012ab02623326b6fe4af2f9cf232f373cb39e18a703`.
+
+The combined build passes the PCM probe launched 05:48:14 and RAM probe launched
+05:50:12 CEST. Returns are `buffered50-pcm-return-1.d88` and
+`buffered50-ram-return-1.d88`. Its 05:51:50 benchmark saves ALU 243 / RAM copy
+98 blocks in 1000 hundredths each, both checksums passing
+(`buffered50-bench-return-2.d88`). This is essentially the earlier 50 MHz result.
+
+Rusty was launched at 05:56:37 with the existing System/Opening disk copies.
+Remote screenshot `rusty-buffered50-060040.png` shows the rendered intro scene
+and bottom-right floppy icon. This time remote capture works. It establishes
+rendering at that instant, not gameplay FPS, icon rotation or audio quality.
+
+The new `software/z98mem.asm` DOS initializer preserves probed RAM and supplies
+BIOS memory counts to the separate open-source HIMEMX(98) driver. On the
+combined 50 MHz build, the first 64 MB XMS run launched 06:01:53 passes, with a
+saved log and screenshot (`xms64-probe-return-2.d88`, `xms64-probe-060420.png`).
+It allocates/locks 17 MB above the aperture, checks round trips at both ends,
+unlocks/frees it and verifies recovered free memory. A repeat launched 06:11:41
+records **63424 KB free**, allocation at **01000000h**
+(`xms64-repeat-return-1.d88`). The 16 MB / 40 MHz fallback launched 06:07:16 also
+passes, recording **14272 KB free**, allocation at **00110000h**
+(`xms16-probe-return-2.d88`). All use disposable disk copies. This makes XMS
+usable with the documented drivers; the original BIOS alone still does not
+advertise extended RAM, and EMS/UMB support has not been validated.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the

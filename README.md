@@ -39,8 +39,11 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    extended RAM (16/64 MB), interrupts, DMA and BIOS support.
    Normal builds retain the lowest-1-MB map. An optional DDR-backed 16/64 MB
    map passes CPU simulation and physical-memory diagnostics on the SuperStation
-   at both sizes. BIOS/XMS discovery remains required before DOS can use it
-   normally. This does not establish complete PC-9821 compatibility.
+   at both sizes. The experimental [DOS memory setup](software/README.md) also
+   passes hardware XMS allocation/copy/free tests at 16 and 64 MB. It requires
+   an initializer and the PC-98 HIMEMX driver on the user's boot disk; it is
+   not enabled by the original BIOS alone. This does not establish complete
+   PC-9821 compatibility.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with
    a working disk controller and BIOS path. Dynamic VHD/VHDX containers are a
    separate format and are not promised by a `.vhd` file selector.

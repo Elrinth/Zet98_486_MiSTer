@@ -40,6 +40,11 @@ PIC EOI. It records the result in `Z98PCM.TXT`. PCM stays muted throughout;
 audio output quality and game-driver compatibility remain unverified. The
 build fits at 33,087 ALMs and 427 RAM blocks but still fails full-design timing.
 
+The combined 50 MHz build also passes this hardware diagnostic, with the DDR
+read buffer and registered SDRAM request metadata enabled. A remote screenshot
+shows Rusty's intro rendering on it; no audible PCM quality claim follows from
+that screenshot. See the hardware log for timings and artifact hashes.
+
 Behavioral references (not copied source):
 
 - [NP2kai register implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/cbus/pcm86io.c)

@@ -4,6 +4,7 @@ module ao486_extmem_tb;
     parameter DOS_PROBE=0;
     parameter READ_CACHE=1;
     parameter LOWMEM_CACHE=0;
+    parameter MEMORY_INIT=0;
     reg clk=0,reset=1;
     always #5 clk=!clk;
     wire cache_invalidate=0,interrupt_do=0;
@@ -46,7 +47,8 @@ module ao486_extmem_tb;
             for(n=0;n<used;n=n+1) if(keys[n]==ddr_address) found=n;
             if(found<0) begin
                 if(used==256) $fatal(1,"DDR model table full");
-                found=used; used=used+1; keys[found]=ddr_address; words[found]=0;
+                found=used; used=used+1; keys[found]=ddr_address;
+                words[found]=MEMORY_INIT ? (64'ha5987e21c0359bf4 ^ ddr_address) : 0;
             end
             if(ddr_write) begin
                 for(k=0;k<8;k=k+1)
@@ -75,6 +77,17 @@ module ao486_extmem_tb;
                     if(held_write && held_address==20'hf2) boots=boots+1;
                     if(held_write && held_address==20'h7ff0) begin
                         if(held_data!=16'h600d) $fatal(1,"protected-mode extended memory program failed");
+                        if(MEMORY_INIT) begin
+                            if(boots!=1 || !dut.cpu.real_mode || dut.a20_enable)
+                                $fatal(1,"memory initializer failed mode/A20 restoration");
+                            if(memory[20'h401]!=(RAM_MB==0 ? 0 : 112) ||
+                               {memory[20'h595],memory[20'h594]}!=(RAM_MB==64 ? 48 : 0))
+                                $fatal(1,"incorrect PC-98 BIOS memory counts");
+                            for(n=0;n<used;n=n+1) if(words[n]!=(64'ha5987e21c0359bf4 ^ keys[n]))
+                                $fatal(1,"memory initializer did not restore probe words");
+                            $display("PASS: memory initializer %0d MB: real driver entry, BIOS counts, preserved RAM, restored mode/A20",RAM_MB);
+                            $finish;
+                        end
                         if(DOS_PROBE) begin
                             if(boots!=1 || ddr_commands<80 || !dut.cpu.real_mode)
                                 $fatal(1,"DOS probe did not return to real-mode code");

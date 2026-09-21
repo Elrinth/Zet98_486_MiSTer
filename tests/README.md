@@ -145,6 +145,16 @@ a relocated COM segment, substituting a result port for DOS file operations.
 A 64 MB diagnostic must reject the 16 MB model. The probe is destructive to
 extended RAM and must boot without XMS/EMS managers or resident applications.
 
+`run-memory-init.sh` runs the DOS driver's actual strategy/interrupt entry
+points with 0/16/64 MB. It checks BIOS memory counts, restored nonzero RAM
+contents, real-mode/A20 restoration, a caller stack outside the driver segment,
+and unsupported device commands. `hardware/xms_probe.asm` then exercises the
+real HIMEMX(98) API on a DOS boot disk: detection, free-space query, allocation,
+lock/address/unlock, patterned round trips at both ends and release. The 64 MB
+test requires a 17 MB block above the PC-98 aperture. It writes `Z98XMS.TXT`.
+`python tests/test_d88_raw.py` checks preservation of D88 headers and original
+data, rejects boot-sector/size changes, and verifies no-overwrite CLI behavior.
+
 `run-sdram.sh` exercises the actual SDRAM controller CPU port at 20/40/50 MHz.
 Each run checks 384 requests on the SDRAM command pins: row/column/bank,
 single/four-plane reads and writes, byte/plane masks, completion counts and
