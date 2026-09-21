@@ -1,4 +1,5 @@
-# Static CPU/GRCG set/preserve data is captured with CPUREQ in CPUCLK.
+# CPU/GRCG address, bank, masks and set/preserve data are captured with
+# CPUREQ in CPUCLK (110 bits at the current 22-bit address width).
 # lCPUREQ admits CPUJOB and the payload on the third memory edge, at least
 # 20 ns after launch. The source remains held until the CPU's next request,
 # which cannot precede completion of this job. A 15 ns maximum gives at least
@@ -6,7 +7,8 @@
 #
 # Fresh RMW plane data is combined only after this capture, entirely in
 # memclk. This exception therefore does not relax the live read/modify/write
-# operation or any CPU request, acknowledgement, address or reset path.
+# operation or any CPU request, acknowledgement or reset path. Only the
+# held address/data payload receives this bound; memory-side paths stay timed.
 # tests/run-sdram-write-bundle.sh injects 15 ns transport delay and checks
 # capture stability, data, masks and request counts over 24 clock/phase pairs.
 # Its deliberately late 80 ns bundle must fail. Normal hold checks remain.
@@ -14,7 +16,7 @@ set cpu_write_source [get_registers {*|ram|cpu_write_source*}]
 set cpu_write_memory [get_registers {*|ram|cpu_write_memory*}]
 if {[get_collection_size $cpu_write_source] < 80 ||
     [get_collection_size $cpu_write_memory] < 80} {
-    error "Expected complete 80-bit CPU write set/preserve bundle endpoints"
+    error "Expected CPU request bundle endpoints (at least 80 data bits; constant address/mask bits may be optimized)"
 }
 set_max_delay -from $cpu_write_source -to $cpu_write_memory 15.000
 

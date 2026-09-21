@@ -167,7 +167,10 @@ signal	lCPUBNK,lCPUBSEL :std_logic_vector(1 downto 0);
 signal	lCPUPSEL :std_logic_vector(3 downto 0);
 type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
 signal cpu_read_words, cpu_write_words : cpu_words_t;
-signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(79 downto 0);
+signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(ADRWIDTH+87 downto 0);
+signal cpu_address : std_logic_vector(ADRWIDTH-1 downto 0);
+signal cpu_bank, cpu_bytes : std_logic_vector(1 downto 0);
+signal cpu_planes : std_logic_vector(3 downto 0);
 signal sub_read_words, sub_write_words : cpu_words_t;
 signal sub_write_source, sub_write_crossing, sub_write_memory : std_logic_vector(ADRWIDTH+87 downto 0);
 signal sub_address : std_logic_vector(ADRWIDTH-1 downto 0);
@@ -365,7 +368,8 @@ begin
             if rising_edge(CPUCLK) then
                 if (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
                    and (lcpustb='0' or lCPUADR/=CPUADR) then
-                    cpu_write_source <= CPUPRESERVE & CPUWDAT3 & CPUWDAT2 & CPUWDAT1 & CPUWDAT0;
+                    cpu_write_source <= CPUADR & CPUBNK & CPUBSEL & CPUPSEL &
+                        CPUPRESERVE & CPUWDAT3 & CPUWDAT2 & CPUWDAT1 & CPUWDAT0;
                 end if;
             end if;
         end process;
@@ -378,12 +382,18 @@ begin
                 end if;
             end if;
         end process;
+        cpu_address <= cpu_write_memory(ADRWIDTH+87 downto 88);
+        cpu_bank <= cpu_write_memory(87 downto 86);
+        cpu_bytes <= cpu_write_memory(85 downto 84);
+        cpu_planes <= cpu_write_memory(83 downto 80);
         planes : for i in 0 to 3 generate
             cpu_write_words(i) <= cpu_write_memory(i*16+15 downto i*16) or
                 (cpu_read_words(i) and cpu_write_memory(79 downto 64));
         end generate;
     end generate;
     legacy_cpu_write : if not CPU_WRITE_BUNDLE generate
+        cpu_address <= lCPUADR; cpu_bank <= lCPUBNK;
+        cpu_bytes <= lCPUBSEL; cpu_planes <= lCPUPSEL;
         cpu_write_words <= (CPUWDAT0, CPUWDAT1, CPUWDAT2, CPUWDAT3);
         -- Legacy GRCG computes its RMW result through these live outputs.
         CPURDAT0 <= cpu_read_words(0);
@@ -655,9 +665,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -668,9 +678,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<="000" & lCPUADR(9 downto 0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<="000" & cpu_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 =>		--precharge all
 						MEMCKE		<='1';
@@ -735,9 +745,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -748,9 +758,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<="000" & lCPUADR(9 downto 2) & "00";
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<="000" & cpu_address(9 downto 2) & "00";
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>	--DQ
 						MEMCKE		<='1';
@@ -760,8 +770,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
 						MEMADR		<=(others=>'0');
 						MEMDATOE	<='0';
 					when 6 =>		--precharge all
@@ -827,9 +837,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--write command & send word
@@ -838,12 +848,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not lCPUBSEL(1);
-						MEMLDQ		<=not lCPUBSEL(0);
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not lCPUBSEL(1) & not lCPUBSEL(0);
-						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
+						MEMUDQ		<=not cpu_bytes(1);
+						MEMLDQ		<=not cpu_bytes(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not cpu_bytes(1) & not cpu_bytes(0);
+						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 0);
 						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
@@ -896,9 +906,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--write command & send 1st word
@@ -907,12 +917,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not (lCPUPSEL(0) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(0) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(0) and lCPUBSEL(1)) & not (lCPUPSEL(0) and lCPUBSEL(0));
-						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 2) & "00";
+						MEMUDQ		<=not (cpu_planes(0) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(0) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(0) and cpu_bytes(1)) & not (cpu_planes(0) and cpu_bytes(0));
+						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 2) & "00";
 						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--2nd word
@@ -921,11 +931,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(1) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(1) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(1) and lCPUBSEL(1)) & not (lCPUPSEL(1) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(1) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(1) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(1) and cpu_bytes(1)) & not (cpu_planes(1) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(1);
 						MEMDATOE	<='1';
@@ -935,11 +945,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(2) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(2) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(2) and lCPUBSEL(1)) & not (lCPUPSEL(2) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(2) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(2) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(2) and cpu_bytes(1)) & not (cpu_planes(2) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(2);
 						MEMDATOE	<='1';
@@ -949,11 +959,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(3) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(3) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(3) and lCPUBSEL(1)) & not (lCPUPSEL(3) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(3) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(3) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(3) and cpu_bytes(1)) & not (cpu_planes(3) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(3);
 						MEMDATOE	<='1';
@@ -1007,9 +1017,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1020,9 +1030,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<="000" & lCPUADR(9 downto 0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<="000" & cpu_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>		--DQN(Hi-Z)
 						MEMCKE		<='1';
@@ -1032,8 +1042,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
 						MEMADR(12 downto 11)	<="11";
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDATOE	<='0';
@@ -1043,12 +1053,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not lCPUBSEL(1);
-						MEMLDQ		<=not lCPUBSEL(0);
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not lCPUBSEL(1) & not lCPUBSEL(0);
-						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
+						MEMUDQ		<=not cpu_bytes(1);
+						MEMLDQ		<=not cpu_bytes(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not cpu_bytes(1) & not cpu_bytes(0);
+						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 0);
 						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--break burst and precharge all
@@ -1101,9 +1111,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<=lCPUADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						CPUJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1114,9 +1124,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR		<="000" & lCPUADR(9 downto 2) & "00";
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR		<="000" & cpu_address(9 downto 2) & "00";
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>		--DQN
 						MEMCKE		<='1';
@@ -1126,8 +1136,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
 						MEMADR		<=(others=>'0');
 						MEMDATOE	<='0';
 					when 6 =>				--BST
@@ -1138,8 +1148,8 @@ begin
 						MEMWE_N		<='0';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
 						MEMADR(12 downto 11)	<="11";
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDATOE	<='0';
@@ -1149,12 +1159,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not (lCPUPSEL(0) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(0) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(0) and lCPUBSEL(1)) & not (lCPUPSEL(0) and lCPUBSEL(0));
-						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
+						MEMUDQ		<=not (cpu_planes(0) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(0) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(0) and cpu_bytes(1)) & not (cpu_planes(0) and cpu_bytes(0));
+						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 0);
 						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--2nd word
@@ -1163,11 +1173,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(1) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(1) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(1) and lCPUBSEL(1)) & not (lCPUPSEL(1) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(1) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(1) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(1) and cpu_bytes(1)) & not (cpu_planes(1) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(1);
 						MEMDATOE	<='1';
@@ -1177,11 +1187,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(2) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(2) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(2) and lCPUBSEL(1)) & not (lCPUPSEL(2) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(2) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(2) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(2) and cpu_bytes(1)) & not (cpu_planes(2) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(2);
 						MEMDATOE	<='1';
@@ -1191,11 +1201,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (lCPUPSEL(3) and lCPUBSEL(1));
-						MEMLDQ		<=not (lCPUPSEL(3) and lCPUBSEL(0));
-						MEMBA1		<=lCPUBNK(1);
-						MEMBA0		<=lCPUBNK(0);
-						MEMADR(12 downto 11)	<=not (lCPUPSEL(3) and lCPUBSEL(1)) & not (lCPUPSEL(3) and lCPUBSEL(0));
+						MEMUDQ		<=not (cpu_planes(3) and cpu_bytes(1));
+						MEMLDQ		<=not (cpu_planes(3) and cpu_bytes(0));
+						MEMBA1		<=cpu_bank(1);
+						MEMBA0		<=cpu_bank(0);
+						MEMADR(12 downto 11)	<=not (cpu_planes(3) and cpu_bytes(1)) & not (cpu_planes(3) and cpu_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT<=cpu_write_words(3);
 						MEMDATOE	<='1';

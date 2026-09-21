@@ -26,7 +26,7 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \
     -gCPU_MHZ=60 -gBUFFERED=true --assert-level=error > "$out/negative.log" 2>&1; then
     echo 'FAIL: late write bundle was accepted' >&2; exit 1
 fi
-grep -Eq 'CPU write bundle arrived too late|SDRAM write data mismatch' "$out/negative.log"
+grep -Eq 'CPU write bundle arrived too late|SDRAM write data mismatch|SDRAM row/bank mismatch' "$out/negative.log"
 echo 'PASS: late CPU write bundle rejected'
 
 # Moving read capture one CPU cycle later must be rejected: the bus master

@@ -3629,7 +3629,9 @@ DBIO_ODAT<=(others=>'1');
 		busy			=>pLED,
 		fclk			=>cpuclk,
 		sclk			=>cpuclk,
-		rclk			=>ramclk,
+        -- FECcont address/write controls and both buffer users run on cpuclk.
+        -- Its two-cycle registered read fits the existing FEC wait states.
+		rclk			=>cpuclk,
 		rstn			=>vrstn
 	);
 

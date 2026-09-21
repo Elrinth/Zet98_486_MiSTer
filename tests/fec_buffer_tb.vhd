@@ -7,10 +7,11 @@ use std.env.all;
 -- output latency. The SDRAM handshake model varies its completion delay.
 entity fec_buffer_tb is
     generic(CPU_MHZ: positive:=60; RAM_PHASE_PS:natural:=0;
+            BUFFER_CPU_CLOCK:boolean:=false;
             BAD_EXTRA_LATENCY:boolean:=false);
 end entity;
 architecture test of fec_buffer_tb is
-    signal clk,ramclk:std_logic:='0';
+    signal clk,ramclk,buffer_clk:std_logic:='0';
     signal rstn,rd,wr,busy,brd,bwr,srd,swr,swait:std_logic:='0';
     signal ba:std_logic_vector(7 downto 0);
     signal sa:std_logic_vector(22 downto 0);
@@ -35,13 +36,14 @@ begin
         wait for RAM_PHASE_PS*1 ps;
         loop wait for 5 ns;ramclk<=not ramclk;end loop;
     end process;
+    buffer_clk<=clk when BUFFER_CPU_CLOCK else ramclk;
     dut:entity work.FECcont generic map(23) port map(
         HIGHADDR=>x"0257",BUFADDR=>ba,RD=>rd,WR=>wr,RDDAT=>bd,WRDAT=>q,
         BUFRD=>brd,BUFWR=>bwr,BUFWAIT=>'0',BUSY=>busy,
         SDR_ADDR=>sa,SDR_RD=>srd,SDR_WR=>swr,SDR_RDAT=>sd,
         SDR_WDAT=>wd,SDR_WAIT=>swait,clk=>clk,rstn=>rstn);
-    process(ramclk) begin
-        if rising_edge(ramclk) then
+    process(buffer_clk) begin
+        if rising_edge(buffer_clk) then
             if not is_x(ba) then
                 address_reg<=to_integer(unsigned(ba));
                 if bwr='1' then memory(to_integer(unsigned(ba)))<=bd;end if;

@@ -105,3 +105,20 @@ rates and four RAM phases with the two-stage RAM read latency model.
 A deliberately stale 16-stage output fails. This is a functional latency
 test, not an electrical RAM/timing model; fitted hold/setup validation and
 hardware reads/writes remain required.
+
+### Complete CPU request metadata
+
+The later palette-stage 60 MHz fit exposes -0.678 ns from latched CPU
+address to SDRAM pins and smaller byte/plane-mask violations. Address,
+bank and byte/plane masks now join the CPU set/preserve words in the held
+request payload, matching the existing GDC transfer. It is 110 bits at
+ADRWIDTH=22. Capture and admission use the same request edges; the legacy
+mode retains its original latched CPU fields. The CPU's source-side address
+comparison still uses lCPUADR, so held-strobe/new-address detection is
+unchanged. Only the expanded source-to-admission payload uses the existing
+15 ns bound; memory-side state/outputs and normal hold checks remain timed.
+
+All 9216 buffered CPU transactions pass with 15 ns injected delay and at
+least 5 ns stability at admission, plus late-payload/read-capture negatives.
+The 1536 legacy CPU transactions, GDC buffered/legacy tests and floppy-port
+regressions also pass. Full fitting and hardware validation remain pending.

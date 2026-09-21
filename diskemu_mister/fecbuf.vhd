@@ -66,7 +66,7 @@ BEGIN
 	q_a    <= sub_wire0(15 DOWNTO 0);
 	q_b    <= sub_wire1(15 DOWNTO 0);
 
-	-- Keep the buffer output in rclk before its CPU-domain request capture.
+	-- Register the buffer output in its port clock before request capture.
 	-- FECcont waits for this registered read before asserting SDR_WR.
 	altsyncram_component : altsyncram
 	GENERIC MAP (
