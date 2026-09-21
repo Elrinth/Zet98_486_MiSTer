@@ -50,3 +50,24 @@ and Options text in NP2kai. Injecting the original row mapper into the emulator
 also corrupts those menu letters, but does not exactly reproduce the FPGA's
 glyph shapes; further differences remain possible. Hardware verification
 with the corrected mapper remains pending.
+
+## DOS byte-capture probe
+
+Assemble `tests/hardware/font_probe.asm` with `nasm -f bin` as `Z98FONT.COM`.
+Run it from a disposable DOS image. It creates `Z98FONT.BIN` only if that
+name is absent, reads 23 selected character codes, and records 736 pairs of
+immediate and delayed CG-ROM reads. It writes no glyph data or font ROM.
+The included cases cover Rusty's row-09 letters, ANK, adjacent JIS rows,
+and the last stored JIS row.
+
+After unloading the image, extract its result and run:
+
+```
+python scripts/verify_font_probe.py Z98FONT.BIN path/to/the/exact/boot.rom
+```
+
+The verifier checks the capture structure, compares each pair with the raw
+font data, and separately reports unstable reads. It returns failure for any
+byte mismatch. In NP2kai, all 736 pairs match the known-working development
+ROM (`647b5fa9...42f21db7`), with zero unstable reads. A changed capture byte
+and a truncated record are rejected. Hardware capture remains pending.
