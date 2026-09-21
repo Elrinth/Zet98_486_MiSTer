@@ -9,7 +9,8 @@ use std.env.all;
 -- completion and request count are checked independently of the controller.
 entity sdram_request_tb is
     generic (CPU_MHZ : positive := 50; BUFFERED : boolean := false;
-             MEM_PHASE_PS : natural := 0; USE_SUB : boolean := false);
+             MEM_PHASE_PS : natural := 0; USE_SUB : boolean := false;
+             HOLD_COMPLETION_CYCLES : natural := 0);
 end entity;
 architecture test of sdram_request_tb is
     constant AW : positive := 22;
@@ -201,6 +202,21 @@ begin
                         assert write_beats=beats+4 report "four-plane write length mismatch" severity failure;
                     else assert write_beats=beats+1 report "word write length mismatch" severity failure; end if;
                 end if;
+                -- A completed request held on the bus must not replay its
+                -- completion or issue another SDRAM command. CPU completion
+                -- is a pulse; drawing completion stays held until release.
+                for hold_cycle in 1 to HOLD_COMPLETION_CYCLES loop
+                    wait until rising_edge(cpuclk); wait for 1 ps;
+                    if USE_SUB then
+                        assert ack='1' report "drawing ACK released before strobe" severity failure;
+                    else
+                        assert ack='0' report "CPU completion repeated" severity failure;
+                    end if;
+                    assert activations=a+1 report "held request repeated" severity failure;
+                    if mode>=2 then
+                        assert rd(0)=expected_rd(0) report "held read data changed" severity failure;
+                    end if;
+                end loop;
                 requests<=(others=>'0'); active<=false;
                 if ack/='0' then wait until ack='0'; end if;
                 -- Minimum bus-release spacing used by the CPU bridge.

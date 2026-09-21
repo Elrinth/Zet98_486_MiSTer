@@ -1203,3 +1203,85 @@ delay and at least 20 ns capture margin; its late-data negative control fails
 as expected. The first graphics-test attempt used an outdated graphics file
 from the cached container and stopped before simulation; copying the current
 graphics source resolves that test-environment mismatch.
+
+
+### HPS peripheral routing with the faster cache
+
+`quartus-20260921-193239-1ba51a` (7854929) fits at 34338 ALMs,
+458 RAM blocks and 66 DSPs. All sixteen corner checks pass, minimum
++0.096 ns. The post-fit atom audit confirms SPI Y72, HDMI I2C Y60 and
+UART1 Y67. RBF SHA-256:
+`9b3c1c8bb41d0ec26f399f4b0a3e52b255341a2f4f694cefaca846fc3facac17`.
+
+The fresh MIDI diagnostic was loaded at 20:07:54 device time. Immediately
+before this change, reading HDMI register 00h at address 39h on I2C bus 1
+failed. At 20:08:06 the identical read returns 13h on the corrected build.
+This establishes restored access through the framework's expected HDMI
+control bus; it does not prove the cause of the earlier visible glitches.
+The test does not write transmitter registers or change output modelines.
+MIDI capture and game boot on this exact build remain pending.
+
+The same HPSCache50 image subsequently passes both MIDI layers: the returned
+DOS log confirms 200 IRQ6 ACK/EOIs, and the independent HPS receiver gets all
+134 bytes at offset zero, with the expected packet hash above. Benchmark v3
+returns 247/125/102 blocks per 1000 hundredths with all checksums passing,
+matching WriteAllocate50. The DOS VHD launcher was loaded at 20:16:34 with
+MPU enabled for a separate software-synthesis test; the game menu is captured
+at 20:23:26. These results supersede the pending tests in the preceding entry.
+
+For that synthesis test, GeneralUser GS 2.0.3 is verified against SHA-256
+`9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe`.
+Only a new [ZET98_TEST] section is appended to a backed-up MidiLink.INI;
+other core sections and global settings are preserved. MidiLink opens ttyS1
+at 31250 baud; FluidSynth exposes its ALSA MIDI port and opens /dev/MrAudio
+through the device's existing ALSA configuration. This is local GM/GS
+synthesis, not an exact SC-55 or CM-64 emulation. Process/route validation
+does not establish audible quality or game compatibility.
+
+The private HPSCache50 DOS/game archive has been rebuilt from the pristine
+owner-provided VHD, verified BIOS/loader and exact fitted RBF above. Its CFG
+comes from the hardware test with only MPU bit 26 cleared for the default.
+ZIP CRC and every payload SHA-256 pass; the older Bundle50 package remains.
+Archive SHA-256: `af7cc19c6bae939c3c0963fe26b88ff30b936f883ce151a810a7665284e2de74`.
+No original D: files or remote saves were overwritten to assemble it.
+
+The installed ARM FluidSynth 2.1.6 renders an original two-note test with
+GeneralUser GS to 144128 stereo frames at 48 kHz: peak 1502, 181467 nonzero
+samples, final-second peak 1. This build emits raw S16_LE even with `-T wav`;
+the initial WAV-header check therefore failed, and the saved raw stream was
+validated and wrapped locally for inspection. It was rendered to a file,
+not played on the TV. This tests synthesis and note release, not game audio.
+Nightslave selected at 20:24:21 did not progress beyond its driver banners
+by 20:29:52 with MPU enabled; UART rx remained at the diagnostic's 268 total
+bytes. Both test audio processes were stopped by verified PID, and the same
+core was reloaded at 20:31:27 with MPU disabled for comparison.
+
+### Completion-path timing work
+
+The DirectBank60 fit (83c18c4) still fails: memory completion clear -0.491 ns,
+palette transfer -0.298 ns, and CPU internal control -0.123 ns at the slow/hot
+corner. It has not been deployed. The following FloppyToggle60 fit (cb812f9)
+stopped during constraint loading: Quartus cloned `vidend` as `~DUPLICATE`,
+and an exact source match returned both copies. All three request synchronizer
+stages and both completion synchronizer stages exist in its fitted database.
+The guard now allows fitted copies of that exact source while still requiring
+exactly one first-stage endpoint. The exception remains confined to the same
+source-to-first-stage synchronizer input; subsequent stages remain timed.
+Reanalysis uses the identical fitted database and retains the original SDC.
+
+CPU and drawing-port completion now use held toggles instead of sending ACK
+back into SDRAM to clear completion. Each destination records the last seen
+value. Read data and ACK are captured on the same edge as before, with no
+additional bus cycle. CPU ACK is a single pulse; drawing ACK keeps its former
+hold-until-strobe-release behavior. These related PLL clock paths remain fully
+timed, with no new synchronizer exception or relaxed data constraint.
+
+Actual-controller regressions pass single/four-plane reads, writes and RMW,
+byte/plane masks, delayed request/return data, and all 20/40/50/60/90/100 MHz
+simulation ratios. Forty-eight held-request runs across both ports and four
+clock phases reject repeated completions and preserve returned data. Stale
+completion, late return capture and late data negative controls fail as
+expected. Floppy and graphics-producer/consumer regressions also pass. A
+container entry-point mistake and sed delimiter mistake were corrected before
+these complete runs; their earlier logs are retained separately. Full-core
+physical timing and hardware validation of these toggles remain pending.

@@ -18,6 +18,9 @@ The current development features include:
   cache. The 50 MHz hardware benchmark is about 2.31x faster for arithmetic and
   2.13x for RAM copy than the matching 20 MHz build. Actual XMS allocation,
   copy and free pass with both the limited and full-memory DOS profiles.
+  Completed-word cache allocation raises the hardware stack benchmark from
+  80 to 102 blocks per ten seconds at the same 50 MHz (27.5%); this is not a
+  measured Rusty frame-rate gain.
 - **PC-9801-86 sound:** OPNA/FM plus experimental PCM/FIFO/IRQ support. A lost
   FM timer-clear write was fixed; Native50 and Bundle50 pass 100 consecutive
   timer-B IRQ12 deliveries and cascaded PIC EOI. These silent diagnostics do
@@ -41,8 +44,9 @@ An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
 `-MidiUart`, passes serial, bus and interrupt simulations, 200 guest IRQ6
 acknowledgements and exact capture of a 134-byte packet on HPS ttyS1 in hardware.
 The first capture exposed a missing HPS UART1 location assignment; correcting
-and verifying that placement fixed the transport. Audible MidiLink playback
-remains pending. It is off by default and does not implement intelligent-mode
+and verifying that placement fixed the transport. Local MidiLink/FluidSynth
+starts with GeneralUser GS and an offline note/release rendering test passes;
+actual game MIDI playback remains pending. It is off by default and does not implement intelligent-mode
 sequencing. A private Nightslave UART trace passes RTL replay; that alone does
 not establish hardware music compatibility.
 

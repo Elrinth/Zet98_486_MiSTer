@@ -37,7 +37,7 @@ echo 'PASS: late SUB write bundle rejected'
 # Moving read capture one SUB cycle later must be rejected: the bus master
 # consumes data with the existing ACK and must never see the previous read.
 test "$(grep -c 'SUB_READ_COMPLETION_CAPTURE' Zet98/sdramc.vhd)" = 1
-sed "s/if subend='1' then -- SUB_READ_COMPLETION_CAPTURE/if SUBACKb='1' then -- deliberately late read/" \
+sed "s@if subend/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE@if SUBACKb='1' then -- deliberately late read@" \
     Zet98/sdramc.vhd > "$out/sdram-late-read.vhd"
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-late-read.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb

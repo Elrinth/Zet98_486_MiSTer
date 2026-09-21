@@ -32,7 +32,7 @@ echo 'PASS: late CPU write bundle rejected'
 # Moving read capture one CPU cycle later must be rejected: the bus master
 # consumes data with the existing ACK and must never see the previous read.
 test "$(grep -c 'CPU_READ_COMPLETION_CAPTURE' Zet98/sdramc.vhd)" = 1
-sed "s/if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE/if CPUACKb='1' then -- deliberately late read/" \
+sed "s@if cpuend/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE@if CPUACKb='1' then -- deliberately late read@" \
     Zet98/sdramc.vhd > "$out/sdram-late-read.vhd"
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-late-read.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb

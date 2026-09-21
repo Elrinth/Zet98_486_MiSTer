@@ -152,6 +152,10 @@ signal	subend		:std_logic;
 signal	vidend		:std_logic;
 signal	fdeend		:std_logic;
 signal	fecend		:std_logic;
+-- CPU/SUB clocks are related PLL outputs and all completion paths remain
+-- timed. Held toggles remove the return ACK-to-memory clear path without
+-- adding a bus cycle; each destination consumes one change exactly once.
+signal CPUdone_seen, SUBdone_seen : std_logic;
 signal	CPUACKb		:std_logic;
 signal	SUBACKb		:std_logic;
 signal	VIDACKb		:std_logic;
@@ -344,7 +348,7 @@ begin
                 SUBRDAT0 <= (others=>'0'); SUBRDAT1 <= (others=>'0');
                 SUBRDAT2 <= (others=>'0'); SUBRDAT3 <= (others=>'0');
             elsif rising_edge(SUBCLK) then
-                if subend='1' then -- SUB_READ_COMPLETION_CAPTURE
+                if subend/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE
                     SUBRDAT0 <= sub_read_crossing(0);
                     SUBRDAT1 <= sub_read_crossing(1);
                     SUBRDAT2 <= sub_read_crossing(2);
@@ -363,16 +367,16 @@ begin
 
     cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
     write_bundle : if CPU_WRITE_BUNDLE generate
-        -- Capture completed reads on the existing CPUACKb assertion edge.
-        -- The bridge consumes ACK/data together on the following CPU edge;
-        -- no command state or completion cycle is added. RMW uses the fresh
+        -- A change in the held completion toggle captures read data and
+        -- asserts CPUACKb together. The bridge consumes both on the following
+        -- CPU edge, with no added command/completion cycle. RMW uses fresh
         -- memory-domain words internally, not these CPU-visible registers.
         process(CPUCLK,rstn) begin
             if rstn='0' then
                 CPURDAT0 <= (others=>'0'); CPURDAT1 <= (others=>'0');
                 CPURDAT2 <= (others=>'0'); CPURDAT3 <= (others=>'0');
             elsif rising_edge(CPUCLK) then
-                if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE
+                if cpuend/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE
                     CPURDAT0 <= cpu_read_crossing(0);
                     CPURDAT1 <= cpu_read_crossing(1);
                     CPURDAT2 <= cpu_read_crossing(2);
@@ -516,12 +520,7 @@ begin
 --			else
 --				lVIDNOP(0)<='0';
 --			end if;
-			if(CPUACKb='1')then
-				cpuend<='0';
-			end if;
-			if(SUBACKb='1')then
-				subend<='0';
-			end if;
+
 
 			
 			if(INITTIMER>0)then
@@ -2229,9 +2228,9 @@ begin
 				if(st_next='1')then		--select next state
 					case STATE is
 					when ST_READ | ST_READ4 | ST_WRITE | ST_WRITE4 | ST_RMW | ST_RMW4 =>
-						cpuend<='1';
+						cpuend<=not cpuend;
 					when ST_SUBREAD | ST_SUBREAD4 | ST_SUBWRITE | ST_SUBWRITE4 | ST_SUBRMW | ST_SUBRMW4 =>
-						subend<='1';
+						subend<=not subend;
 					when ST_VIDREAD =>
 						vidend<=lVIDREQ(2);
 					when ST_FDEREAD | ST_FDEWRITE =>
@@ -2447,6 +2446,7 @@ begin
 			nCPUJOB<=JOB_NOP;
 			lcpustb<='0';
 			CPUACKb<='0';
+            CPUdone_seen<='0';
 			CPUREQ<='0';
 		elsif(CPUCLK' event and CPUCLK='1')then
             -- Capture request metadata in its source clock domain before the
@@ -2508,11 +2508,8 @@ begin
 				nCPUJOB<=JOB_NOP;
 				CPUREQ<='0';
 			end if;
-			if(cpuend='1')then
-				CPUACKb<='1';
-			else
-				CPUACKb<='0';
-			end if;
+            CPUACKb<=cpuend xor CPUdone_seen;
+            CPUdone_seen<=cpuend;
 		end if;
 	end process;
 	
@@ -2523,6 +2520,7 @@ begin
 			nSUBJOB<=JOB_NOP;
 			lsubstb<='0';
 			SUBACKb<='0';
+            SUBdone_seen<='0';
 			SUBREQ<='0';
 		elsif(SUBCLK' event and SUBCLK='1')then
 --			nSUBJOB<=JOB_NOP;
@@ -2569,7 +2567,8 @@ begin
 				nSUBJOB<=JOB_NOP;
 				SUBREQ<='0';
 			end if;
-			if(SUBend='1')then
+            SUBdone_seen<=subend;
+            if subend/=SUBdone_seen then
 				SUBACKb<='1';
 			elsif(SUBREQS='0')then
 				SUBACKb<='0';

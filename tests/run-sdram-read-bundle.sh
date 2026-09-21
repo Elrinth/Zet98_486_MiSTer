@@ -10,8 +10,8 @@ trap 'rm -rf "$out"' EXIT
 for delay in 5 80; do
     sed -e "s/cpu_read_crossing <= cpu_read_words; -- CPU_READ_BUNDLE_TRANSPORT/cpu_read_crossing <= transport cpu_read_words after $delay ns;/" \
         -e "s/sub_read_crossing <= sub_read_words; -- SUB_READ_BUNDLE_TRANSPORT/sub_read_crossing <= transport sub_read_words after $delay ns;/" \
-        -e "/if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE/a\\                    assert cpu_read_crossing'stable(5 ns) report \"CPU return bundle arrived too late\" severity failure;" \
-        -e "/if subend='1' then -- SUB_READ_COMPLETION_CAPTURE/a\\                    assert sub_read_crossing'stable(5 ns) report \"SUB return bundle arrived too late\" severity failure;" \
+        -e "/CPU_READ_COMPLETION_CAPTURE/a\\                    assert cpu_read_crossing'stable(5 ns) report \"CPU return bundle arrived too late\" severity failure;" \
+        -e "/SUB_READ_COMPLETION_CAPTURE/a\\                    assert sub_read_crossing'stable(5 ns) report \"SUB return bundle arrived too late\" severity failure;" \
         Zet98/sdramc.vhd > "$out/sdram-$delay.vhd"
 done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-5.vhd" tests/sdram_request_tb.vhd
