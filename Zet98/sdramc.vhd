@@ -176,12 +176,20 @@ type job_t is(
 
 signal	CPUJOB,nCPUJOB	:job_t;
 signal	SUBJOB,nSUBJOB	:job_t;
-signal	VIDJOB,nVIDJOB	:job_t;
+signal	VIDJOB	:job_t;
 signal	FDEJOB,nFDEJOB,lFDEJOB	:job_t;
 signal	FECJOB,nFECJOB	:job_t;
 signal	CPUREQ,CPUREC	:std_logic;
 signal	SUBREQ,SUBREC	:std_logic;
-signal	VIDREQ,VIDREC	:std_logic;
+-- One outstanding graphics transfer. Request and completion are toggles,
+-- so a pulse or the previous acknowledgement cannot be sampled as a new job.
+signal VIDREQ, VIDbusy : std_logic;
+signal VIDdone_sync : std_logic_vector(1 downto 0);
+attribute preserve : boolean;
+attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
+attribute altera_attribute : string;
+attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
+    "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 signal	FDEREQ,FDEREC	:std_logic;
 signal	FECREQ,FECREC	:std_logic;
 
@@ -242,7 +250,6 @@ begin
 			lFECREQ<=(others=>'0');
 			CPUREC<='0';
 			SUBREC<='0';
-			VIDREC<='0';
 			FDEREC<='0';
 			FECREC<='0';
 			mem_inidone<='0';
@@ -268,11 +275,8 @@ begin
 			elsif(SUBREQ='0')then
 				SUBREC<='0';
 			end if;
-			if(lVIDREQ="011")then
-				VIDJOB<=nVIDJOB;
-				VIDREC<='1';
-			elsif(VIDREQ='0')then
-				VIDREC<='0';
+			if(lVIDREQ(2)/=lVIDREQ(1))then
+				VIDJOB<=JOB_RD;
 			end if;
 			if(lFDEREQ="011")then
 				FDEJOB<=nFDEJOB;
@@ -317,9 +321,7 @@ begin
 			if(SUBACKb='1')then
 				subend<='0';
 			end if;
-			if(VIDACKb='1')then
-				vidend<='0';
-			end if;
+
 			if(FDEACKb='1')then
 				fdeend<='0';
 			end if;
@@ -2036,7 +2038,7 @@ begin
 					when ST_SUBREAD | ST_SUBREAD4 | ST_SUBWRITE | ST_SUBWRITE4 | ST_SUBRMW | ST_SUBRMW4 =>
 						subend<='1';
 					when ST_VIDREAD =>
-						vidend<='1';
+						vidend<=lVIDREQ(2);
 					when ST_FDEREAD | ST_FDEWRITE =>
 						fdeend<='1';
 					when ST_FECREAD | ST_FECWRITE =>
@@ -2155,7 +2157,7 @@ begin
 			VIDDAT0		<=(others=>'0');
 			VIDDAT1		<=(others=>'0');
 			VIDDAT2		<=(others=>'0');
-			VIDDAT2		<=(others=>'0');
+			VIDDAT3		<=(others=>'0');
 			FDERDAT		<=(others=>'0');
 			FECRDAT		<=(others=>'0');
 			lSTATE		<=ST_REFRESH;
@@ -2380,31 +2382,29 @@ begin
 		end if;
 	end process;
 
+	-- GRAMADR remains stable from request through acknowledgement. Data
+	-- remains stable until the next request; only the completion toggle crosses
+	-- the synchronizer. The graphics reader then registers its RAM write enable.
 	process(VIDCLK,rstn)begin
 		if(rstn='0')then
-			nVIDJOB<=JOB_NOP;
 			lVIDstb<='0';
 			VIDACKb<='0';
 			VIDREQ<='0';
+			VIDbusy<='0';
+			VIDdone_sync<=(others=>'0');
 		elsif(VIDCLK' event and VIDCLK='1')then
---			nVIDJOB<=JOB_NOP;
-			if(VIDRD='1')then
-				lvidstb<='1';
-				if(lVIDstb='0')then
-					nVIDJOB<=JOB_RD;
-					VIDREQ<='1';
-				end if;
-			else
-				lvidstb<='0';
-			end if;
-			if(VIDREC='1')then
-				nVIDJOB<=JOB_NOP;
-				VIDREQ<='0';
-			end if;
-			if(VIDend='1')then
-				VIDACKb<='1';
-			elsif(VIDRD='0')then
+			VIDdone_sync<=VIDdone_sync(0) & vidend;
+			if(VIDRD='0')then
+				lVIDstb<='0';
 				VIDACKb<='0';
+			elsif(lVIDstb='0')then
+				lVIDstb<='1';
+				VIDREQ<=not VIDREQ;
+				VIDbusy<='1';
+				VIDACKb<='0';
+			elsif(VIDbusy='1' and VIDdone_sync(1)=VIDREQ)then
+				VIDACKb<='1';
+				VIDbusy<='0';
 			end if;
 		end if;
 	end process;

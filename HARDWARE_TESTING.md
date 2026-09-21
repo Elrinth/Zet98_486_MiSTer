@@ -586,7 +586,47 @@ logic use. Its unit and full CPU/coherence/extended-memory tests pass, with
 unchanged ALU/VRAM simulation kernels; fitting and hardware tests are pending.
 
 The `-SystemClockMHz 60` experiment passes OPNA/PIT/PCM-rate and SDRAM request
-simulation. Its FPGA fit is running. No reliable 60 MHz hardware claim is made.
+simulation. Its first full fit (`quartus-20260921-061451-2d245c`) completes in
+32m41s with 34747 ALMs, 425 RAM blocks and 65 DSP blocks. Timing fails 48 checks,
+worst -6.658 ns; even the CPU-internal setup report fails at -0.393 ns. It is
+not deployed. No reliable 60 MHz hardware claim is made.
+
+The first cache-enabled 50 MHz PCM test launched at 06:27:21 also passes
+(`lowcache50-pcm-return-1.d88`). It verifies the board ID, FIFO and two IRQ12
+deliveries, with PCM muted. Rusty launched on that build at 06:35:03 shows its
+intro text at 06:38:29 (`rusty-lowcache50-063829.png`), then a black frame at
+06:48:27. A Space key sent through a temporary Linux keyboard at 06:49:21 does
+not immediately change that frame. This is not a successful gameplay test.
+
+To isolate the intro-to-game transition, a disposable System disk changes only
+three bytes: it skips the BOOT.COM call to OP.COM (offset 0143h in the file).
+All original source images remain untouched. This disk plus Game Disk A was
+launched at 06:51:33 using `Zet98_Rusty_SkipIntro50.mgl`; outcome is pending.
+
+### Graphics transfer timing work
+
+The explicit pixel-clock constraints exposed unsynchronized graphics control
+crossings as well as bundled address/data buses being timed against arbitrary
+adjacent clock edges. SDRAMC now uses synchronized request/completion toggles.
+It no longer consumes raw pixel-domain ACK or job bits in its memory domain.
+Only each control synchronizer's first input stage is excepted; its remaining
+stages and control logic remain timed. The two held address/data buses have
+20 ns maximum-delay constraints, with normal hold checks retained.
+
+`tests/run-video-sdram.sh` connects the real SDRAMC and GRAPHSCR98 with a checked
+line-RAM model. It verifies 16 complete lines, all four plane values and their
+order, concurrent CPU reads, and six relative clock phases. Data and address
+each carry 20 ns transport delay; enabled RAM capture must still have 20 ns
+of data stability. A deliberately late data path must fail. CPU SDRAM tests
+also pass at 20/40/50/60 MHz. The test additionally covers the corrected reset
+of VIDDAT3 and explicit 10-bit graphics line-counter wrap.
+
+An audit of the previous constrained 50 MHz fit matches all 64 data bits and
+14 address bits plus duplicates. Those bundled buses pass the justified
+20 ns limit; other control/configuration/text-video paths still fail. A fresh
+50 MHz fit includes the new control handshake, compact cache and constraints
+(`quartus-20260921-064725-d61d77`). Hardware validation is pending; this is not
+yet a demonstrated fix for Rusty's black transition or the earlier HDMI issue.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

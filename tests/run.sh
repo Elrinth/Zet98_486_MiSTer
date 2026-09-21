@@ -16,6 +16,7 @@ iverilog -g2012 -Wall -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
 vvp "$out/memory-integration.vvp"
 bash tests/run-extmem-bridge.sh
 bash tests/run-sdram.sh
+bash tests/run-video-sdram.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \
     LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd

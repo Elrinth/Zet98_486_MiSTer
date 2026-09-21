@@ -149,13 +149,13 @@ begin
 						BUFSTATE<=BS_READ;
 						LINECOUNT<=DOTPLINE;
 						GRAMRD<='1';
-						LINENUM:=LINENUM+1;
+						LINENUM:=(LINENUM+1) mod 1024;
 					elsif(LINECOUNT="00000")then
 						GRAMADRb<=C0ADDR+PITCH;
 						C0ADDR<=C0ADDR+PITCH;
 						BUFSTATE<=BS_READ;
 						GRAMRD<='1';
-						LINENUM:=LINENUM-1;
+						LINENUM:=(LINENUM+1023) mod 1024;
 						LINECOUNT<=DOTPLINE;
 						LINEEN<='1';
 					else
