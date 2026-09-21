@@ -1,61 +1,47 @@
-# Zet98-486 for MiSTer — experimental development
+# Zet98-486 for MiSTer â€” experimental development
 
 A PC-98 core development project based on **Puu's Zet/98**. The primary
 acceptance target is smoother **Rusty** gameplay on MiSTer-compatible hardware,
 initially a SuperStation One with SuperDock. A faster CPU must preserve game,
 video, timer, sound and disk timing.
 
-**The default build uses Zet; the optional ao486 integration is experimental.**
-The ao486 DiskFix hardware test reaches DOS, displays Rusty's C-Lab logo
-correctly and plays opening cutscenes with the user's BIOS/disks. The user
-reports extremely poor performance on that uncached build. A new cached ao486
-build passes the hardware arithmetic/RAM checksums and substantially improves
-small-loop throughput at the same clock; Rusty gameplay speed remains unverified.
-Earlier severe video corruption affected Console Mode too and cleared
-after a full power cycle. The isolated DOS probe now reads both System and
-Opening disks and persists its log to the host image. Rusty's cached-build
-animation now looks somewhat better to the user; there is no measured gameplay
-frame-rate or DX4-100 performance claim yet.
-The newer 50 MHz ao486 test passes the hardware benchmark, with about 2.31x
-arithmetic and 2.13x RAM-copy throughput versus its matching 20 MHz build.
-The 64 MB physical-memory probe also passes at 50 MHz. A separate 40 MHz build
-passes a silent 86-board FIFO/IRQ diagnostic. The newer Native50 build is
-the first with no negative slack in the reported full-design timing checks.
-Board I/O constraints remain incomplete; this is not complete timing sign-off
-or a certification of gameplay stability and audio quality.
-An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
-50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
-with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
-The latest 60 MHz fit passes CPU-internal setup but still fails full-design
-setup, hold and removal checks. It has not been deployed.
-Optional extended RAM and 86 PCM playback are described in
-[extended RAM](rtl/cpu/EXTENDED_RAM.md) and [PCM86](rtl/PCM86.md).
-The source now fixes a truncated HPS disk acknowledgement that prevented
-slots 1–3 from completing transfers. The regression reproduces the old failure
-and passes with the fix. Hardware also requires waiting for image loading
-before reset: a 60-second delay makes drive B accessible in the DOS probe,
-where the earlier three-second delay did not. The cached 50 MHz build now
-reaches Rusty's first stage with coherent player/enemy/HUD graphics, using a
-private disk copy that skips the opening program. The original opening
-transition, measured gameplay speed and sound quality remain unresolved.
+**Experimental: the default build still uses Zet.** The optional ao486 build
+runs on the SuperStation One and has passed hardware CPU, 64 MB physical-memory,
+XMS, disk and interrupt diagnostics at 50 MHz. Rusty reaches its title, intro
+and first-stage graphics; Nightslave reaches its title menu. Gameplay frame
+rate and audible music quality have not yet been measured. This is not a
+complete PC-9821 implementation or a DX4/Pentium performance claim.
 
-A reproduced OPNA bug can lose a one-cycle timer-clear write between sound
-clock enables, leaving the FM interrupt asserted. The source now consumes clears
-every CPU cycle and resets timer/channel/IRQ state explicitly. Timer A/B clear
-and repeat-IRQ simulations pass all enable phases at 20/40/50/60 MHz; the old
-source fails. The prior Integer50 hardware build also reproduces a lost clear
-after two timer-B IRQs. The fixed Native50 FPGA build passes 100 consecutive
-timer-B IRQ12 deliveries, checking status assertion/clear and cascaded PIC EOI.
-Audible music quality remains unverified. A separate
-[prefetch queue optimization](rtl/cpu/PREFETCH_STORE.md) passes CPU simulation
-without adding cycles; its first fit passes CPU-internal setup at 60 MHz.
-The subsequent [SDRAM write-path change](rtl/cpu/SDRAM_WRITE_BUNDLE.md) reduces
-the worst full-design violation from -5.898 to -3.120 ns. Capturing completed
-reads at CPU ACK reduces the next fit's worst setup violation to -2.289 ns
-and CPU-internal setup passes at +0.256 ns, but other timing failures remain.
-The preceding write-bundle/prefetch source passes reported timing at 50 MHz;
-its Bundle50 hardware build passes the FM IRQ and DOS file-persistence tests.
-Inherited RBFs are upstream artifacts, not releases of the new implementation.
+The current development features include:
+
+- **ao486 and memory:** optional 16/64 MB DDR-backed RAM and a conventional-RAM
+  cache. The 50 MHz hardware benchmark is about 2.31x faster for arithmetic and
+  2.13x for RAM copy than the matching 20 MHz build. Actual XMS allocation,
+  copy and free pass with both the limited and full-memory DOS profiles.
+- **PC-9801-86 sound:** OPNA/FM plus experimental PCM/FIFO/IRQ support. A lost
+  FM timer-clear write was fixed; Native50 and Bundle50 pass 100 consecutive
+  timer-B IRQ12 deliveries and cascaded PIC EOI. These silent diagnostics do
+  not certify musical timing or sound quality.
+- **Hard disk:** a raw `.vhd`/`.img` controller and floppy-installed disk BIOS
+  boot the owner's DOS 6.20 image. The optional bounded write BIOS persists
+  DOS files, verified independently against the resulting FAT and data sectors.
+  General geometry discovery and ROM-based HDD boot remain unfinished.
+- **Display:** native-aspect fit, exact integer fit and HDMI-only integer crop,
+  plus the supplied animated floppy indicator with D0/D1 captions. Hardware
+  reports 1728x1080 fit, 1280x800 integer fit and a centered 1920x1080 crop.
+  Standard 15 kHz SCART conversion is not implemented.
+
+Recent 50 MHz complete builds have no negative slack in the reported timing
+checks; SDRAM/HDMI board-I/O constraints remain incomplete. The 60 MHz builds
+are still undergoing timing work and have not been deployed. The latest
+50 MHz memory/video changes are being hardware-tested separately from the
+verified Bundle50 fallback. See [hardware evidence and limitations](HARDWARE_TESTING.md).
+
+DOS, BIOS ROMs, games and prepared private disk packages are not distributed
+in this repository. MIDI/MPU-401, optical-drive support, native HDI mounting,
+and native HDM/FDI/NFD selection are still pending. The import utility covers
+standard images described below. Doom II boots in software emulation, but
+its FPGA graphics are currently corrupt; it is not a supported playable title.
 
 ## Priorities
 
@@ -91,8 +77,8 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    test sector changed in the returned image.
    A private DOS 6.20 image now boots Rusty, Nightslave and Doom II in a
    software PC-98 emulator. Its [configuration templates](disk-templates/dos620/README.md)
-   provide six memory profiles and a game launcher; this does not establish
-   FPGA HDD boot. An [import utility](scripts/import_disk_image.py) converts
+   provide memory profiles and a game launcher. Four FPGA-oriented profiles
+   also boot on Bundle50; EMM386-based profiles remain software-emulator-only. An [import utility](scripts/import_disk_image.py) converts
    standard HDM/FDI/NFD-R0 floppies to D88 and 512-byte-sector HDI disks to raw
    images. Native selection of those additional container formats is pending.
 4. Add the PC-98 MIDI interface used by games and route it through MiSTer MidiLink
@@ -244,12 +230,12 @@ glitch is not claimed fixed until retested.
 
 ## Credits and provenance
 
-- **Puu / プー** — original Zet/98 PC-98 implementation and peripheral work.
+- **Puu / ãƒ—ãƒ¼** â€” original Zet/98 PC-98 implementation and peripheral work.
   [Original development blog](https://fpga8801.seesaa.net/category/22270192-1.html).
-- **dentnz** — [GitHub source import and MiSTer wrapper update](https://github.com/dentnz/Zet98_MiSTer).
-- **Zeus Gómez Marmolejo and the Zet contributors** — original Zet CPU.
-- **Alexey Melnikov / Sorgelig and MiSTer contributors** — MiSTer infrastructure.
-- **Aleksander Osman and ao486/MiSTer contributors** —
+- **dentnz** â€” [GitHub source import and MiSTer wrapper update](https://github.com/dentnz/Zet98_MiSTer).
+- **Zeus GÃ³mez Marmolejo and the Zet contributors** â€” original Zet CPU.
+- **Alexey Melnikov / Sorgelig and MiSTer contributors** â€” MiSTer infrastructure.
+- **Aleksander Osman and ao486/MiSTer contributors** â€”
   [ao486](https://github.com/MiSTer-devel/ao486_MiSTer), the replacement CPU.
 - [X68000 for MiSTer](https://github.com/MiSTer-devel/X68000_MiSTer) and
   [MidiLink](https://github.com/MiSTer-devel/MidiLink_MiSTer) are storage/MIDI

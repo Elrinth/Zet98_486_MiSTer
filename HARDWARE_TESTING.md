@@ -162,7 +162,7 @@ the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
-engine; slots 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3 could never complete their host transfers. The disk engine
+engine; slots 1ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
 later System-disk writes. This can prevent Opening-disk loading and is
 consistent with the mount-order stall. The hardware retests below confirm
@@ -857,7 +857,7 @@ FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
 FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
 closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
 shows PASS. An independent full-image comparison at 14:48:25 finds exactly
-140 changed sectors, confined to FAT/root metadata and clusters 7026ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ7030.
+140 changed sectors, confined to FAT/root metadata and clusters 7026ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ7030.
 A stricter metadata audit confirms all unrelated FAT and directory entries
 are identical to the pristine archive. Both FAT copies agree. The extracted
 payload also matches on the host, SHA-256
@@ -986,3 +986,32 @@ the FPGA-profile menu at 16:22:14. The private installation ZIP contains the
 verified Bundle50 RBF, owner ROM, pristine VHD, loader, scoped configuration
 and that launcher. Archive CRC and all payload SHA-256 checks pass. Nothing
 from the ROM/DOS/game package is included in source control.
+
+### Metadata50 timing and isolated CPU comparison
+
+`quartus-20260921-161512-c13500` (8a64ed1) completes in 32m57s with
+33925 ALMs, 453 RAM blocks and 66 DSPs. All reported timing checks are
+nonnegative; minimum reported slack is +0.075 ns. It includes CPU decode
+and segment changes, completed-read capture, GDC/floppy data bundles,
+registered FEC-buffer output, video settings and the caption pipeline.
+It predates the palette and OSD settings changes. Board-I/O constraint
+coverage remains incomplete.
+
+The RBF SHA-256 is
+`1f231364079a8d5fe75c3331e3db717a37c40dc20ff4579cdd7edcbd07807bdc`.
+An isolated FM diagnostic on this build was loaded at 16:50:33 device time.
+The 16:53:04 capture and returned Z98FM.TXT confirm 100 timer-B IRQ12
+deliveries, status assertion/clear and cascaded PIC EOI. The test is silent;
+real music quality remains unverified. The private hard-disk/profile launcher
+was loaded at 16:55:41 for the next boot/XMS check. Bundle50 remains available
+as the fallback.
+
+The segment-change CPU-only 66 MHz fit regresses to 59.55 MHz Fmax and
+-1.642 ns worst setup, versus 61.08 MHz / -1.221 ns for decode-only.
+The worst path moves to read_commands through readiness and decode logic.
+This is not evidence of faster hardware. A separate probe with physical
+register retiming disabled is in progress; no production setting changed.
+
+The Bundle50 package launcher without a D1 carrier launches Rusty at
+16:33:44 and shows a coherent castle intro in the 16:41:01 capture.
+Still images do not measure gameplay frame rate or audio quality.

@@ -16,5 +16,11 @@ The full CPU smoke test and both cached coherency/benchmark configurations
 pass with unchanged cycle counts. Actual ao486 protected-mode memory,
 unaligned writes, REP MOVSD, DDR instruction fetch, reset and the DOS
 probe's return to real mode pass at both 16 MB and 64 MB. The 64 MB probe
-rejects a deliberately restricted 16 MB map. Physical timing of this
-segment change and hardware testing remain pending.
+rejects a deliberately restricted 16 MB map.
+
+The isolated 66 MHz fit with this change reports 59.55 MHz Fmax and
+-1.642 ns worst setup, worse than the decode-only 61.08 MHz / -1.221 ns.
+The former segment path is no longer the worst path; the new worst path
+runs from read_commands through pipeline readiness and instruction decode.
+This is a physical-fit regression, not a measured speed improvement.
+The complete-core 50/60 MHz fits and hardware validation remain pending.

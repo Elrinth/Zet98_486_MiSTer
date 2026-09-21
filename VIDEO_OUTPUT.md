@@ -147,3 +147,24 @@ mid-run reset and all pixel indices. Outputs are checked at the video edge
 and between edges; CPU readback is checked independently. Deliberately using
 the live CPU bank fails the between-edge check. Complete FPGA timing and
 hardware validation of this palette change are pending.
+
+## OSD configuration timing
+
+The 5bab734 60 MHz fit also reports a -0.534 ns hold violation from
+OSD infoh to its video-domain horizontal counter. Menu enable, geometry,
+rotation and info-mode settings now pass through two video-clock registers
+before coordinate arithmetic. Pixel, sync and OSD-buffer pipelines are
+unchanged. All crossings retain normal setup/hold checks; there is no new
+false path or claim of an asynchronous multi-bit handshake.
+
+`tests/run-osd-video.sh` compares against the unchanged original menu with
+CPU writes through its real command interface. Eight configurations cover
+info mode, ordinary menus, all four rotations, disable and 320x200/640x400
+rasters at 50 and 60 MHz CPU clocks. It checks 3,411,200 pixel/sync results,
+requires actual overlay pixels in enabled cases and checks every settings
+pipeline update. A deliberately bypassed stage fails. Because the inherited
+OSD lacks reset for some registers, both simulation models explicitly use
+zero-initialized two-state registers; this does not test analog power-up
+behavior or metastability. `tests/Dockerfile.video` provides Verilator for
+fast full-frame runs, with an Icarus fallback. Full FPGA timing and hardware
+validation of the OSD change are pending.
