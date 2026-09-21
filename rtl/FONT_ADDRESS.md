@@ -99,3 +99,12 @@ the two halves of row-09 S exactly match original offsets `1e60`/`1e70`.
 This confirms the source defects on hardware; it does not yet validate the
 corrected RBF. Capture SHA-256:
 `ce6941ff44c359a35702751b7e39288552282c4d32c51cd6a7152c2c0eff507c`.
+
+FontMap50 (`971ace7`, built before the third-bank loader fix) passed all
+sixteen reported timing-corner categories, minimum +0.095 ns, and the
+SPI/I2C/UART fitted-pin guards. On hardware on 2026-09-22, the same probe
+reduces mismatches from 395 to 29 of 736 sample pairs, with zero unstable
+reads. The remaining mismatches are the absent third-bank glyph `535c`;
+the tested ANK and row-09 letters now match the working ROM. Capture SHA-256:
+`52d0641706aa921a9c579b10adae27f05b176ce74e3e005034ec91e393431eb0`.
+The third-bank fix still needs a new FPGA build and hardware capture.
