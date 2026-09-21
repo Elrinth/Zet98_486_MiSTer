@@ -15,7 +15,7 @@ if {[get_collection_size $system_clock] != 1} {
 report_timing -setup -from_clock $system_clock -to_clock $system_clock -npaths 6 -nworst 1 -detail full_path -file output_files/system-setup-paths.txt
 # Overall worst paths can all end in the CPU. Also expose the worst incoming
 # paths for each peripheral clock so CPU improvements do not hide other limits.
-foreach {domain pattern} {memory {*emu*general?0?*divclk} video {*emu*general?2?*divclk}} {
+foreach {domain pattern} {incoming-system {*emu*general?1?*divclk} memory {*emu*general?0?*divclk} video {*emu*general?2?*divclk}} {
     set domain_clock [get_clocks $pattern]
     if {[get_collection_size $domain_clock] != 1} {
         error "Expected exactly one $domain clock"
@@ -27,5 +27,18 @@ if {[get_collection_size $cpu_registers] == 0} {
     error "CPU registers were not found"
 }
 report_timing -setup -from $cpu_registers -to $cpu_registers -npaths 6 -nworst 1 -detail full_path -file output_files/cpu-setup-paths.txt
+# The default slow/hot corner does not expose cold-corner hold/removal
+# failures. Keep each available corner separate so no result is overwritten.
+set corner 0
+foreach_in_collection condition [get_available_operating_conditions] {
+    set_operating_conditions $condition
+    update_timing_netlist
+    puts "CORNER $corner: model=[get_operating_conditions_info $condition -model] temperature=[get_operating_conditions_info $condition -temperature]"
+    foreach check {setup hold recovery removal} {
+        report_timing -$check -npaths 6 -nworst 1 -detail full_path -file output_files/corner-${corner}-${check}.txt
+    }
+    report_timing -setup -to_clock $system_clock -npaths 6 -nworst 1 -detail full_path -file output_files/corner-${corner}-incoming-system.txt
+    incr corner
+}
 delete_timing_netlist
 project_close

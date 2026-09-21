@@ -8,7 +8,8 @@ ENTITY SDRAMC IS
 		CLKMHZ			:integer	:=100;			--MHz
 		REFCYC			:integer	:=64000/8192;	--usec
         CPU_WRITE_BUNDLE : boolean := false;
-        SUB_WRITE_BUNDLE : boolean := false
+        SUB_WRITE_BUNDLE : boolean := false;
+        FLOPPY_REQUEST_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -170,6 +171,11 @@ signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector
 signal sub_read_words, sub_write_words : cpu_words_t;
 signal sub_write_source, sub_write_crossing, sub_write_memory : std_logic_vector(79 downto 0);
 
+signal fde_request_source, fde_request_crossing, fde_request_memory : std_logic_vector(ADRWIDTH+17 downto 0);
+signal fec_request_source, fec_request_crossing, fec_request_memory : std_logic_vector(ADRWIDTH+17 downto 0);
+signal fde_address, fec_address : std_logic_vector(ADRWIDTH+1 downto 0);
+signal fde_read_data, fec_read_data : std_logic_vector(15 downto 0);
+signal fde_write_data, fec_write_data : std_logic_vector(15 downto 0);
 signal	lFDEADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	lFECADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	smemdat		:std_logic_vector(15 downto 0);
@@ -198,6 +204,7 @@ signal VIDdone_sync : std_logic_vector(1 downto 0);
 attribute preserve : boolean;
 attribute preserve of cpu_write_source, cpu_write_memory : signal is true;
 attribute preserve of sub_write_source, sub_write_memory : signal is true;
+attribute preserve of fde_request_source, fde_request_memory, fec_request_source, fec_request_memory : signal is true;
 attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
 attribute altera_attribute : string;
 attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
@@ -222,6 +229,65 @@ signal	MEMDATOE	:STD_LOGIC;
 
 signal	SUBREQS	:std_logic;
 begin
+
+    fde_request_crossing <= fde_request_source; -- FDE_REQUEST_BUNDLE_TRANSPORT
+    fec_request_crossing <= fec_request_source; -- FEC_REQUEST_BUNDLE_TRANSPORT
+    floppy_bundle : if FLOPPY_REQUEST_BUNDLE generate
+        -- These are the same acceptance conditions as FDEREQ/FECREQ.
+        -- The held address/data reach memory with the corresponding JOB.
+        process(FDECLK) begin
+            if rising_edge(FDECLK) then
+                if (FDEWR='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_WR)) or
+                   (FDEWR='0' and FDERD='1' and (lfdestb='0' or lFDEADR/=FDEADR or lFDEJOB/=JOB_RD)) then
+                    fde_request_source <= FDEADR & FDEWDAT;
+                end if;
+            end if;
+        end process;
+        process(FECCLK) begin
+            if rising_edge(FECCLK) then
+                if (FECWR='1' or FECRD='1') and (lfecstb='0' or lFECADR/=FECADR) then
+                    fec_request_source <= FECADR & FECWDAT;
+                end if;
+            end if;
+        end process;
+        process(memclk) begin
+            if rising_edge(memclk) then
+                if lFDEREQ="011" then -- FDE_REQUEST_BUNDLE_ADMISSION
+                    fde_request_memory <= fde_request_crossing;
+                end if;
+                if lFECREQ="011" then -- FEC_REQUEST_BUNDLE_ADMISSION
+                    fec_request_memory <= fec_request_crossing;
+                end if;
+            end if;
+        end process;
+        process(FDECLK,rstn) begin
+            if rstn='0' then
+                FDERDAT <= (others=>'0');
+            elsif rising_edge(FDECLK) then
+                if fdeend='1' then -- FDE_READ_COMPLETION_CAPTURE
+                    FDERDAT <= fde_read_data;
+                end if;
+            end if;
+        end process;
+        process(FECCLK,rstn) begin
+            if rstn='0' then
+                FECRDAT <= (others=>'0');
+            elsif rising_edge(FECCLK) then
+                if fecend='1' then -- FEC_READ_COMPLETION_CAPTURE
+                    FECRDAT <= fec_read_data;
+                end if;
+            end if;
+        end process;
+        fde_address <= fde_request_memory(ADRWIDTH+17 downto 16);
+        fec_address <= fec_request_memory(ADRWIDTH+17 downto 16);
+        fde_write_data <= fde_request_memory(15 downto 0);
+        fec_write_data <= fec_request_memory(15 downto 0);
+    end generate;
+    legacy_floppy_request : if not FLOPPY_REQUEST_BUNDLE generate
+        FDERDAT <= fde_read_data; FECRDAT <= fec_read_data;
+        fde_address <= FDEADR; fec_address <= FECADR;
+        fde_write_data <= FDEWDAT; fec_write_data <= FECWDAT;
+    end generate;
 
     sub_write_crossing <= sub_write_source; -- SUB_WRITE_BUNDLE_TRANSPORT
     sub_bundle : if SUB_WRITE_BUNDLE generate
@@ -1847,9 +1913,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=FDEADR(ADRWIDTH+1);
-						MEMBA0		<=FDEADR(ADRWIDTH);
-						MEMADR		<=FDEADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=fde_address(ADRWIDTH+1);
+						MEMBA0		<=fde_address(ADRWIDTH);
+						MEMADR		<=fde_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						FDEJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1860,9 +1926,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=FDEADR(ADRWIDTH+1);
-						MEMBA0		<=FDEADR(ADRWIDTH);
-						MEMADR		<="000" & FDEADR(9 downto 0);
+						MEMBA1		<=fde_address(ADRWIDTH+1);
+						MEMBA0		<=fde_address(ADRWIDTH);
+						MEMADR		<="000" & fde_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 =>		--precharge all
 						MEMCKE		<='1';
@@ -1927,9 +1993,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=FDEADR(ADRWIDTH+1);
-						MEMBA0		<=FDEADR(ADRWIDTH);
-						MEMADR		<=FDEADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=fde_address(ADRWIDTH+1);
+						MEMBA0		<=fde_address(ADRWIDTH);
+						MEMADR		<=fde_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						FDEJOB<=JOB_NOP;
 					when 2 =>		--write command & send word
@@ -1940,10 +2006,10 @@ begin
 						MEMWE_N		<='0';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=FDEADR(ADRWIDTH+1);
-						MEMBA0		<=FDEADR(ADRWIDTH);
-						MEMADR		<="000" & FDEADR(9 downto 0);
-						MEMDAT		<=FDEWDAT;
+						MEMBA1		<=fde_address(ADRWIDTH+1);
+						MEMBA0		<=fde_address(ADRWIDTH);
+						MEMADR		<="000" & fde_address(9 downto 0);
+						MEMDAT		<=fde_write_data;
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -1995,9 +2061,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=FECADR(ADRWIDTH+1);
-						MEMBA0		<=FECADR(ADRWIDTH);
-						MEMADR		<=FECADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=fec_address(ADRWIDTH+1);
+						MEMBA0		<=fec_address(ADRWIDTH);
+						MEMADR		<=fec_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						FECJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -2008,9 +2074,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=FECADR(ADRWIDTH+1);
-						MEMBA0		<=FECADR(ADRWIDTH);
-						MEMADR		<="000" & FECADR(9 downto 0);
+						MEMBA1		<=fec_address(ADRWIDTH+1);
+						MEMBA0		<=fec_address(ADRWIDTH);
+						MEMADR		<="000" & fec_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 =>		--precharge all
 						MEMCKE		<='1';
@@ -2075,9 +2141,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=FECADR(ADRWIDTH+1);
-						MEMBA0		<=FECADR(ADRWIDTH);
-						MEMADR		<=FECADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=fec_address(ADRWIDTH+1);
+						MEMBA0		<=fec_address(ADRWIDTH);
+						MEMADR		<=fec_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						FECJOB<=JOB_NOP;
 					when 2 =>		--write command & send word
@@ -2088,10 +2154,10 @@ begin
 						MEMWE_N		<='0';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=FECADR(ADRWIDTH+1);
-						MEMBA0		<=FECADR(ADRWIDTH);
-						MEMADR		<="000" & FECADR(9 downto 0);
-						MEMDAT		<=FECWDAT;
+						MEMBA1		<=fec_address(ADRWIDTH+1);
+						MEMBA0		<=fec_address(ADRWIDTH);
+						MEMADR		<="000" & fec_address(9 downto 0);
+						MEMDAT		<=fec_write_data;
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -2263,8 +2329,8 @@ begin
 			VIDDAT1		<=(others=>'0');
 			VIDDAT2		<=(others=>'0');
 			VIDDAT3		<=(others=>'0');
-			FDERDAT		<=(others=>'0');
-			FECRDAT		<=(others=>'0');
+			fde_read_data		<=(others=>'0');
+			fec_read_data		<=(others=>'0');
 			lSTATE		<=ST_REFRESH;
 			lclkcount	<=clkcount;
 		elsif(memclk' event and memclk='1')then
@@ -2315,11 +2381,11 @@ begin
 				end case;
 			when ST_FDEREAD =>
 				if(lclkcount=6)then
-					FDERDAT<=SMEMDAT;
+					fde_read_data<=SMEMDAT;
 				end if;
 			when ST_FECREAD =>
 				if(lclkcount=6)then
-					FECRDAT<=SMEMDAT;
+					fec_read_data<=SMEMDAT;
 				end if;
 			when others =>
 			end case;

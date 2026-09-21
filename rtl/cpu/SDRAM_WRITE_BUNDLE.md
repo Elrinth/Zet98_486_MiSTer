@@ -73,3 +73,14 @@ memory operation nor an acknowledgement cycle is added. Only the held
 80-bit source-to-admission bundle receives the same bounded 15 ns constraint;
 request, completion, read results and normal hold checks remain timed.
 Integrated timing and hardware verification of this GDC change are pending.
+
+The floppy emulator (FDE) and image-transfer (FEC) ports also capture their
+40-bit address/data payload with request acceptance, then with memory-side
+JOB admission. This removes the live seek/address calculation from the
+memory state-machine path. Return words are captured with the existing
+WAIT release; no memory command or wait cycle is added. The 15 ns constraint
+covers only the held payload registers. Tests pass 12,288 buffered and 2,048
+legacy requests across both ports, six source rates/four phases, poisoned
+live pins after acceptance, and four deliberately late payload/read controls.
+The CPU, drawing and scanout regressions also pass. FPGA timing and hardware
+validation of this floppy change remain pending.

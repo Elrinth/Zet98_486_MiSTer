@@ -28,3 +28,15 @@ if {[get_collection_size $sub_write_source] < 80 ||
     error "Expected complete 80-bit GDC write set/preserve bundle endpoints"
 }
 set_max_delay -from $sub_write_source -to $sub_write_memory 15.000
+
+# Floppy buffer address/data use independent source and admission registers.
+# Their 40-bit payloads (22-bit word address, bank, data) share the same
+# three-stage request deadline; controls and return data stay normally timed.
+foreach port {fde fec} {
+    set source [get_registers "*|ram|${port}_request_source*"]
+    set destination [get_registers "*|ram|${port}_request_memory*"]
+    if {[get_collection_size $source] < 40 || [get_collection_size $destination] < 40} {
+        error "Expected complete 40-bit $port request bundle endpoints"
+    }
+    set_max_delay -from $source -to $destination 15.000
+}

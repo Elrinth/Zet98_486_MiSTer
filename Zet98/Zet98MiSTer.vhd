@@ -284,7 +284,8 @@ component SDRAMC
 		CLKMHZ			:integer	:=100;			--MHz
 		REFCYC			:integer	:=64000/8192;	--usec
         CPU_WRITE_BUNDLE : boolean := false;
-        SUB_WRITE_BUNDLE : boolean := false
+        SUB_WRITE_BUNDLE : boolean := false;
+        FLOPPY_REQUEST_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -2285,7 +2286,7 @@ begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
 
-	ram	:SDRAMC generic map(22,100,64000/8192,true,true) port map(
+	ram	:SDRAMC generic map(22,100,64000/8192,true,true,true) port map(
 		-- SDRAM PORTS
 		PMEMCKE			=>pMemCke,
 		PMEMCS_N			=>pMemCs_n,

@@ -162,7 +162,7 @@ the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
-engine; slots 1–3 could never complete their host transfers. The disk engine
+engine; slots 1â€“3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
 later System-disk writes. This can prevent Opening-disk loading and is
 consistent with the mount-order stall. The hardware retests below confirm
@@ -857,7 +857,7 @@ FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
 FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
 closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
 shows PASS. An independent full-image comparison at 14:48:25 finds exactly
-140 changed sectors, confined to FAT/root metadata and clusters 7026–7030.
+140 changed sectors, confined to FAT/root metadata and clusters 7026â€“7030.
 A stricter metadata audit confirms all unrelated FAT and directory entries
 are identical to the pristine archive. Both FAT copies agree. The extracted
 payload also matches on the host, SHA-256
@@ -881,4 +881,7 @@ The profile menu saved LIMITED at 14:57:35 on September 21. After reload at
 free XMS (hex 37C0), a 1 MB block at physical 00110000, both-end copy/readback,
 unlock/free and full recovery of the free count. The returned diagnostic
 floppy contains the same result. The full FPGA profile was saved again at
-15:09:46; its new boot/API verification is pending.
+15:09:46. After reload at 15:10:37, DOS reached the FPGA menu. The
+15:16:25 screenshot and returned log pass the 64 MB diagnostic: 63,424 KB
+free (hex F7C0), a 17 MB block at physical 01000000, both-end verification
+and recovery of the full free count after unlock/free.

@@ -16,6 +16,7 @@ bash tests/run-extmem-bridge.sh
 bash tests/run-sdram.sh
 bash tests/run-sdram-write-bundle.sh
 bash tests/run-sub-write-bundle.sh
+bash tests/run-floppy-sdram.sh
 bash tests/run-video-sdram.sh
 bash tests/run-graphics-address.sh
 bash tests/run-text-pixel-memory.sh
