@@ -103,9 +103,9 @@ signal	tramdatl	:std_logic_vector(15 downto 0);
 
 begin
 
-	-- Register the CPU-domain text settings before address arithmetic or glyph comparison.
+	-- Register the parent-video-clock text settings before address arithmetic or glyph comparison.
 	-- These clocks share the PLL and remain fully timed: the short register
-	-- crossing replaces a CPU-to-pixel compare/invert path with only 6.666 ns.
+	-- crossing keeps address/compare logic wholly in the pixel clock domain.
 	-- Settings take effect one pixel later without changing scan timing.
 	process(clk,rstn)begin
 		if rstn='0' then

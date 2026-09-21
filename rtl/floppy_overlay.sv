@@ -37,8 +37,11 @@ module floppy_overlay #(
     wire box=enabled_sync && sized && hold_frames!=0 && in_de &&
         x>=box_left && x<box_right && y>=box_top && y<box_bottom;
     wire [6:0] dx=x-box_left, dy=y-box_top;
-    wire disk_pixel=box && dx>=19 && dx<69 && dy<56;
-    wire [17:0] rom_address=disk_pixel ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
+    // The ROM only needs a bounded local address. Global box/enable tests
+    // mask the output separately and must not lengthen the RAM address path.
+    wire rom_in_range=dx>=19 && dx<69 && dy<56;
+    wire disk_pixel=box && rom_in_range;
+    wire [17:0] rom_address=rom_in_range ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
     (* ramstyle="M10K" *) reg [1:0] pixels[0:165199];
     reg [1:0] rom_pixel;
     initial $readmemb(ROM_FILE,pixels);

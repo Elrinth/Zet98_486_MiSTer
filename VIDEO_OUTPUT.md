@@ -78,6 +78,8 @@ and clock enable have the same two-clock pipeline latency.
 Crop validation and indicator bounds are calculated in three register stages
 starting at vertical sync. This removes crop arithmetic from the caption's
 per-pixel path and keeps indicator placement fixed during the visible frame.
+ROM addressing uses only bounded local disk coordinates; the larger global
+rectangle/enable test masks the final output without gating the ROM address.
 
 ## Graphics scanout correction
 
@@ -93,7 +95,12 @@ Only the two existing starting-address windows are exposed. The second window
 continues to the bottom of the screen; additional parameter-RAM partitions,
 wrapping through drawing-pattern RAM, and display zoom remain unsupported.
 Graphics and text GDC settings are registered before pixel-domain address
-arithmetic, with their clock crossings still timed. VTIMING now delivers its
+arithmetic, with their clock crossings still timed. CRTC98 first stages these
+settings on the 75 MHz parent clock: direct CPU-to-pixel transfers required
+hold-fixing route delay for one divider phase that then missed setup in another.
+This adds one parent-clock cycle to settings updates without retiming the raster,
+pixel data or palette. The parent-clock change is awaiting its full-fit result.
+VTIMING now delivers its
 counters directly to pixel-clocked consumers, removing the previous
 pixel-to-75-MHz-to-pixel round trip. The sampled raster coordinates and
 line/frame pulses are unchanged. Full-frame counter checks, text rendering,

@@ -280,7 +280,74 @@ signal KNJFNT_ADDR	:std_logic_vector(16 downto 0);
 signal KNJFNT_SEL		:std_logic_vector(1 downto 0);
 signal ETRAM_ADRX	:std_logic_Vector(11 downto 0);
 
+-- Stage GDC settings on the parent video clock before the pixel registers.
+signal tbaseaddr_video : std_logic_vector(12 downto 0);
+signal tpitch_video : std_logic_vector(7 downto 0);
+signal hmode_video : std_logic;
+signal vlines_video : std_logic_vector(4 downto 0);
+signal curaddr_video : std_logic_vector(12 downto 0);
+signal cure_video : std_logic;
+signal curupper_video : integer range 0 to 19;
+signal curlower_video : integer range 0 to 19;
+signal cblink_video : std_logic;
+signal blinkrate_video : std_logic_vector(4 downto 0);
+signal gbaseaddr0_video : std_logic_vector(13 downto 0);
+signal gbaseaddr1_video : std_logic_vector(13 downto 0);
+signal glinenum0_video : std_logic_vector(9 downto 0);
+signal glinenum1_video : std_logic_vector(9 downto 0);
+signal gpitch_video : std_logic_vector(7 downto 0);
+signal dotpline_video : std_logic_vector(4 downto 0);
+signal graphen_video : std_logic;
+signal lowbl_video : std_logic;
+
 begin
+	-- The resettable divide-by-three pixel clock has three possible phases.
+	-- Direct CPU-to-pixel paths needed enough route delay for one phase's hold
+	-- check that another phase missed setup. This parent-clock stage splits
+	-- the transfer; both crossings keep their normal setup/hold constraints.
+	-- No scan counters, pixel data or palette values pass through this stage.
+	process(clk,rstn) begin
+		if rstn='0' then
+			tbaseaddr_video <= (others=>'0');
+			tpitch_video <= (others=>'0');
+			hmode_video <= '0';
+			vlines_video <= (others=>'0');
+			curaddr_video <= (others=>'0');
+			cure_video <= '0';
+			curupper_video <= 0;
+			curlower_video <= 0;
+			cblink_video <= '0';
+			blinkrate_video <= (others=>'0');
+			gbaseaddr0_video <= (others=>'0');
+			gbaseaddr1_video <= (others=>'0');
+			glinenum0_video <= (others=>'0');
+			glinenum1_video <= (others=>'0');
+			gpitch_video <= (others=>'0');
+			dotpline_video <= (others=>'0');
+			graphen_video <= '0';
+			lowbl_video <= '0';
+		elsif rising_edge(clk) then
+			tbaseaddr_video <= TBASEADDR;
+			tpitch_video <= TPITCH;
+			hmode_video <= HMODE;
+			vlines_video <= VLINES;
+			curaddr_video <= CURADDR;
+			cure_video <= CURE;
+			curupper_video <= CURUPPER;
+			curlower_video <= CURLOWER;
+			cblink_video <= CBLINK;
+			blinkrate_video <= BLINKRATE;
+			gbaseaddr0_video <= GBASEADDR0;
+			gbaseaddr1_video <= GBASEADDR1;
+			glinenum0_video <= GLINENUM0;
+			glinenum1_video <= GLINENUM1;
+			gpitch_video <= GPITCH;
+			dotpline_video <= DOTPLINE;
+			graphen_video <= GRAPHEN;
+			lowbl_video <= LOWBL;
+		end if;
+	end process;
+
 	TIM	:vtiming generic map(
 	DOTPU	=>DOTPU,
 	HWIDTH	=>HWIDTH,
@@ -311,17 +378,17 @@ begin
 		BITOUT	=>T_BIT,
 		COLOR	=>TCOLOR,
 		
-		CURADDR	=>CURADDR,
-		CURE	=>CURE,
-		CURUPPER=>CURUPPER,
-		CURLOWER=>CURLOWER,
-		CBLINK	=>CBLINK,
-		BLINKRATE=>BLINKRATE,
+		CURADDR	=>curaddr_video,
+		CURE	=>cure_video,
+		CURUPPER=>curupper_video,
+		CURLOWER=>curlower_video,
+		CBLINK	=>cblink_video,
+		BLINKRATE=>blinkrate_video,
 		
-		BASEADDR=>TBASEADDR,
-		HMODE	=>HMODE,
-		VLINES	=>VLINES,
-		PITCH	=>TPITCH,
+		BASEADDR=>tbaseaddr_video,
+		HMODE	=>hmode_video,
+		VLINES	=>vlines_video,
+		PITCH	=>tpitch_video,
 		
 		UCOUNT	=>UCOUNT,
 		HUCOUNT	=>HUCOUNT,
@@ -379,9 +446,9 @@ begin
 		DOTOUT	=>G_DOT,
 		DOTE	=>G_DOTE,
 
-		GRAPHEN	=>GRAPHEN,
-		DOTPLINE=>DOTPLINE,
-		BLANK	=>LOWBL,
+		GRAPHEN	=>graphen_video,
+		DOTPLINE=>dotpline_video,
+		BLANK	=>lowbl_video,
 		
 		UCOUNT	=>UCOUNT,
 		HUCOUNT	=>HUCOUNT,
@@ -389,11 +456,11 @@ begin
 		HCOMP	=>HCOMP,
 		VCOMP	=>VCOMP,
 
-		BASEADDR0=>GBASEADDR0,
-		BASEADDR1=>GBASEADDR1,
-		LINENUM0=>GLINENUM0,
-		LINENUM1=>GLINENUM1,
-		PITCH	=>GPITCH,
+		BASEADDR0=>gbaseaddr0_video,
+		BASEADDR1=>gbaseaddr1_video,
+		LINENUM0=>glinenum0_video,
+		LINENUM1=>glinenum1_video,
+		PITCH	=>gpitch_video,
 		
 		clk		=>clk3,
 		rstn	=>pixel_rstn
