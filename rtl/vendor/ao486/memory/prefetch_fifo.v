@@ -70,7 +70,8 @@ assign prefetchfifo_accept_empty = empty && ~bypass;
 
 simple_fifo_mlab #(
     .width      (36),
-    .widthu     (4)
+    .widthu     (4),
+    .speculative_store (1)
 )
 prefetch_fifo_inst(
     .clk        (clk),      //input
@@ -79,6 +80,10 @@ prefetch_fifo_inst(
     
     .rdreq      (prefetchfifo_accept_do),                                                               //input
     .wrreq      ((prefetchfifo_write_do && (~empty || ~prefetchfifo_accept_do)) || prefetchfifo_signal_limit_do || prefetchfifo_signal_pf_do),   //input
+    // Keep empty-queue bypass and queue occupancy unchanged. The spare
+    // physical slots let RAM store control depend only on arriving data,
+    // removing decode/execute backpressure from the MLAB write-enable path.
+    .store      (prefetchfifo_write_do || prefetchfifo_signal_limit_do || prefetchfifo_signal_pf_do),
     .data       ((prefetchfifo_signal_limit_do)? { `PREFETCH_GP_FAULT, 32'd0 } :
                  (prefetchfifo_signal_pf_do)?    { `PREFETCH_PF_FAULT, 32'd0 } :
                                                      prefetchfifo_write_data),                          //input [35:0]

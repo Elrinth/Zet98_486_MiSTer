@@ -59,7 +59,9 @@ python tests/pc98_ide_bios_unicorn.py build/ide-bios-test.bin
 owner's private prepared VHD. It temporarily hooks INT 1Bh, checks geometry,
 IPL/partition checksums, a CHS boundary and a 64 KB linear read, restores the
 old handler, then saves Z98HDRO.TXT on its disposable floppy. It does not boot
-the hard disk. Its hardware result is pending.
+the hard disk. On the Native50 FPGA build it passes all checks against the
+prepared 568336384-byte VHD, including the full 64 KB read. The VHD was only
+read; the diagnostic result was saved to its separate disposable floppy.
 
 ## Calling-convention references
 

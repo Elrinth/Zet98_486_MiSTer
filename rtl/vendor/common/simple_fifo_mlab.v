@@ -27,7 +27,8 @@
 module simple_fifo_mlab
 #(
    parameter width     = 1,
-   parameter widthu    = 1
+   parameter widthu    = 1,
+   parameter speculative_store = 0
 )
 (
     input                       clk,
@@ -36,6 +37,7 @@ module simple_fifo_mlab
     
     input                       rdreq,
     input                       wrreq,
+    input                       store,
     input       [width-1:0]     data,
     
     output                      empty,
@@ -45,23 +47,26 @@ module simple_fifo_mlab
 );
 
 
-reg [width-1:0] mem [(2**widthu)-1:0];
-
-reg [widthu-1:0] rd_index = 0;
-reg [widthu-1:0] wr_index = 0;
+// Speculative stores write a free physical slot before the late logical
+// enqueue decision. Twice the logical capacity ensures wr_index never names
+// live data, even when full: the pointers can be at most 2**widthu apart.
+// Only an accepted wrreq advances wr_index or makes that data visible.
+localparam pointer_width = widthu + speculative_store;
+reg [pointer_width-1:0] rd_index = 0;
+reg [pointer_width-1:0] wr_index = 0;
 
 assign empty= usedw == 0 && ~(full);
 
 always @(posedge clk) begin
     if(rst_n == 1'b0)           rd_index <= 0;
     else if(sclr)               rd_index <= 0;
-    else if(rdreq && ~(empty))  rd_index <= rd_index + { {widthu-1{1'b0}}, 1'b1 };
+    else if(rdreq && ~(empty))  rd_index <= rd_index + 1'b1;
 end
 
 always @(posedge clk) begin
     if(rst_n == 1'b0)                       wr_index <= 0;
     else if(sclr)                           wr_index <= 0;
-    else if(wrreq && (~(full) || rdreq))    wr_index <= wr_index + { {widthu-1{1'b0}}, 1'b1 };
+    else if(wrreq && (~(full) || rdreq))    wr_index <= wr_index + 1'b1;
 end
 
 always @(posedge clk) begin
@@ -85,7 +90,7 @@ altdpram	altdpram_component (
 			.outclock (clk),
 			.rdaddress (rd_index),
 			.wraddress (wr_index),
-			.wren (wrreq && (~(full) || rdreq)),
+			.wren (speculative_store ? store : (wrreq && (~(full) || rdreq))),
 			.q (q),
 			.aclr (1'b0),
 			.byteena (1'b1),
@@ -109,11 +114,18 @@ defparam
 	altdpram_component.rdcontrol_reg = "UNREGISTERED",
 	altdpram_component.read_during_write_mode_mixed_ports = "CONSTRAINED_DONT_CARE",
 	altdpram_component.width = width,
-	altdpram_component.widthad = widthu,
+	altdpram_component.widthad = pointer_width,
 	altdpram_component.width_byteena = 1,
 	altdpram_component.wraddress_aclr = "OFF",
 	altdpram_component.wraddress_reg = "INCLOCK",
 	altdpram_component.wrcontrol_aclr = "OFF",
 	altdpram_component.wrcontrol_reg = "INCLOCK";
+
+// synthesis translate_off
+always @(posedge clk) begin
+    if (speculative_store && rst_n && !sclr && wrreq && (!full || rdreq) && !store)
+        $fatal(1, "Logical FIFO write without its physical store");
+end
+// synthesis translate_on
 
 endmodule

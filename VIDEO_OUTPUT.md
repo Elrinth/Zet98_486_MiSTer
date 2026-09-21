@@ -46,8 +46,11 @@ to fractional native fit.
 320x240 source measurements, crop pixel coordinates, CE stalls, exact-fit cases,
 mode changes and small-output fallback. The previous V-Integer mode's
 1066x800 viewport was measured on hardware, but it intentionally changed the
-640:400 source proportions to 4:3. It is no longer the default. The new choices
-await FPGA fitting and hardware viewport checks.
+640:400 source proportions to 4:3. It is no longer the default. Native50 fits
+with no negative reported timing slack. Hardware scaler metadata confirms
+640x400 to 1728x1080 for Fit native and 640x400 to 1280x800 for Integer fit.
+These metadata readings are not measurements of the physical HDMI transport.
+Integer zoom still awaits its hardware viewport/crop check.
 
 ## Analogue output
 
@@ -114,8 +117,10 @@ release phases pass simulation.
 The full FPGA fit confirms the corrected quoted QSF destination uses a global
 clock network; the build script rejects a missing assignment. Global routing
 alone did not close timing: it exposed the counter round trip and text-address
-paths addressed above. The new changes still require a passing full timing
-report and hardware checks before they can be called stable.
+paths addressed above. Native50 now passes the reported timing checks, but
+SDRAM/HDMI board-I/O constraints remain incomplete. Hardware diagnostic text
+and Rusty's title screen render coherently; sustained gameplay and physical
+output stability still need testing.
 
 `tests/run-graphics-address.sh` checks both complete frames at split lengths
 1, 3, 200, 400, 513, 1023 and zero, repeat counts 0/1/3/31, 14-bit VRAM wrap,

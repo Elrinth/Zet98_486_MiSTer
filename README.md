@@ -19,8 +19,10 @@ frame-rate or DX4-100 performance claim yet.
 The newer 50 MHz ao486 test passes the hardware benchmark, with about 2.31x
 arithmetic and 2.13x RAM-copy throughput versus its matching 20 MHz build.
 The 64 MB physical-memory probe also passes at 50 MHz. A separate 40 MHz build
-passes a silent 86-board FIFO/IRQ diagnostic. Full-design timing still fails;
-these measurements do not certify gameplay stability or audio quality.
+passes a silent 86-board FIFO/IRQ diagnostic. The newer Native50 build is
+the first with no negative slack in the reported full-design timing checks.
+Board I/O constraints remain incomplete; this is not complete timing sign-off
+or a certification of gameplay stability and audio quality.
 An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
 50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
 with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
@@ -41,8 +43,11 @@ clock enables, leaving the FM interrupt asserted. The source now consumes clears
 every CPU cycle and resets timer/channel/IRQ state explicitly. Timer A/B clear
 and repeat-IRQ simulations pass all enable phases at 20/40/50/60 MHz; the old
 source fails. The prior Integer50 hardware build also reproduces a lost clear
-after two timer-B IRQs. Verification of the fixed FPGA build and audible music
-quality are still pending.
+after two timer-B IRQs. The fixed Native50 FPGA build passes 100 consecutive
+timer-B IRQ12 deliveries, checking status assertion/clear and cascaded PIC EOI.
+Audible music quality remains unverified. A separate
+[prefetch queue optimization](rtl/cpu/PREFETCH_STORE.md) passes CPU simulation
+without adding cycles; its 60 MHz fit is in progress.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -64,8 +69,11 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    Provide a bootable, user-supplied DOS setup with documented CONFIG.SYS and
    AUTOEXEC.BAT settings for a multi-game disk.
    The experimental [`-RawIde` controller](rtl/storage/README.md) now passes
-   task-file and real HPS-interface simulations. Its disk BIOS and HDD boot
-   path are still missing. A disposable hardware diagnostic passes IDENTIFY,
+   task-file and real HPS-interface simulations. Its
+   [read BIOS prototype](software/DISK_BIOS.md) passes hardware geometry,
+   partition, cylinder-crossing and 64 KB read checks against the private VHD.
+   ROM integration and the HDD boot path are still missing.
+   A disposable hardware diagnostic passes IDENTIFY,
    sector write/read checksum and four IRQ9 deliveries; only the designated
    test sector changed in the returned image.
    A private DOS 6.20 image now boots Rusty, Nightslave and Doom II in a
@@ -84,7 +92,9 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    actual 400-line picture and show the supplied 59-frame disk animation with
    a D0/D1 label and cycling dots. The animation matches the imported frames in hardware captures. New
    native-aspect fit (default), exact integer fit and HDMI-only integer crop
-   choices pass simulation; their FPGA/hardware verification is pending. Standard 15 kHz SCART scan conversion is not yet
+   choices pass simulation and fit in Native50. Hardware confirms native fit
+   at 1728x1080 and integer fit at 1280x800 on the 1080p test profile.
+   Integer zoom still needs its hardware check. Standard 15 kHz SCART scan conversion is not yet
    implemented.
 
 ## Current source and build

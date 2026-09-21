@@ -719,3 +719,37 @@ Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable unmodified intro-to-game loading, repeatable gameplay
 timing, sound pitch/tempo, and video stability. Neither the
 initial logo nor successful FPGA fitting measures Rusty speed.
+
+### Native50: reported timing pass and hardware interrupt/disk checks
+
+Snapshot `quartus-20260921-115048-aca4bf` uses clean source commit
+`ff843f37a40ff762edf4935bb28443d53f3c6fde`: ao486 at 50 MHz, 64 MB RAM,
+PC-9801-86 sound, 8 KB conventional-memory cache and raw IDE. It includes
+the FM clear fix, native/integer scaling, graphics row correction and the
+compressed 59-frame overlay. Compilation completes in 31m45s with 34194/41910
+ALMs, 453/553 RAM blocks and 66/112 DSPs. The tile overlay saves 25 RAM blocks.
+All reported setup/hold/recovery/removal/pulse-width checks have nonnegative
+slack; the minimum is +0.045 ns. All clocks are constrained. However, the
+inherited board interface still has 24 unconstrained input ports and 86
+unconstrained output ports, including SDRAM DQ and HDMI signals. These need
+board/device timing budgets before complete interface sign-off. Do not hide
+them behind blanket false paths or describe this build as fully certified.
+
+RBF SHA-256:
+`38bbb7f7f2f5f00ff66cb4c7e1a979afb95f6f8db830b4b4bea1e20b5b2b80e3`.
+The separately named Native50 test RBF on the SuperStation matches this hash.
+
+- FM probe loaded at 12:24:38 CEST: the returned disposable D88 contains
+  `PASS: 100 FM timer B IRQ12 deliveries`, including status clear and cascaded
+  PIC EOI. The earlier Integer50 probe failed at two deliveries. This is a
+  silent interrupt test, not an audible music-quality measurement.
+- Read BIOS probe loaded at 12:30:18: geometry, IPL/partition checksums, a CHS
+  cylinder crossing and a 64 KB linear transfer pass against the full private
+  DOS game VHD. The image's local and device SHA-256 hashes match. The probe
+  performs no HDD writes and does not test HDD boot.
+- Original System/Opening Rusty disks loaded at 12:33:05: early captures are
+  black; after Space/Enter at 12:38:29, a 12:39:18 capture shows a coherent
+  Rusty title/menu. This does not establish an unattended opening transition.
+- Scaler metadata confirms 640x400 captured into a 1728x1080 native-fit
+  viewport. After changing only the isolated core's scaling bits, integer
+  fit reports a 1280x800 viewport. Global HDMI/HDR settings are unchanged.

@@ -95,6 +95,7 @@ isimple_fifo (
 
 	.data({snoop_be, snoop_data, snoop_addr}),
 	.wrreq(snoop_we),
+	.store(1'b0),
 
 	.q(Fifo_dout),
 	.rdreq((state == IDLE) && !INVALIDATE && !invalidate_pending && !Fifo_empty),
