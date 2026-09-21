@@ -25,6 +25,7 @@ bash tests/run-text-pixel-memory.sh
 bash tests/run-video-counters.sh
 bash tests/run-video-scale.sh
 bash tests/run-video-calc.sh
+bash tests/run-framebuffer-viewport.sh
 bash tests/run-hdmi-tune-gate.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \

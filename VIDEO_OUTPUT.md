@@ -212,3 +212,19 @@ The actual compositor expressions pass 256 colour/coverage/enable cases and
 reject a deliberately bypassed stage. The complete CRTC reset/render test
 still produces 640 visible pixels, including 636 white test-font pixels,
 at all six reset phases. Integrated fitting and hardware checks are pending.
+
+## Framebuffer viewport settings
+
+The graphics-capture 60 MHz fit exposes a -0.316 ns LFB_EN-to-vmini path in
+the MiSTer framework. The framebuffer rectangle and its enable now pass
+through two clk_vid registers before the viewport state machine. HDMI pixel
+data, sync, audio and output clocks are unchanged; configuration settling
+gains two video-clock stages. All paths retain normal timing checks.
+
+The actual framework calculator and multiplier/divider pass 73 rectangles
+at each of 50/60/90 MHz command-clock timings: native 1728x1080, integer
+1280x800, 4:3, configured aspect, framebuffer takeover/release, bounded full
+screen and 720p. The test checks every settings-pipeline update and rejects
+a bypassed stage. The inherited no-reset calculator state uses an explicit
+zero-power-up simulation model. Integrated fitting and hardware verification
+are pending; this is not proof of a 90 MHz CPU build.

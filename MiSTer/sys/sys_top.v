@@ -780,6 +780,19 @@ reg fb_vbl;
 always @(posedge clk_vid) fb_vbl <= hdmi_vbl;
 `endif
 
+// Framebuffer viewport writes arrive on clk_sys. Stage the complete rectangle
+// with its enable before the clk_vid calculation; retain normal timing checks.
+reg [48:0] lfb_viewport_meta = 0, lfb_viewport_video = 0;
+always @(posedge clk_vid) begin
+	lfb_viewport_meta <= {LFB_EN,LFB_HMIN,LFB_HMAX,LFB_VMIN,LFB_VMAX};
+	lfb_viewport_video <= lfb_viewport_meta;
+end
+wire lfb_viewport_enabled = lfb_viewport_video[48];
+wire [11:0] lfb_viewport_hmin = lfb_viewport_video[47:36];
+wire [11:0] lfb_viewport_hmax = lfb_viewport_video[35:24];
+wire [11:0] lfb_viewport_vmin = lfb_viewport_video[23:12];
+wire [11:0] lfb_viewport_vmax = lfb_viewport_video[11:0];
+
 reg  ar_md_start;
 wire ar_md_busy;
 reg  [11:0] ar_md_mul1, ar_md_mul2, ar_md_div;
@@ -840,11 +853,11 @@ always @(posedge clk_vid) begin
 	ar_md_start <= 0;
 	state <= state + 1'd1;
 	case(state)
-		0: if(LFB_EN) begin
-				hmini <= LFB_HMIN;
-				vmini <= LFB_VMIN;
-				hmaxi <= LFB_HMAX;
-				vmaxi <= LFB_VMAX;
+		0: if(lfb_viewport_enabled) begin
+				hmini <= lfb_viewport_hmin;
+				vmini <= lfb_viewport_vmin;
+				hmaxi <= lfb_viewport_hmax;
+				vmaxi <= lfb_viewport_vmax;
 				state <= 0;
 			end
 			else if(FREESCALE || !arx || !ary) begin
