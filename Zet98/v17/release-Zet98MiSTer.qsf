@@ -40,9 +40,11 @@
 set_global_assignment -name FAMILY "Cyclone V"
 set_global_assignment -name DEVICE 5CSEBA6U23I7
 set_global_assignment -name TOP_LEVEL_ENTITY sys_top
-# Keep the FPGA serial connection on UART1 (/dev/ttyS1), as in MiSTer/sys/sys.tcl.
+# Keep the fixed HPS peripheral routes from MiSTer/sys/sys.tcl.
 # This legacy project includes sys.qip directly and does not source sys.tcl.
+set_instance_assignment -name HPS_LOCATION HPSINTERFACEPERIPHERALSPIMASTER_X52_Y72_N111 -entity sys_top -to spi
 set_instance_assignment -name HPS_LOCATION HPSINTERFACEPERIPHERALUART_X52_Y67_N111 -entity sys_top -to uart
+set_instance_assignment -name HPS_LOCATION HPSINTERFACEPERIPHERALI2C_X52_Y60_N111 -entity sys_top -to hdmi_i2c
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 17.0.2
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "23:28:24  JANUARY 06, 2021"
 set_global_assignment -name LAST_QUARTUS_VERSION "17.0.0 Lite Edition"

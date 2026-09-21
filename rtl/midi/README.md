@@ -2,10 +2,11 @@
 
 Build with `scripts/build.ps1 -MidiUart` and select **MPU MIDI: UART** in
 the core menu. The option is off by default. This prototype has passed
-simulation and guest IRQ tests on a fitted 50 MHz core. The first hardware
-test exposed an incorrect HPS UART placement; the corrected build still needs
-serial capture and audible playback verification. It is not a complete
-intelligent-mode MPU-401.
+simulation, guest IRQ tests and exact HPS serial capture on a fitted 50 MHz
+core. The first hardware test exposed an incorrect HPS UART placement; the
+corrected build delivers the complete 134-byte diagnostic packet to ttyS1.
+Audible playback remains unverified. It is not a complete intelligent-mode
+MPU-401.
 
 The guest interface is the PC-98 default: low-byte data at **E0D0h**,
 command/status at **E0D2h**, and **master PIC IRQ6**, normally vector 0Eh.
@@ -80,12 +81,22 @@ received zero bytes. The fitted atom database shows the UART at
 route requires `HPSINTERFACEPERIPHERALUART_X52_Y67_N111` (UART1/ttyS1).
 This legacy project includes sys.qip without sourcing sys.tcl, so it lacked
 the upstream location assignment. The project now explicitly fixes that
-location, and MIDI builds run `scripts/check-hps-uart.tcl` against the actual
+location, and MIDI builds check the actual
 fitted netlist. The check rejects the observed wrong placement.
 
 `tests/hardware/capture_mpu_uart.py` captures the diagnostic packet at
 31250 baud without transmitting or starting a synthesizer. It refuses a
 busy port, saves raw bytes and a JSON result, and restores the original
 serial settings. Its Linux pseudo-terminal test checks fragmented delivery,
-an incorrect packet and settings restoration. Hardware serial capture must
-still pass after the corrected placement is fitted.
+an incorrect packet and settings restoration.
+
+The corrected UART1-50 build (5def4ed) was loaded at 19:25:07 on 2026-09-21.
+All sixteen timing corner/type reports are nonnegative, minimum +0.074 ns;
+board-I/O constraint coverage remains incomplete. The guest again passes
+200 IRQ6 acknowledgements, and the independent HPS capture receives exactly
+134 bytes at offset zero, matching the diagnostic byte for byte. Serial
+settings are restored afterwards. Captured packet SHA-256:
+`49a265aaedf5513a3b0d2c4a3ce3f4d90c26426a51b19d2b439c268c0427a38f`.
+This verifies physical transport, not synthesis, external modules, intelligent
+mode or music quality. The location guard has since been expanded to
+`scripts/check-hps-peripherals.tcl`, also covering the shared SPI/HDMI routes.

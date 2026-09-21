@@ -38,9 +38,13 @@ are still undergoing timing work and have not been deployed. The latest
 verified Bundle50 fallback. See [hardware evidence and limitations](HARDWARE_TESTING.md).
 
 An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
-`-MidiUart`, passes serial, bus and interrupt simulations. It is off by
-default and does not yet implement intelligent-mode sequencing. Hardware
-MidiLink playback and game MIDI compatibility remain unverified.
+`-MidiUart`, passes serial, bus and interrupt simulations, 200 guest IRQ6
+acknowledgements and exact capture of a 134-byte packet on HPS ttyS1 in hardware.
+The first capture exposed a missing HPS UART1 location assignment; correcting
+and verifying that placement fixed the transport. Audible MidiLink playback
+remains pending. It is off by default and does not implement intelligent-mode
+sequencing. A private Nightslave UART trace passes RTL replay; that alone does
+not establish hardware music compatibility.
 
 DOS, BIOS ROMs, games and prepared private disk packages are not distributed
 in this repository. Complete MIDI/MPU-401, optical-drive support, native HDI mounting,
@@ -123,6 +127,8 @@ Quartus runs on Docker's native Linux filesystem, with source copied in and the
 complete project database/reports copied back. This avoids observed stalls on
 Docker Desktop's Windows bind share. Failed exports retain the named container
 for inspection. A post-fit guard also verifies global routing of the pixel clock.
+Another guard checks the fixed HPS SPI and HDMI I2C locations, plus UART1 in
+MIDI-enabled builds, against the actual fitted primitives.
 Compilation alone does not establish working hardware or acceptable timing.
 After compilation, the script records the reported slack in `timing-results.json`
 and exits with an error if any timing check reports negative slack. The RBF and

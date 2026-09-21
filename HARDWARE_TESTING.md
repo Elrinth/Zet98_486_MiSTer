@@ -1125,3 +1125,36 @@ existing disposable BOOT.COM allocation. No source disk sectors outside that
 file were changed. The Metadata50 baseline was loaded at 19:15:16 device time;
 its result remains pending. The core had previously returned to the DOS 6.20
 game menu at 19:02:19, confirmed by the 19:06:37 screenshot.
+
+The returned Z98PERF.TXT now confirms benchmark v3 passing on Metadata50:
+246 ALU blocks, 125 RAM-copy blocks and 78 stack blocks, each over 1000
+reported hundredths. This is the baseline for the next build, not evidence
+that write allocation has improved hardware yet. The initial image had no
+result file, and the independent model had already checked this benchmark's
+success/failure paths and saved output.
+
+### Physical UART1 capture passes
+
+`quartus-20260921-185242-557b62` (5def4ed) finishes with 34323 ALMs,
+458 RAM blocks and 66 DSPs. Its UART-specific post-fit guard confirms Y67;
+all sixteen setup/hold/recovery/removal corner reports are nonnegative,
+minimum +0.074 ns. Board-I/O coverage remains incomplete. RBF SHA-256:
+`88ce83d7eb14587eae49ecf9f53aeb2a11b2131588a935b2a187231322bdbc0d`.
+
+The fresh MPU diagnostic was loaded at 19:25:07 device time. By 19:27:22,
+both the returned guest log and independent HPS capture pass: 200 IRQ6 ACKs
+and exactly 134 received bytes at offset zero. A second local byte comparison
+matches the complete expected packet, SHA-256
+`49a265aaedf5513a3b0d2c4a3ce3f4d90c26426a51b19d2b439c268c0427a38f`.
+The capture restores the prior Linux serial settings. Synthesizer assets and
+audible playback are not validated by this test.
+
+A fresh benchmark-v3 disk on the same UART1-50 core was loaded at 19:29:21
+to establish a closer comparison for the write-allocation build.
+
+The broader HPS placement audit also finds the legacy HDMI I2C primitive at
+Y59, whereas the vendored MiSTer sys.tcl assigns Y60. SPI already matches Y72.
+Source now explicitly retains all three framework locations; the expanded
+post-fit guard rejects the observed I2C mismatch. This has not yet been fitted
+or hardware-tested, and is not proof of the cause of earlier display glitches.
+No HPS pinmux registers, global HDR settings or output modelines were changed.

@@ -102,9 +102,8 @@ try {
     # Keep the source snapshot and export the complete database for TimeQuest.
     $containerName = 'zet98-' + $buildName
     $compileCommand = 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
-    if ($MidiUart) {
-        $compileCommand += ' && quartus_cdb -t ../../scripts/check-hps-uart.tcl'
-    }
+    $requireUart = if ($MidiUart) { 1 } else { 0 }
+    $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
     $containerId = & docker --context $DockerContext create --name $containerName `
         --network none --workdir /project/Zet98/v17 $Image bash -lc `
         $compileCommand
