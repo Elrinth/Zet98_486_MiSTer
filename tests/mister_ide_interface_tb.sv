@@ -13,7 +13,8 @@ module mister_ide_interface_tb;
     emu dut(.CLK_50M(clk),.RESET(1'b0),.HPS_BUS(bus));
     defparam dut.hps_io.CONF_STR_BRAM=0;
     defparam dut.hps_io.PS2DIV=0;
-    defparam dut.floppy_icon.ROM_FILE="rtl/assets/floppy-animation.mem";
+    defparam dut.floppy_icon.TILE_MAP_FILE="rtl/assets/floppy-tile-map.mem";
+    defparam dut.floppy_icon.TILE_PIXELS_FILE="rtl/assets/floppy-tile-pixels.mem";
     integer floppy_bytes=0;
     always @(posedge clk) begin
         if(dut.sd_ack[2] && (dut.Zet98_top.mist_ack || dut.Zet98_top.mist_buffwr))

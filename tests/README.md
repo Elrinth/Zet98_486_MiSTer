@@ -248,3 +248,17 @@ software status read.
 `hardware/fm_timer_probe.asm` checks 100 consecutive timer-B IRQ12 deliveries,
 flag assertion/clearing and cascaded PIC EOI, with the 86-board FM/PSG muted.
 It writes `Z98FM.TXT` on a disposable boot disk and does not measure audio quality.
+
+## Compressed activity overlay and CRTC reset
+
+`tests/run-floppy-overlay.sh` compares every pixel of all 59 animation frames
+with the uncompressed reference, checks frame wrap, caption dots and drive
+selection, then checks 56576 continuous/bursty-CE pixels for three-clock
+RGB/sync/blanking alignment. The ROM packer independently reconstructs all
+165200 original pixels before writing its two ROM files.
+
+`tests/run-crtc-reset.sh` exercises the complete CRTC text path after six
+reset phases, including stopped-clock recovery and settings changed during
+reset. It checks a 640-pixel rendered line after each release. Temporary
+copies rename the legacy VMODE identifier so VHDL-2008 can compile the
+original expression port mappings; no logic changes are made by the runner.

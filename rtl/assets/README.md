@@ -12,7 +12,11 @@ independent of the referenced artwork.
 
 The importer retains all 59 frames, crops to the 50x56 disk, removes the
 original caption and maps antialiasing colors to black, blue, pale pink and
-gray. This uses 330400 data bits instead of an eight-bit frame buffer.
+gray. The canonical reference is 330400 bits. The FPGA reads a lossless 4x4
+tile atlas: 495 shared tiles plus a 59-frame tile map use 112482 data bits.
+An isolated Cyclone V fit uses 16 RAM blocks instead of 41 (25 fewer blocks).
+All 165200 reference pixels are verified after packing. The partial rightmost
+tile is padded with black, outside the visible 50-pixel disk.
 The first frame lasts 80 ms and subsequent frames 40 ms, rounded to the next
 video frame boundary. The caption is generated independently by the FPGA.
 
@@ -20,4 +24,10 @@ To regenerate from the supplied file, install Pillow and run:
 
 ```sh
 python scripts/import_floppy_animation.py path/to/Amiga_disk_screens_30.gif
+```
+
+To repack the existing canonical ROM without the GIF or Pillow:
+
+```sh
+python scripts/pack_floppy_animation.py
 ```

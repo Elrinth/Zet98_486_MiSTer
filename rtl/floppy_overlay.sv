@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// User-supplied rotating disk, drive label and cycling dots. A two-clock
+// User-supplied rotating disk, drive label and cycling dots. A three-clock
 // pipeline keeps ROM pixels, RGB, blanking, sync and CE aligned.
 module floppy_overlay #(
     parameter HOLD_FRAMES=15,
     parameter ANIMATION_CYCLES=3000000, // 40 ms at the 75 MHz video clock.
-    parameter ROM_FILE="../../rtl/assets/floppy-animation.mem"
+    parameter TILE_MAP_FILE="../../rtl/assets/floppy-tile-map.mem",
+    parameter TILE_PIXELS_FILE="../../rtl/assets/floppy-tile-pixels.mem"
 ) (
     input wire clk, reset, enabled,
     input wire [1:0] activity,
@@ -22,7 +23,7 @@ module floppy_overlay #(
     reg [11:0] x,y,max_width,width,height;
     reg [$clog2(HOLD_FRAMES+1)-1:0] hold_frames;
     reg [5:0] animation_frame;
-    reg [17:0] frame_base;
+    reg [13:0] frame_base;
     reg [22:0] animation_ticks;
     reg [4:0] dot_phase;
     wire frame_start=in_ce && in_vs && !prev_vs;
@@ -41,11 +42,20 @@ module floppy_overlay #(
     // mask the output separately and must not lengthen the RAM address path.
     wire rom_in_range=dx>=19 && dx<69 && dy<56;
     wire disk_pixel=box && rom_in_range;
-    wire [17:0] rom_address=rom_in_range ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
-    (* ramstyle="M10K" *) reg [1:0] pixels[0:165199];
+    wire [6:0] disk_x=dx-7'd19;
+    wire [13:0] tile_address=rom_in_range ? frame_base + dy[6:2]*14'd13 + disk_x[6:2] : 14'd0;
+    (* ramstyle="M10K" *) reg [8:0] tile_map[0:10737];
+    (* ramstyle="M10K" *) reg [1:0] tile_pixels[0:7919];
+    reg [8:0] tile;
+    reg [3:0] tile_offset;
     reg [1:0] rom_pixel;
-    initial $readmemb(ROM_FILE,pixels);
-    always @(posedge clk) rom_pixel<=pixels[rom_address];
+    initial $readmemb(TILE_MAP_FILE,tile_map);
+    initial $readmemb(TILE_PIXELS_FILE,tile_pixels);
+    always @(posedge clk) begin
+        tile<=tile_map[tile_address];
+        tile_offset<={dy[1:0],disk_x[1:0]};
+        rom_pixel<=tile_pixels[{tile,tile_offset}];
+    end
 
     // Five-column, seven-row caption font. Space and unused columns are blank.
     function automatic [34:0] glyph(input [3:0] position,input selected_drive,input [1:0] dots);
@@ -75,6 +85,8 @@ module floppy_overlay #(
                     font[34-((dy-60)*5+column)];
     reg ce_pipe,hs_pipe,vs_pipe,de_pipe,box_pipe,disk_pipe,text_pipe;
     reg [23:0] rgb_pipe;
+    reg ce_pipe2,hs_pipe2,vs_pipe2,de_pipe2,box_pipe2,disk_pipe2,text_pipe2;
+    reg [23:0] rgb_pipe2;
     function automatic [23:0] palette(input [1:0] index);
         case(index)
             1: palette=24'h0044ff;
@@ -93,6 +105,8 @@ module floppy_overlay #(
             animation_frame<=0;frame_base<=0;animation_ticks<=0;dot_phase<=0;
             ce_pipe<=0;hs_pipe<=0;vs_pipe<=0;de_pipe<=0;rgb_pipe<=0;
             box_pipe<=0;disk_pipe<=0;text_pipe<=0;
+            ce_pipe2<=0;hs_pipe2<=0;vs_pipe2<=0;de_pipe2<=0;rgb_pipe2<=0;
+            box_pipe2<=0;disk_pipe2<=0;text_pipe2<=0;
             out_ce<=0;out_hs<=0;out_vs<=0;out_de<=0;out_r<=0;out_g<=0;out_b<=0;
         end else begin
             activity_meta<=activity;activity_sync<=activity_meta;
@@ -120,7 +134,7 @@ module floppy_overlay #(
             end else if(frame_start && animation_ticks >= (animation_frame==0 ? ANIMATION_CYCLES*2 : ANIMATION_CYCLES)) begin
                 animation_ticks<=0;dot_phase<=dot_phase+1'b1;
                 if(animation_frame==58) begin animation_frame<=0;frame_base<=0;end
-                else begin animation_frame<=animation_frame+1'b1;frame_base<=frame_base+18'd2800;end
+                else begin animation_frame<=animation_frame+1'b1;frame_base<=frame_base+14'd182;end
             end else if(animation_ticks<ANIMATION_CYCLES*2) animation_ticks<=animation_ticks+1'b1;
             if(in_ce) begin
                 prev_de<=in_de;prev_vs<=in_vs;
@@ -138,12 +152,17 @@ module floppy_overlay #(
                 hs_pipe<=in_hs;vs_pipe<=in_vs;de_pipe<=in_de;rgb_pipe<={in_r,in_g,in_b};
                 box_pipe<=box;disk_pipe<=disk_pixel;text_pipe<=text_pixel;
             end
-            out_ce<=ce_pipe;
+            ce_pipe2<=ce_pipe;
             if(ce_pipe) begin
-                out_hs<=hs_pipe;out_vs<=vs_pipe;out_de<=de_pipe;
-                if(!box_pipe) {out_r,out_g,out_b}<=rgb_pipe;
-                else if(text_pipe) {out_r,out_g,out_b}<=24'h0044ff;
-                else if(disk_pipe) {out_r,out_g,out_b}<=palette(rom_pixel);
+                hs_pipe2<=hs_pipe;vs_pipe2<=vs_pipe;de_pipe2<=de_pipe;rgb_pipe2<=rgb_pipe;
+                box_pipe2<=box_pipe;disk_pipe2<=disk_pipe;text_pipe2<=text_pipe;
+            end
+            out_ce<=ce_pipe2;
+            if(ce_pipe2) begin
+                out_hs<=hs_pipe2;out_vs<=vs_pipe2;out_de<=de_pipe2;
+                if(!box_pipe2) {out_r,out_g,out_b}<=rgb_pipe2;
+                else if(text_pipe2) {out_r,out_g,out_b}<=24'h0044ff;
+                else if(disk_pipe2) {out_r,out_g,out_b}<=palette(rom_pixel);
                 else {out_r,out_g,out_b}<=0;
             end
         end

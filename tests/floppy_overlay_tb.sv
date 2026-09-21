@@ -10,7 +10,8 @@ module floppy_overlay_tb;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
     floppy_overlay #(.HOLD_FRAMES(3),.ANIMATION_CYCLES(0),
-        .ROM_FILE("rtl/assets/floppy-animation.mem")) dut(.*);
+        .TILE_MAP_FILE("rtl/assets/floppy-tile-map.mem"),
+        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem")) dut(.*);
     reg [1:0] reference_pixels[0:165199];
     initial $readmemb("rtl/assets/floppy-animation.mem",reference_pixels);
     reg [23:0] screen[0:12287];
@@ -35,6 +36,9 @@ module floppy_overlay_tb;
                     @(posedge clk);#1;
                     if(out_ce || {out_r,out_g,out_b,out_hs,out_vs,out_de}!==held)
                         $fatal(1,"ROM pipeline changed output without delayed CE");
+                    @(negedge clk);in_ce=0;
+                    @(posedge clk);#1;
+                    if(out_ce) $fatal(1,"early tile output CE");
                     @(negedge clk);in_ce=0;
                     @(posedge clk);#1;
                     if(!out_ce || {out_hs,out_vs,out_de}!=={in_hs,in_vs,in_de})

@@ -16,7 +16,8 @@ module mister_disk_interface_tb;
     // generate scope rules differ from Quartus for this upstream PS/2 block.
     defparam dut.hps_io.CONF_STR_BRAM = 0;
     defparam dut.hps_io.PS2DIV = 0;
-    defparam dut.floppy_icon.ROM_FILE = "rtl/assets/floppy-animation.mem";
+    defparam dut.floppy_icon.TILE_MAP_FILE="rtl/assets/floppy-tile-map.mem";
+    defparam dut.floppy_icon.TILE_PIXELS_FILE="rtl/assets/floppy-tile-pixels.mem";
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;

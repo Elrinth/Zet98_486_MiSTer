@@ -306,27 +306,12 @@ begin
 	-- check that another phase missed setup. This parent-clock stage splits
 	-- the transfer; both crossings keep their normal setup/hold constraints.
 	-- No scan counters, pixel data or palette values pass through this stage.
-	process(clk,rstn) begin
-		if rstn='0' then
-			tbaseaddr_video <= (others=>'0');
-			tpitch_video <= (others=>'0');
-			hmode_video <= '0';
-			vlines_video <= (others=>'0');
-			curaddr_video <= (others=>'0');
-			cure_video <= '0';
-			curupper_video <= 0;
-			curlower_video <= 0;
-			cblink_video <= '0';
-			blinkrate_video <= (others=>'0');
-			gbaseaddr0_video <= (others=>'0');
-			gbaseaddr1_video <= (others=>'0');
-			glinenum0_video <= (others=>'0');
-			glinenum1_video <= (others=>'0');
-			gpitch_video <= (others=>'0');
-			dotpline_video <= (others=>'0');
-			graphen_video <= '0';
-			lowbl_video <= '0';
-		elsif rising_edge(clk) then
+	-- These are unconditional pipeline registers, not state. They refresh on
+	-- every parent-clock edge, including while reset is asserted. The pixel
+	-- reset remains asserted for two pixel edges after parent reset releases,
+	-- so consumers cannot run before the settings stage has been filled.
+	process(clk) begin
+		if rising_edge(clk) then
 			tbaseaddr_video <= TBASEADDR;
 			tpitch_video <= TPITCH;
 			hmode_video <= HMODE;

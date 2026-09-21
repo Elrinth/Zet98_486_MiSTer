@@ -9,6 +9,7 @@ import argparse
 import hashlib
 from pathlib import Path
 from PIL import Image, ImageSequence
+from pack_floppy_animation import pack
 
 PALETTE = [(0, 0, 0), (0, 68, 255), (255, 238, 255), (119, 119, 119)]
 BOX = (136, 94, 186, 150)
@@ -34,6 +35,7 @@ def main():
     tokens = [format(i, '02b') for i in indices]
     rows = [' '.join(tokens[n:n+32]) for n in range(0, len(tokens), 32)]
     args.output.write_bytes(('\n'.join(rows) + '\n').encode())
+    pack(args.output, args.output.parent)
     print(f'{len(indices)} pixels / {len(indices)*2} bits; source SHA256 '
           f'{hashlib.sha256(args.gif.read_bytes()).hexdigest()}')
 

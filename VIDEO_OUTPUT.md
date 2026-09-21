@@ -74,7 +74,8 @@ rotating disk above `Loading D0` or `Loading D1` and zero through three dots.
 FDC-selected drive activity is combined with each drive's HPS transfers.
 If both request service together, the last uniquely active drive is retained.
 It expires after 15 idle frames. It never draws into blanking; RGB, DE, sync
-and clock enable have the same two-clock pipeline latency.
+and clock enable have the same three-clock pipeline latency. A tile-map lookup followed by a shared
+pixel-tile lookup reduces animation storage without dropping any frames.
 Crop validation and indicator bounds are calculated in three register stages
 starting at vertical sync. This removes crop arithmetic from the caption's
 per-pixel path and keeps indicator placement fixed during the visible frame.
@@ -99,7 +100,10 @@ arithmetic, with their clock crossings still timed. CRTC98 first stages these
 settings on the 75 MHz parent clock: direct CPU-to-pixel transfers required
 hold-fixing route delay for one divider phase that then missed setup in another.
 This adds one parent-clock cycle to settings updates without retiming the raster,
-pixel data or palette. The parent-clock change is awaiting its full-fit result.
+pixel data or palette. The parent-clock fit passes CPU-to-pixel setup/hold
+checks. Its unconditional settings registers now update during reset as well;
+the pixel reset still holds consumers for two pixel-clock edges before use.
+This removes unnecessary reset fanout from the parent pipeline.
 VTIMING now delivers its
 counters directly to pixel-clocked consumers, removing the previous
 pixel-to-75-MHz-to-pixel round trip. The sampled raster coordinates and
