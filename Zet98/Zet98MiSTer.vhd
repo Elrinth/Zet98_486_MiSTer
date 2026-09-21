@@ -9,7 +9,7 @@ LIBRARY	IEEE,work;
 entity Zet98MiSTer is
 generic(
 	SYSFREQ		:integer	:=20000;		--CPU clock(kHz)
-	SND			:integer	:=2;			--0:No sound 1:OPN(-26) 2:OPNA(-73)
+	SND			:integer	:=2;			--0:none 1:OPN(-26) 2:OPNA(-73) 3:experimental -86 PCM
 	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
 	EXT_RAM_MB  :integer :=0           -- experimental DDR-backed extended memory
 );
@@ -135,6 +135,20 @@ component SPI_IF
 		clk		:in std_logic;
 		rstn	:in std_logic
 	);
+end component;
+
+component pcm86
+generic(CLOCK_HZ :integer :=20000000);
+port(
+    clk, reset :in std_logic;
+    address :in std_logic_vector(15 downto 0);
+    read, write :in std_logic;
+    writedata :in std_logic_vector(7 downto 0);
+    readdata :out std_logic_vector(7 downto 0);
+    selected, irq, opna_extended, opna_muted :out std_logic;
+    audio_l, audio_r :out std_logic_vector(15 downto 0);
+    sample_valid :out std_logic
+);
 end component;
 
 component pc98_ao486
@@ -2243,6 +2257,9 @@ signal	SND_MONO		:std_logic_vector(15 downto 0);
 signal	SNDID_CS		:std_logic;
 signal	SNDID_ODAT	:std_logic_vector(7 downto 0);
 signal	SNDID_OE		:std_logic;
+signal PCM_IRQ, PCM_EXT, PCM_FM_MUTE :std_logic;
+signal PCM_L, PCM_R, BASE_SND_L, BASE_SND_R :std_logic_vector(15 downto 0);
+signal FM_ROUTE_L, FM_ROUTE_R, PSG_ROUTE :std_logic_vector(15 downto 0);
 
 
 signal	IPCOUNT	:std_logic_vector(31 downto 0);
@@ -2870,7 +2887,7 @@ DBIO_ODAT<=(others=>'1');
 	
 	IR10<= FDC_INTS when FDCIF_H_Dn='0' else '0';
 	IR11<= FDC_INTS when FDCIF_H_Dn='1' else '0';
-	IR12<= not OPN_INTn;
+	IR12<= (not OPN_INTn) or PCM_IRQ;
 	IR13<=MOUS_INTp and MOUS_INTe;
 	
 	INTS_CS<='1' when ioaddr_even(15 downto 2)="00000000000010" and ioaddr_even(0)='0' else '0';
@@ -3921,8 +3938,13 @@ DBIO_ODAT<=(others=>'1');
 	OPNS	:sftgen generic map(SYSFREQ/10000) port map(SYSFREQ/10000,OPN_sft,cpuclk,srstn);
 	SNDID_CS<='1' when ioaddr_even=x"a460" else '0';
 
-	C2	:if SND=2 generate
-		OPN_CS<=	'1' when ioaddr_even(15 downto 3)="0000000110001" and ioaddr_even(0)='0' else '0';
+	no_pcm :if SND/=3 generate
+		PCM_IRQ<='0'; PCM_EXT<='1'; PCM_FM_MUTE<='0';
+		PCM_L<=(others=>'0'); PCM_R<=(others=>'0');
+	end generate;
+	C2	:if SND=2 or SND=3 generate
+		OPN_CS<=	'1' when ioaddr_even(15 downto 3)="0000000110001" and ioaddr_even(0)='0' and
+			(ioaddr_even(2)='0' or PCM_EXT='1') else '0';
 		
 		FMS	:OPNA generic map(16) port map(
 			DIN		=>io_wdata(7 downto 0),
@@ -3959,10 +3981,30 @@ DBIO_ODAT<=(others=>'1');
 			rstn	=>srstn
 		);
 
-		monoa	:average generic map(16) port map(BEEP_snd,OPN_sndPSG,SND_MONO);
-		MIXL	:average generic map(16) port map(OPN_sndL,SND_MONO,pSndL);
-		MIXR	:average generic map(16) port map(OPN_sndR,SND_MONO,pSndR);
-		SID	:sndid generic map(x"2") port map(SNDID_CS,IORD,IOWR,SNDID_ODAT,SNDID_OE,io_wdata(7 downto 0),open,open,cpuclk,rstn);
+		FM_ROUTE_L<=OPN_sndL when PCM_FM_MUTE='0' else (others=>'0');
+		FM_ROUTE_R<=OPN_sndR when PCM_FM_MUTE='0' else (others=>'0');
+		PSG_ROUTE<=OPN_sndPSG when PCM_FM_MUTE='0' else (others=>'0');
+		monoa	:average generic map(16) port map(BEEP_snd,PSG_ROUTE,SND_MONO);
+		MIXL	:average generic map(16) port map(FM_ROUTE_L,SND_MONO,BASE_SND_L);
+		MIXR	:average generic map(16) port map(FM_ROUTE_R,SND_MONO,BASE_SND_R);
+		legacy_sound :if SND=2 generate
+			pSndL<=BASE_SND_L; pSndR<=BASE_SND_R;
+			SID :sndid generic map(x"2") port map(SNDID_CS,IORD,IOWR,SNDID_ODAT,SNDID_OE,io_wdata(7 downto 0),open,open,cpuclk,rstn);
+		end generate;
+		board86 :if SND=3 generate
+			pcm :pcm86 generic map(CLOCK_HZ=>SYSFREQ*1000) port map(
+				clk=>cpuclk, reset=>not srstn, address=>ioaddr_even,
+				read=>IORD, write=>IOWR, writedata=>io_wdata(7 downto 0),
+				readdata=>SNDID_ODAT, selected=>SNDID_OE, irq=>PCM_IRQ,
+				opna_extended=>PCM_EXT, opna_muted=>PCM_FM_MUTE,
+				audio_l=>PCM_L, audio_r=>PCM_R, sample_valid=>open
+			);
+			-- Preserve the existing FM/speaker gain; saturate added half-scale PCM.
+			pcm_mix_l :entity work.addsat generic map(16)
+				port map(BASE_SND_L,PCM_L(15) & PCM_L(15 downto 1),pSndL,open,open);
+			pcm_mix_r :entity work.addsat generic map(16)
+				port map(BASE_SND_R,PCM_R(15) & PCM_R(15 downto 1),pSndR,open,open);
+		end generate;
 		
 	end generate;
 	

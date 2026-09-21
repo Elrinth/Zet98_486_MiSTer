@@ -209,6 +209,11 @@ localparam integer CPU486_ENABLED = 1;
 `else
 localparam integer CPU486_ENABLED = 0;
 `endif
+`ifdef ZET98_PCM86
+localparam integer SOUND_MODEL = 3;
+`else
+localparam integer SOUND_MODEL = 2;
+`endif
 
 pll pll
 (
@@ -398,7 +403,7 @@ localparam EXT_RAM_MB = `ZET98_EXT_RAM_MB;
 `else
 localparam EXT_RAM_MB = 0;
 `endif
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB)) Zet98_top
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .SND(SOUND_MODEL)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),

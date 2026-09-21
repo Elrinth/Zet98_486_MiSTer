@@ -16,6 +16,11 @@ after a full power cycle. The isolated DOS probe now reads both System and
 Opening disks and persists its log to the host image. Rusty's cached-build
 animation now looks somewhat better to the user; there is no measured gameplay
 frame-rate or DX4-100 performance claim yet.
+The newer 40 MHz ao486 test also passes two hardware benchmark runs, with
+about 1.9x arithmetic and 1.8x RAM-copy throughput versus its matching 20 MHz
+build. Full-design timing still fails; these measurements do not certify
+gameplay stability. Optional extended RAM and 86 PCM playback are described in
+[extended RAM](rtl/cpu/EXTENDED_RAM.md) and [PCM86](rtl/PCM86.md).
 The source now fixes a truncated HPS disk acknowledgement that prevented
 slots 1–3 from completing transfers. The regression reproduces the old failure
 and passes with the fix. Hardware also requires waiting for image loading

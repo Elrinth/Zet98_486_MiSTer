@@ -458,6 +458,10 @@ measurements, not Rusty frame rates. Authoritative results are the returned
 - Opt20: `d7b7a7a9f6f47024d20d213c6079b615caf62264b712ff1044a41a9ba436d3e6`
 - Opt40: `0e1959ab75b09f9af2b7cb18b57e6f4229c6372731f888b913fa713164563406`
 
+A fresh-disk Opt40 repeat launched at 04:43:52 CEST reports ALU 202 / RAM
+copy 84 blocks, each in 1000 hundredths, again with both checksums passing.
+Its returned disk is `cpu-bench-v2-opt40-repeat-return-1.d88`.
+
 An optional 50 MHz setting now preserves OPNA/PIT rates and 100 ns VFO pulses
 in simulation. PS/2 scaling multiplies before dividing, avoiding truncation
 at a non-integer multiple of 20 MHz. Its complete fit and hardware results are
@@ -470,6 +474,12 @@ counter from those long combinational paths. The actual raster regression
 passes at 20/40 MHz with bounded status latency and no extra edges. Video
 output timing is unchanged; no timing exceptions have been added. Its first
 complete fit also enables the optional 16 MB DDR map for hardware diagnosis.
+
+The optional `-SoundBoard PC9801_86` integration adds PCM playback and shared
+IRQ12. Standalone PCM and PIC regressions pass, and Quartus analysis/elaboration
+passes in `quartus-20260921-044759-401082`. The complete PCM build and silent
+DOS FIFO/IRQ diagnostic are pending. See `rtl/PCM86.md` for explicit limitations;
+this is not yet verified Rusty or Nightslave 86-board sound.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

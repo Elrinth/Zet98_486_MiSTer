@@ -80,6 +80,16 @@ after the startup interval must not mute later speaker audio. Clock and duration
 generics are reduced for simulation; the core uses its system clock frequency
 and a 10,000 ms interval.
 
+`run-pcm86.sh` verifies the experimental PCM86 playback module: signed samples
+in all six audible 8/16-bit mono/stereo formats, a complete 32 KB FIFO with
+wrap and concurrent refill, held I/O writes, full/empty/reset, volume/mute,
+and interrupt threshold/acknowledge/masking. The rate test checks all eight
+fractional sample rates at 20/40/50 MHz. The PIC regression independently checks
+shared FM/PCM IRQ12 levels. `hardware/pcm86_probe.asm` checks the board ID,
+32 KB full/empty/reset status and two real PCM interrupt deliveries, then saves
+`Z98PCM.TXT` on a disposable DOS disk. It keeps PCM muted and does not validate
+the audible output or game compatibility.
+
 `run-disk-interface.sh` drives real HPS commands through the core's actual
 SystemVerilog wrapper and `hps_io`. It transfers 512-byte reads and writes on
 each of four image slots and checks per-slot/shared ACK lifetime, LBA, the

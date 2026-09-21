@@ -40,6 +40,7 @@ vvp "$out/floppy-overlay.vvp"
 bash tests/run-disk-interface.sh
 bash tests/run-data-bus.sh
 bash tests/run-cache-map.sh
+bash tests/run-pcm86.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/DMA/DMASW.vhd tests/dma_grant_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" dma_grant_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" dma_grant_tb --assert-level=error

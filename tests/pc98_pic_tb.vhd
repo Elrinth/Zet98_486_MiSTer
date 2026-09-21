@@ -12,6 +12,7 @@ architecture test of pc98_pic_tb is
     signal mirq, sirq :std_logic_vector(7 downto 0) := x"00";
     signal mint, sint, mdoe, sdoe :std_logic;
     signal cascade :std_logic_vector(2 downto 0);
+    signal pcm_irq :std_logic := '0';
 begin
     clk <= not clk after 5 ns;
     master: entity work.z8259 port map(
@@ -22,7 +23,7 @@ begin
     slave: entity work.z8259 port map(
         CS=>scs, ADDR=>addr, DIN=>din, DOUT=>sdout, DOE=>sdoe, RD=>'0', WR=>wr,
         IR0=>sirq(0), IR1=>sirq(1), IR2=>sirq(2), IR3=>sirq(3),
-        IR4=>sirq(4), IR5=>sirq(5), IR6=>sirq(6), IR7=>sirq(7),
+        IR4=>(sirq(4) or pcm_irq), IR5=>sirq(5), IR6=>sirq(6), IR7=>sirq(7),
         INT=>sint, INTA=>inta, CASI=>cascade, CASO=>open, CASM=>'0', clk=>clk, rstn=>rstn);
     process
         procedure cycles(n :positive) is begin
@@ -70,7 +71,19 @@ begin
         assert mint='0' report "slave IRQ repeated after EOI" severity failure;
         mirq(0)<='1'; cycles(2); mirq(0)<='0'; cycles(20);
         assert mint='0' report "masked IRQ delivered" severity failure;
+        -- IRQ12 is shared by the FM timer and PCM FIFO. Clearing one source
+        -- cannot withdraw the other, and servicing both must leave no repeat.
+        sirq(4)<='1'; pcm_irq<='1'; await_irq;
+        pcm_irq<='0'; cycles(3);
+        assert mint='1' report "clearing PCM withdrew pending FM IRQ" severity failure;
+        acknowledge(true,x"14"); sirq(4)<='0';
+        write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "shared sound IRQ repeated after both cleared" severity failure;
+        pcm_irq<='1'; await_irq; acknowledge(true,x"14"); pcm_irq<='0';
+        write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "PCM-only IRQ repeated after EOI" severity failure;
         report "PASS: existing PC-98 PICs: master/slave vectors, one-cycle acknowledge, masking and EOI";
+        report "PASS: shared IRQ12 retains FM when PCM clears, and delivers subsequent PCM-only vector";
         finish;
     end process;
 end;

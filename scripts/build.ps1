@@ -7,6 +7,8 @@ param(
     [string]$Cpu = 'Zet',
     [ValidateSet(0, 16, 64)]
     [int]$ExtendedRamMB = 0,
+    [ValidateSet('OPNA', 'PC9801_86')]
+    [string]$SoundBoard = 'OPNA',
     [switch]$PrepareOnly
 )
 
@@ -38,6 +40,11 @@ try {
     $SystemClockMHz | Set-Content -LiteralPath (Join-Path $buildRoot 'system-clock-mhz.txt')
     $Cpu | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu.txt')
     $ExtendedRamMB | Set-Content -LiteralPath (Join-Path $buildRoot 'extended-ram-mb.txt')
+    $SoundBoard | Set-Content -LiteralPath (Join-Path $buildRoot 'sound-board.txt')
+    if ($SoundBoard -eq 'PC9801_86') {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_PCM86=1"
+    }
     if ($ExtendedRamMB -ne 0) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_EXT_RAM_MB=$ExtendedRamMB"
