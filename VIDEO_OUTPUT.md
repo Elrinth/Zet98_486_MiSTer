@@ -168,3 +168,20 @@ zero-initialized two-state registers; this does not test analog power-up
 behavior or metastability. `tests/Dockerfile.video` provides Verilator for
 fast full-frame runs, with an Icarus fallback. Full FPGA timing and hardware
 validation of the OSD change are pending.
+
+## Graphics line-buffer input hold
+
+The palette-stage 60 MHz fit exposes a -0.254 ns hold path from SDRAM
+video data to the graphics line-buffer RAM. GRAPHSCR98 now captures all
+four completed plane words on the existing GRAMACK edge, before the
+following pixel edge writes them into the line buffer. The existing BUFWE,
+write address, request/ACK sequence and raster pipeline are unchanged.
+No new timing exception is introduced.
+
+The real SDRAM controller and graphics module pass 16 four-plane lines
+at six relative clock phases with a 20 ns injected data route; a 200 ns
+late-data negative fails. Two-frame address tests pass split lengths
+0/1/3/200/400/513/1023, repeat counts 0/1/3/31, 14-bit wrap and no blanking
+fetches. The tested source hash was checked against the workspace after
+correcting an initial Docker copy that used the previous source. FPGA
+fitting and hardware validation of this capture stage remain pending.

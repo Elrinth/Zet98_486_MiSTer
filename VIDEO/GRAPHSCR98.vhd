@@ -110,10 +110,10 @@ signal pitch_pixel : std_logic_vector(7 downto 0);
 signal repeat_pixel : std_logic_vector(4 downto 0);
 
 begin
-	buf0	:graphbuf816 port map(clk,GRAMDAT0,RADR,WADR,BUFWE,RDAT0);
-	buf1	:graphbuf816 port map(clk,GRAMDAT1,RADR,WADR,BUFWE,RDAT1);
-	buf2	:graphbuf816 port map(clk,GRAMDAT2,RADR,WADR,BUFWE,RDAT2);
-	buf3	:graphbuf816 port map(clk,GRAMDAT3,RADR,WADR,BUFWE,RDAT3);
+	buf0	:graphbuf816 port map(clk,WDAT0,RADR,WADR,BUFWE,RDAT0);
+	buf1	:graphbuf816 port map(clk,WDAT1,RADR,WADR,BUFWE,RDAT1);
+	buf2	:graphbuf816 port map(clk,WDAT2,RADR,WADR,BUFWE,RDAT2);
+	buf3	:graphbuf816 port map(clk,WDAT3,RADR,WADR,BUFWE,RDAT3);
 	
 	lvcount<=conv_std_logic_vector(vcount,10);
 	
@@ -185,6 +185,11 @@ begin
 				end if;
 			when BS_READ =>
 				if(GRAMACK='1')then
+                    -- The memory result is already stable at ACK. Capture it
+                    -- before the existing next-edge line-buffer write, keeping
+                    -- RAM input timing entirely in the pixel clock domain.
+                    WDAT0<=GRAMDAT0; WDAT1<=GRAMDAT1;
+                    WDAT2<=GRAMDAT2; WDAT3<=GRAMDAT3;
 					BUFWE<='1';
 					BUFSTATE<=BS_WRITE;
 					GRAMRD<='0';
