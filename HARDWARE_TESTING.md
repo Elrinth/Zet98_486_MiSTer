@@ -914,3 +914,11 @@ restored configuration clock gate fails. No global MiSTer configuration or
 physical HDMI output mode is changed. These framework changes still require
 full FPGA timing and hardware validation; they do not establish the cause
 of the user's earlier display-chain glitches.
+
+The CONV profile was saved at 15:25:13 and booted after reload at 15:27:54.
+Its 15:31:55 MEM report shows 655,360 conventional bytes, 553,856 free,
+a 553,840-byte largest DOS block, no upper-memory blocks and no XMS manager.
+BARE was saved at 15:35:47 and reloaded at 15:36:39; the 15:39:56 capture
+shows the expected DOS 6.20 shell without launching the menu. All four
+FPGA-oriented profiles have now booted on Bundle50. Restoring the default
+full-memory profile follows this check.

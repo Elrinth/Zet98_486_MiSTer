@@ -211,7 +211,8 @@ decode_regs decode_regs_inst(
     .fetch              (fetch),            //input [63:0]
     
     .prefix_count       (prefix_count),     //input [3:0]
-    .consume_count      (consume_count),    //input [3:0]
+    .consume_count      (instr_prefix ? 4'd1 : consume_count_local),
+    .consume_enabled    (instr_prefix || (!dec_reset && !micro_busy)),    //input [3:0]
     
     .dec_acceptable     (dec_acceptable),   //output [3:0]
     

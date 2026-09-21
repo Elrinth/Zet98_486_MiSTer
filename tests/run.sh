@@ -7,6 +7,7 @@ iverilog -g2012 -Wall -s ao486_io_bridge_tb -o "$out/io.vvp" \
     rtl/cpu/ao486_io_bridge.sv tests/ao486_io_bridge_tb.sv
 vvp "$out/io.vvp"
 bash tests/run-memory-bridge.sh
+bash tests/run-decode-buffer.sh
 iverilog -g2012 -Wall -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
     -o "$out/memory-integration.vvp" rtl/vendor/ao486/memory/avalon_mem.v \
     rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_io_bridge.sv \

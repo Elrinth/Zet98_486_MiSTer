@@ -65,6 +65,7 @@ It selects the full HIMEMX profile, `LIMITED.SYS` (14 MB including HMA),
 the same backup and byte-comparison workflow. HIMEMX's `/MAX=14336` limits
 what the memory manager exposes; it does not change the FPGA's physical RAM
 map. LIMITED now boots on Bundle50 and passes direct XMS allocation/copy/free
-with 14,272 KB free. The conventional-only profile boot check is pending.
+with 14,272 KB free. CONV boots with a 553,840-byte largest DOS block and no XMS manager;
+BARE reaches the minimal DOS shell. All four profiles have booted on Bundle50.
 The emulator-oriented EMM386/VEM menu should not be installed with the
 current resident HDD BIOS.
