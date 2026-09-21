@@ -112,3 +112,12 @@ Rusty's title menu remains malformed on this build despite correct sampled
 font bytes. The mapper fixes are therefore necessary but not sufficient to
 establish correct game text rendering; the subsequent drawing path remains
 under investigation.
+
+The optional `-DIMMEDIATE_IO=1` probe uses adjacent immediate-port OUT/IN
+instructions, including Rusty's font-access mode selection. It preserves
+the normal capture format and immediate/delayed read pairs. Its reference
+capture matches all 736 pairs, while FontMap50 hardware produces exactly
+the same capture as the DX-port probe (29 third-bank mismatches, no unstable
+reads). The tighter OUT/IN sequence alone therefore does not explain the
+remaining menu corruption. This does not cover the game's subsequent RAM
+lookups, font expansion or graphics writes.

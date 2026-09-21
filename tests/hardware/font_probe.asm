@@ -2,6 +2,7 @@
 ; PC-98 DOS CG-ROM read probe. Creates a NEW Z98FONT.BIN; never overwrites.
 ; Each record contains A1:A3 and 32 pairs of immediate/delayed A9 reads.
 ; Positions 0..15 select A5=20..2f; positions 16..31 select A5=00..0f.
+; IMMEDIATE_IO uses adjacent immediate OUT/IN instructions as Rusty does.
 bits 16
 cpu 8086
 org 100h
@@ -26,14 +27,26 @@ start:
 .glyph:
     pushf
     cli
+%ifdef IMMEDIATE_IO
+    mov al,0bh
+    out 68h,al
+%endif
     lodsw
     stosw
     mov dx,0a1h
     xchg al,ah
+%ifdef IMMEDIATE_IO
+    out 0a1h,al
+%else
     out dx,al
+%endif
     add dx,2
     mov al,ah
+%ifdef IMMEDIATE_IO
+    out 0a3h,al
+%else
     out dx,al
+%endif
     xor bx,bx
 .row:
     mov al,bl
@@ -42,17 +55,30 @@ start:
     jnz .right
     or al,20h
 .right:
+%ifdef IMMEDIATE_IO
+    out 0a5h,al
+    in al,0a9h
+%else
     mov dx,0a5h
     out dx,al
     mov dx,0a9h
     in al,dx
+%endif
     stosb
     times 8 nop
+%ifdef IMMEDIATE_IO
+    in al,0a9h
+%else
     in al,dx
+%endif
     stosb
     inc bl
     cmp bl,32
     jb .row
+%ifdef IMMEDIATE_IO
+    mov al,0ah
+    out 68h,al
+%endif
     popf
     dec bp
     jnz .glyph
