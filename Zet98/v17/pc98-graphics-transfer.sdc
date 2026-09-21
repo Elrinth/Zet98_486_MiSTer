@@ -21,10 +21,13 @@ set graphics_address [get_registers {*|VID|GRP|GRAMADRb*}]
 set sdram_address [get_registers {*|ram|MEMADR*}]
 set graphics_data [get_registers {*|ram|VIDDAT*}]
 set graphics_line_data [get_registers {*|VID|GRP|buf*|*porta_datain_reg*}]
+# Before physical RAM packing, TimeQuest represents this mixed-width RAM as
+# 32 two-bit input keepers. After packing they expand to 64 one-bit keepers.
+# The source bus always has all 64 registers; both endpoint forms are valid.
 if {[get_collection_size $graphics_address] < 14 ||
     [get_collection_size $sdram_address] < 13 ||
     [get_collection_size $graphics_data] < 64 ||
-    [get_collection_size $graphics_line_data] < 64} {
+    [get_collection_size $graphics_line_data] < 32} {
     error "Expected the complete SDRAMC/GRAPHSCR bundled address and data buses"
 }
 set_max_delay -from $graphics_address -to $sdram_address 20.000
