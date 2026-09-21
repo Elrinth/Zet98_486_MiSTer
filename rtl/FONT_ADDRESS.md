@@ -108,3 +108,7 @@ reads. The remaining mismatches are the absent third-bank glyph `535c`;
 the tested ANK and row-09 letters now match the working ROM. Capture SHA-256:
 `52d0641706aa921a9c579b10adae27f05b176ce74e3e005034ec91e393431eb0`.
 The third-bank fix still needs a new FPGA build and hardware capture.
+Rusty's title menu remains malformed on this build despite correct sampled
+font bytes. The mapper fixes are therefore necessary but not sufficient to
+establish correct game text rendering; the subsequent drawing path remains
+under investigation.

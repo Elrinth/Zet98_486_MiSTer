@@ -78,3 +78,27 @@ The disconnected-DMA negative control fails as expected. With both caches,
 the three kernels take 6392/3720/5268 cycles and 17/162/145 transfers, unchanged
 from the prior implementation. This is a candidate timing improvement, not
 a measured instruction-speed increase. Physical fitting remains pending.
+
+## Registered global descriptor limits
+
+The StackDisplay60 fit (`quartus-20260921-230252-980603`) reports a
+-0.348 ns path from a global descriptor through limit expansion, stack-fault
+checking and the memory bridge's byte-enable register. `global_regs.v` now
+expands both global descriptor limits on their existing update cycles and
+stores the results beside the original descriptors. Reset, update and hold
+priorities are unchanged, with no additional instruction cycle.
+
+`python3 tests/prove-global-descriptor-limits.py` runs Yosys temporal induction
+against the actual module and the independent original limit expressions.
+Both limits match for arbitrary reset, update enables and descriptor values.
+Negative controls using the previous descriptor value or omitting the second
+limit's reset are rejected with counterexamples. A simulation assertion also
+checks both decoded limits on every CPU edge. Physical fitting is pending;
+this is not yet a measured clock-frequency improvement.
+
+Cached and uncached CPU smoke tests both pass with 576 bus transfers. Cache
+configurations 00/10/11 pass the DMA, self-modification and ALU/VRAM/stack
+checks with unchanged cycles and transfers; disconnected DMA invalidation
+still fails. Actual CPU protected-mode tests and the DOS probe's return to
+real mode pass with both 16 MB and 64 MB RAM. The oversized-memory negative
+control is rejected. These tests ran with the limit-alignment assertion enabled.

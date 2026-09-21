@@ -68,10 +68,22 @@ module global_regs(
 
 //------------------------------------------------------------------------------
 
-assign glob_desc_limit = glob_descriptor[`DESC_BIT_G]? { glob_descriptor[51:48], glob_descriptor[15:0], 12'hFFF } : { 12'd0, glob_descriptor[51:48], glob_descriptor[15:0] };
+// Expand limits beside their descriptors, keeping the granularity mux out of
+// downstream stack checking. The registers share the descriptor update enables.
+function [31:0] expanded_global_limit;
+    input [63:0] descriptor;
+    begin
+        expanded_global_limit = descriptor[`DESC_BIT_G]?
+            { descriptor[51:48], descriptor[15:0], 12'hfff } :
+            { 12'd0, descriptor[51:48], descriptor[15:0] };
+    end
+endfunction
+(* preserve *) reg [31:0] descriptor_limit_cached;
+(* preserve *) reg [31:0] descriptor_2_limit_cached;
+assign glob_desc_limit = descriptor_limit_cached;
 assign glob_desc_base  = { glob_descriptor[63:56], glob_descriptor[39:16] };
 
-assign glob_desc_2_limit = glob_descriptor_2[`DESC_BIT_G]? { glob_descriptor_2[51:48], glob_descriptor_2[15:0], 12'hFFF } : { 12'd0, glob_descriptor_2[51:48], glob_descriptor_2[15:0] };
+assign glob_desc_2_limit = descriptor_2_limit_cached;
 
 
 //------------------------------------------------------------------------------
@@ -110,6 +122,24 @@ always @(posedge clk) begin
     if(rst_n == 1'b0)               glob_descriptor_2 <= 64'd0;
     else if(glob_descriptor_2_set)  glob_descriptor_2 <= glob_descriptor_2_value;
 end
+
+always @(posedge clk) begin
+    if(rst_n == 1'b0)              descriptor_limit_cached <= 32'd0;
+    else if(glob_descriptor_set)   descriptor_limit_cached <= expanded_global_limit(glob_descriptor_value);
+end
+
+always @(posedge clk) begin
+    if(rst_n == 1'b0)                descriptor_2_limit_cached <= 32'd0;
+    else if(glob_descriptor_2_set)   descriptor_2_limit_cached <= expanded_global_limit(glob_descriptor_2_value);
+end
+
+`ifndef SYNTHESIS
+always @(posedge clk) begin
+    if(rst_n && (glob_desc_limit !== expanded_global_limit(glob_descriptor) ||
+                 glob_desc_2_limit !== expanded_global_limit(glob_descriptor_2)))
+        $fatal(1, "Global descriptor limit cache lost register alignment");
+end
+`endif
 
 //------------------------------------------------------------------------------
 
