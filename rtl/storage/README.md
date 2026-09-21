@@ -67,3 +67,7 @@ This build still had video timing violations; it is diagnostic evidence, not
 a timing-clean release. The subsequent shared-write-port RAM optimization
 has passed simulation and infers 4096 block-RAM bits in Quartus; hardware
 confirmation of that optimization remains pending.
+
+A [read-only INT 1Bh service](../../software/DISK_BIOS.md) now passes
+actual-CPU smoke tests and a separate full 64 KB transfer test. It is not yet
+installed in the disk-ROM window and does not add HDD boot to this controller.

@@ -69,3 +69,6 @@ replace CONFIG.SYS and install the diagnostic as BOOT.COM. Then
 headers and requires the original boot sector and geometry. Both commands
 refuse existing output files. Keep the original disk unmodified. This workflow
 does not implement a hard-disk controller or a bootable VHD.
+
+The separate [experimental ATA read BIOS](DISK_BIOS.md) provides tested
+PC-98 disk-read calls. It has no ROM installer or HDD bootstrap yet.
