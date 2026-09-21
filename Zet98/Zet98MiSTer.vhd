@@ -282,7 +282,8 @@ component SDRAMC
 	generic(
 		ADRWIDTH		:integer	:=23;
 		CLKMHZ			:integer	:=100;			--MHz
-		REFCYC			:integer	:=64000/8192	--usec
+		REFCYC			:integer	:=64000/8192;	--usec
+        CPU_WRITE_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -308,6 +309,7 @@ component SDRAMC
 		CPUWDAT1		:in std_logic_vector(15 downto 0);
 		CPUWDAT2		:in std_logic_vector(15 downto 0);
 		CPUWDAT3		:in std_logic_vector(15 downto 0);
+        CPUPRESERVE :in std_logic_vector(15 downto 0) := x"0000";
 		CPUWR1			:in std_logic;
 		CPUWR4			:in std_logic;
 		CPURD1			:in std_logic;
@@ -494,6 +496,7 @@ port(
 end component;
 
 component grcg
+generic(SPLIT_RMW : boolean := false);
 port(
 	iocs	:in std_logic;
 	ioaddr	:in std_logic;
@@ -522,6 +525,7 @@ port(
 	memwdat1:out std_logic_vector(15 downto 0);
 	memwdat2:out std_logic_vector(15 downto 0);
 	memwdat3:out std_logic_vector(15 downto 0);
+	memwmask :out std_logic_vector(15 downto 0);
 	memwrpsel	:out std_logic_vector(3 downto 0);
 	
 	clk		:in std_logic;
@@ -2003,6 +2007,7 @@ signal	GCG_RD1		:std_logic;
 signal	GCG_RD4		:std_logic;
 signal	GCG_RMW1	:std_logic;
 signal	GCG_RMW4	:std_logic;
+signal GCG_WMASK, CB_PRESERVE :std_logic_vector(15 downto 0);
 signal	GCG_WDAT0	:std_logic_vector(15 downto 0);
 signal	GCG_WDAT1	:std_logic_vector(15 downto 0);
 signal	GCG_WDAT2	:std_logic_vector(15 downto 0);
@@ -2277,7 +2282,7 @@ begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
 
-	ram	:SDRAMC generic map(22,100,64000/8192) port map(
+	ram	:SDRAMC generic map(22,100,64000/8192,true) port map(
 		-- SDRAM PORTS
 		PMEMCKE			=>pMemCke,
 		PMEMCS_N			=>pMemCs_n,
@@ -2297,6 +2302,7 @@ begin
 		CPURDAT1			=>CB_RDAT1,
 		CPURDAT2			=>CB_RDAT2,
 		CPURDAT3			=>CB_RDAT3,
+        CPUPRESERVE=>CB_PRESERVE,
 		CPUWDAT0			=>CB_WDAT0,
 		CPUWDAT1			=>CB_WDAT1,
 		CPUWDAT2			=>CB_WDAT2,
@@ -2366,7 +2372,9 @@ begin
 		rstn				=>mrstn
 	);
 	
-	irstn<=	rstn and MEM_INIDONE;
+    -- All irstn consumers use cpuclk. SDRAM ready is released in ramclk.
+    memory_ready_reset : entity work.reset_release
+        port map(cpuclk, rstn and MEM_INIDONE, irstn);
 	
 	LDR_ACK<=CB_ACK;
 	
@@ -2484,7 +2492,7 @@ begin
 	io_wdata <= LDR_WDAT & LDR_WDAT when LDR_OE='1' else cpuod;
 	-- Only the FDC uses DMA channels 2/3; channels 0/1 have no request source.
 	-- A memory write therefore comes from the loader, CPU, or FDC byte.
-	-- GRCG still merges this live write mask with its separate memory read data.
+	-- The CPU GRCG produces a set/preserve pair; SDRAMC merges fresh read data.
 	mem_wdata <= LDR_WDAT & LDR_WDAT when LDR_OE='1' else
 		cpuod when DMAen='0' else
 		FDC_ODAT & FDC_ODAT when FDC_DOE='1' else x"ffff";
@@ -2537,6 +2545,7 @@ begin
 		"10"	when LDR_OE='1' and LDR_ADDR(0)='1' else
 		bussel;
 		
+    CB_PRESERVE <= GCG_WMASK when GCG_MCS='1' else x"0000";
 	CB_WDAT0<=	GCG_WDAT0	when GCG_MCS='1' else
 				mem_wdata;
 	CB_WDAT1<=	GCG_WDAT1	when GCG_MCS='1' else
@@ -2745,7 +2754,7 @@ DBIO_ODAT<=(others=>'1');
 	DBIO_DOE<=	MRD when DBIO_CS='1' else '0';
 	
 	GCG_IOCS<=	'1' when ioaddr_even(15 downto 2)=(x"007" & "11") and ioaddr_even(0)='0' else '0';
-	gcg	:grcg port map(
+	gcg	:grcg generic map(true) port map(
 		iocs		=>GCG_IOCS,
 		ioaddr		=>ioaddr(1),
 		iowr		=>iowr,
@@ -2769,6 +2778,7 @@ DBIO_ODAT<=(others=>'1');
 		memrdat1	=>CB_RDAT1,
 		memrdat2	=>CB_RDAT2,
 		memrdat3	=>CB_RDAT3,
+        memwmask=>GCG_WMASK,
 		memwdat0	=>GCG_WDAT0,
 		memwdat1	=>GCG_WDAT1,
 		memwdat2	=>GCG_WDAT2,
@@ -3232,6 +3242,7 @@ DBIO_ODAT<=(others=>'1');
 		memrdat1		=>GCG_GDC_RDAT1,
 		memrdat2		=>GCG_GDC_RDAT2,
 		memrdat3		=>GCG_GDC_RDAT3,
+        memwmask=>open,
 		memwdat0		=>GCG_GDC_WDAT0,
 		memwdat1		=>GCG_GDC_WDAT1,
 		memwdat2		=>GCG_GDC_WDAT2,

@@ -4,6 +4,7 @@ LIBRARY	IEEE;
 	USE	IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity grcg is
+generic(SPLIT_RMW : boolean := false);
 port(
 	iocs	:in std_logic;
 	ioaddr	:in std_logic;
@@ -32,6 +33,7 @@ port(
 	memwdat1:out std_logic_vector(15 downto 0);
 	memwdat2:out std_logic_vector(15 downto 0);
 	memwdat3:out std_logic_vector(15 downto 0);
+	memwmask :out std_logic_vector(15 downto 0);
 	memwrpsel	:out std_logic_vector(3 downto 0);
 	
 	clk		:in std_logic;
@@ -49,6 +51,9 @@ signal	tile2	:std_logic_vector(7 downto 0);
 signal	tile3	:std_logic_vector(7 downto 0);
 signal	tilenum	:integer range 0 to 3;
 begin
+    -- Split mode sends a static set/preserve pair to the SDRAM controller.
+    -- The controller merges its newly read plane data in the memory domain.
+    memwmask <= not pwrdat when SPLIT_RMW and CGEN='1' and RMWMODE='1' else x"0000";
 	
 	process(clk,rstn)
 	variable lwr	:std_logic_vector(1 downto 0);
@@ -120,18 +125,22 @@ begin
 	
 	memwdat0<=	pwrdat 			when CGEN='0' else
 				tile0 & tile0	when RMWMODE='0' else
+				((tile0 & tile0) and pwrdat) when SPLIT_RMW else
 				((tile0 & tile0) and pwrdat) or (memrdat0 and (not pwrdat));
 
 	memwdat1<=	(others=>'0')	when CGEN='0' else
 				tile1 & tile1	when RMWMODE='0' else
+				((tile1 & tile1) and pwrdat) when SPLIT_RMW else
 				((tile1 & tile1) and pwrdat) or (memrdat1 and (not pwrdat));
 	
 	memwdat2<=	(others=>'0')	when CGEN='0' else
 				tile2 & tile2	when RMWMODE='0' else
+				((tile2 & tile2) and pwrdat) when SPLIT_RMW else
 				((tile2 & tile2) and pwrdat) or (memrdat2 and (not pwrdat));
 	
 	memwdat3<=	(others=>'0')	when CGEN='0' else
 				tile3 & tile3	when RMWMODE='0' else
+				((tile3 & tile3) and pwrdat) when SPLIT_RMW else
 				((tile3 & tile3) and pwrdat) or (memrdat3 and (not pwrdat));
 	
 	memrd1<=	'0'	when pmemcs='0' else

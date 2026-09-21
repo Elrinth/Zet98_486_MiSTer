@@ -26,7 +26,8 @@ or a certification of gameplay stability and audio quality.
 An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
 50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
 with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
-The first 60 MHz full build fails timing, including CPU-internal paths.
+The latest 60 MHz fit passes CPU-internal setup, but the complete core still
+fails across clock domains. It has not been deployed.
 Optional extended RAM and 86 PCM playback are described in
 [extended RAM](rtl/cpu/EXTENDED_RAM.md) and [PCM86](rtl/PCM86.md).
 The source now fixes a truncated HPS disk acknowledgement that prevented
@@ -47,7 +48,8 @@ after two timer-B IRQs. The fixed Native50 FPGA build passes 100 consecutive
 timer-B IRQ12 deliveries, checking status assertion/clear and cascaded PIC EOI.
 Audible music quality remains unverified. A separate
 [prefetch queue optimization](rtl/cpu/PREFETCH_STORE.md) passes CPU simulation
-without adding cycles; its 60 MHz fit is in progress.
+without adding cycles and passes CPU-internal setup at 60 MHz. A subsequent
+[SDRAM write-path change](rtl/cpu/SDRAM_WRITE_BUNDLE.md) is under FPGA validation.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -94,7 +96,7 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    native-aspect fit (default), exact integer fit and HDMI-only integer crop
    choices pass simulation and fit in Native50. Hardware confirms native fit
    at 1728x1080 and integer fit at 1280x800 on the 1080p test profile.
-   Integer zoom still needs its hardware check. Standard 15 kHz SCART scan conversion is not yet
+   Integer zoom reports a 640x360 crop into 1920x1080. Standard 15 kHz SCART scan conversion is not yet
    implemented.
 
 ## Current source and build

@@ -8,7 +8,8 @@ use std.env.all;
 -- electrical/timing model. Addresses, byte/plane masks, live RMW write data,
 -- completion and request count are checked independently of the controller.
 entity sdram_request_tb is
-    generic (CPU_MHZ : positive := 50);
+    generic (CPU_MHZ : positive := 50; BUFFERED : boolean := false;
+             MEM_PHASE_PS : natural := 0);
 end entity;
 architecture test of sdram_request_tb is
     constant AW : positive := 22;
@@ -20,6 +21,8 @@ architecture test of sdram_request_tb is
     signal requests : std_logic_vector(5 downto 0) := (others=>'0');
     type words_t is array(0 to 3) of std_logic_vector(15 downto 0);
     signal wd : words_t := (others=>x"1357");
+    signal expected_wd : words_t;
+    signal preserve_mask : std_logic_vector(15 downto 0) := x"0000";
     signal rd : words_t;
     signal cke, cs, ras, cas, we, udq, ldq, ba1, ba0 : std_logic;
     signal ma : std_logic_vector(12 downto 0);
@@ -33,15 +36,19 @@ architecture test of sdram_request_tb is
     signal activations, reads, writes, write_beats : natural := 0;
 begin
     cpuclk <= not cpuclk after 500 ns / CPU_MHZ;
-    memclk <= not memclk after 5 ns;
+    process begin
+        wait for MEM_PHASE_PS * 1 ps;
+        loop wait for 5 ns; memclk<=not memclk; end loop;
+    end process;
     dq <= read_source;
-    dut : entity work.SDRAMC generic map(AW,100,64000/8192) port map(
+    dut : entity work.SDRAMC generic map(AW,100,64000/8192,BUFFERED) port map(
         PMEMCKE=>cke, PMEMCS_N=>cs, PMEMRAS_N=>ras, PMEMCAS_N=>cas,
         PMEMWE_N=>we, PMEMUDQ=>udq, PMEMLDQ=>ldq, PMEMBA1=>ba1,
         PMEMBA0=>ba0, PMEMADR=>ma, PMEMDAT=>dq,
         CPUBNK=>bank, CPUADR=>address, CPURDAT0=>rd(0), CPURDAT1=>rd(1),
         CPURDAT2=>rd(2), CPURDAT3=>rd(3), CPUWDAT0=>wd(0), CPUWDAT1=>wd(1),
-        CPUWDAT2=>wd(2), CPUWDAT3=>wd(3), CPUWR1=>requests(0), CPUWR4=>requests(1),
+        CPUWDAT2=>wd(2), CPUWDAT3=>wd(3), CPUPRESERVE=>preserve_mask,
+        CPUWR1=>requests(0), CPUWR4=>requests(1),
         CPURD1=>requests(2), CPURD4=>requests(3), CPURMW1=>requests(4), CPURMW4=>requests(5),
         CPUBSEL=>bytes, CPUPSEL=>planes, CPUACK=>ack, CPUCLK=>cpuclk,
         SUBBNK=>"00", SUBADR=>(others=>'0'), SUBRDAT0=>open, SUBRDAT1=>open,
@@ -83,7 +90,7 @@ begin
                     if kind=2 or kind=4 then
                         read_source<=x"a55a" after 20 ns, (others=>'Z') after 30 ns;
                     else
-                        read_source<=x"a55a" after 20 ns, (others=>'Z') after 55 ns;
+                        read_source<=x"a55a" after 20 ns, (others=>'Z') after 60 ns;
                     end if;
                 else
                     assert kind/=2 and kind/=3 report "unexpected SDRAM write" severity failure;
@@ -101,8 +108,9 @@ begin
                 want_bytes:=expected_bytes;
                 if (kind=1 or kind=5) and expected_planes(lane)='0' then want_bytes:="00"; end if;
                 assert (udq & ldq)=not want_bytes report "SDRAM write mask mismatch" severity failure;
-                assert dq=wd(lane) report "SDRAM write data mismatch mode=" & integer'image(kind) &
-                    " lane=" & integer'image(lane) & " actual=" & to_hstring(dq) & " expected=" & to_hstring(wd(lane)) severity failure;
+                assert (BUFFERED and dq=expected_wd(lane)) or (not BUFFERED and dq=wd(lane))
+                    report "SDRAM write data mismatch mode=" & integer'image(kind) &
+                    " lane=" & integer'image(lane) & " actual=" & to_hstring(dq) severity failure;
                 write_beats<=write_beats+1;
             end if;
             lane:=0;
@@ -112,6 +120,7 @@ begin
     process
         variable a, r, w, beats, total : natural;
         variable rowcol : unsigned(AW-1 downto 0);
+        variable mask, value : std_logic_vector(15 downto 0);
     begin
         wait for 137 ns; rstn<='1';
         wait until ready='1';
@@ -127,7 +136,14 @@ begin
                 expected_bank<=std_logic_vector(to_unsigned(n mod 4,2)); bank<=std_logic_vector(to_unsigned(n mod 4,2));
                 expected_bytes<=std_logic_vector(to_unsigned((n/4) mod 4,2)); bytes<=std_logic_vector(to_unsigned((n/4) mod 4,2));
                 expected_planes<=std_logic_vector(to_unsigned(n mod 16,4)); planes<=std_logic_vector(to_unsigned(n mod 16,4));
-                wd<=(x"1111",x"2222",x"4444",x"8888");
+                mask:=x"0000";
+                if BUFFERED and mode>=4 then mask:=std_logic_vector(to_unsigned((n*1031) mod 65536,16)); end if;
+                preserve_mask<=mask;
+                for p in 0 to 3 loop
+                    value:=std_logic_vector(to_unsigned((n*8191+p*4369+mode*349) mod 65536,16));
+                    wd(p)<=value;
+                    expected_wd(p)<=value or (x"a55a" and mask);
+                end loop;
                 kind<=mode; active<=true;
                 a:=activations; r:=reads; w:=writes; beats:=write_beats;
                 requests(mode)<='1';
@@ -140,12 +156,13 @@ begin
                 wait until ack='1' for 3 us;
                 assert ack='1' report "SDRAM request timed out" severity failure;
                 wait until falling_edge(cpuclk);
+                wait for 1 ps; -- settle coincident memory-edge output assignments
                 assert activations=a+1 report "duplicated or missing activation" severity failure;
                 if mode>=2 then
                     assert reads=r+1 and rd(0)=x"a55a" report "read completion mismatch" severity failure;
                     if mode=3 or mode=5 then
                         assert rd(1)=x"a55a" and rd(2)=x"a55a" and rd(3)=x"a55a"
-                            report "four-plane read data mismatch" severity failure;
+                            report "four-plane read data mismatch: " & to_hstring(rd(0)) & " " & to_hstring(rd(1)) & " " & to_hstring(rd(2)) & " " & to_hstring(rd(3)) severity failure;
                     end if;
                 else assert reads=r report "write performed extra read" severity failure; end if;
                 if mode=2 or mode=3 then

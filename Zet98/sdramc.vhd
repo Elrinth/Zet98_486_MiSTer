@@ -6,7 +6,8 @@ ENTITY SDRAMC IS
 	generic(
 		ADRWIDTH		:integer	:=23;
 		CLKMHZ			:integer	:=100;			--MHz
-		REFCYC			:integer	:=64000/8192	--usec
+		REFCYC			:integer	:=64000/8192;	--usec
+        CPU_WRITE_BUNDLE : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -32,6 +33,7 @@ ENTITY SDRAMC IS
 		CPUWDAT1			:in std_logic_vector(15 downto 0);
 		CPUWDAT2			:in std_logic_vector(15 downto 0);
 		CPUWDAT3			:in std_logic_vector(15 downto 0);
+        CPUPRESERVE :in std_logic_vector(15 downto 0) := x"0000";
 		CPUWR1			:in std_logic;
 		CPUWR4			:in std_logic;
 		CPURD1			:in std_logic;
@@ -160,6 +162,10 @@ signal	lFECREQ		:std_logic_vector(2 downto 0);
 signal	lCPUADR		:std_logic_vector(ADRWIDTH-1 downto 0);
 signal	lCPUBNK,lCPUBSEL :std_logic_vector(1 downto 0);
 signal	lCPUPSEL :std_logic_vector(3 downto 0);
+type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
+signal cpu_read_words, cpu_write_words : cpu_words_t;
+signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(79 downto 0);
+
 signal	lFDEADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	lFECADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	smemdat		:std_logic_vector(15 downto 0);
@@ -186,6 +192,7 @@ signal	SUBREQ,SUBREC	:std_logic;
 signal VIDREQ, VIDbusy : std_logic;
 signal VIDdone_sync : std_logic_vector(1 downto 0);
 attribute preserve : boolean;
+attribute preserve of cpu_write_source, cpu_write_memory : signal is true;
 attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
 attribute altera_attribute : string;
 attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
@@ -210,6 +217,38 @@ signal	MEMDATOE	:STD_LOGIC;
 
 signal	SUBREQS	:std_logic;
 begin
+
+    cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
+    write_bundle : if CPU_WRITE_BUNDLE generate
+        process(CPUCLK) begin
+            if rising_edge(CPUCLK) then
+                if (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
+                   and (lcpustb='0' or lCPUADR/=CPUADR) then
+                    cpu_write_source <= CPUPRESERVE & CPUWDAT3 & CPUWDAT2 & CPUWDAT1 & CPUWDAT0;
+                end if;
+            end if;
+        end process;
+        process(memclk) begin
+            if rising_edge(memclk) then
+                -- Same admission edge as CPUJOB. The source was captured
+                -- before the three-stage request synchronizer reached 011.
+                if lCPUREQ="011" then
+                    cpu_write_memory <= cpu_write_crossing;
+                end if;
+            end if;
+        end process;
+        planes : for i in 0 to 3 generate
+            cpu_write_words(i) <= cpu_write_memory(i*16+15 downto i*16) or
+                (cpu_read_words(i) and cpu_write_memory(79 downto 64));
+        end generate;
+    end generate;
+    legacy_cpu_write : if not CPU_WRITE_BUNDLE generate
+        cpu_write_words <= (CPUWDAT0, CPUWDAT1, CPUWDAT2, CPUWDAT3);
+    end generate;
+    CPURDAT0 <= cpu_read_words(0);
+    CPURDAT1 <= cpu_read_words(1);
+    CPURDAT2 <= cpu_read_words(2);
+    CPURDAT3 <= cpu_read_words(3);
 
 	process(memclk,rstn)
 	variable	st_next	:std_logic;
@@ -663,7 +702,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not lCPUBSEL(1) & not lCPUBSEL(0);
 						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
-						MEMDAT		<=CPUWDAT0;
+						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -732,7 +771,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(0) and lCPUBSEL(1)) & not (lCPUPSEL(0) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 2) & "00";
-						MEMDAT		<=CPUWDAT0;
+						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--2nd word
 						MEMCKE		<='1';
@@ -746,7 +785,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(1) and lCPUBSEL(1)) & not (lCPUPSEL(1) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT1;
+						MEMDAT<=cpu_write_words(1);
 						MEMDATOE	<='1';
 					when 4 =>		--3rd word
 						MEMCKE		<='1';
@@ -760,7 +799,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(2) and lCPUBSEL(1)) & not (lCPUPSEL(2) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT2;
+						MEMDAT<=cpu_write_words(2);
 						MEMDATOE	<='1';
 					when 5 =>		--4th word
 						MEMCKE		<='1';
@@ -774,7 +813,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(3) and lCPUBSEL(1)) & not (lCPUPSEL(3) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT3;
+						MEMDAT<=cpu_write_words(3);
 						MEMDATOE	<='1';
 					when 6 =>		--precharge all
 						MEMCKE		<='1';
@@ -868,7 +907,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not lCPUBSEL(1) & not lCPUBSEL(0);
 						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
-						MEMDAT		<=CPUWDAT0;
+						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -974,7 +1013,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(0) and lCPUBSEL(1)) & not (lCPUPSEL(0) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<='0' & lCPUADR(9 downto 0);
-						MEMDAT		<=CPUWDAT0;
+						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--2nd word
 						MEMCKE		<='1';
@@ -988,7 +1027,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(1) and lCPUBSEL(1)) & not (lCPUPSEL(1) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT1;
+						MEMDAT<=cpu_write_words(1);
 						MEMDATOE	<='1';
 					when 10 =>		--3rd word
 						MEMCKE		<='1';
@@ -1002,7 +1041,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(2) and lCPUBSEL(1)) & not (lCPUPSEL(2) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT2;
+						MEMDAT<=cpu_write_words(2);
 						MEMDATOE	<='1';
 					when 11 =>		--4th word
 						MEMCKE		<='1';
@@ -1016,7 +1055,7 @@ begin
 						MEMBA0		<=lCPUBNK(0);
 						MEMADR(12 downto 11)	<=not (lCPUPSEL(3) and lCPUBSEL(1)) & not (lCPUPSEL(3) and lCPUBSEL(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
-						MEMDAT		<=CPUWDAT3;
+						MEMDAT<=cpu_write_words(3);
 						MEMDATOE	<='1';
 					when 12 =>		--precharge all
 						MEMCKE		<='1';
@@ -2146,10 +2185,10 @@ begin
 	
 	process(memclk,rstn)begin
 		if(rstn='0')then
-			CPURDAT0	<=(others=>'0');
-			CPURDAT1	<=(others=>'0');
-			CPURDAT2	<=(others=>'0');
-			CPURDAT3	<=(others=>'0');
+			cpu_read_words(0)	<=(others=>'0');
+			cpu_read_words(1)	<=(others=>'0');
+			cpu_read_words(2)	<=(others=>'0');
+			cpu_read_words(3)	<=(others=>'0');
 			SUBRDAT0	<=(others=>'0');
 			SUBRDAT1	<=(others=>'0');
 			SUBRDAT2	<=(others=>'0');
@@ -2166,18 +2205,18 @@ begin
 			case lSTATE is
 			when ST_READ | ST_RMW =>
 				if(lclkcount=6)then
-					CPURDAT0<=SMEMDAT;
+					cpu_read_words(0)<=SMEMDAT;
 				end if;
 			when ST_READ4 | ST_RMW4 =>
 				case lclkcount is
 				when 6 =>
-					CPURDAT0<=SMEMDAT;
+					cpu_read_words(0)<=SMEMDAT;
 				when 7 =>
-					CPURDAT1<=SMEMDAT;
+					cpu_read_words(1)<=SMEMDAT;
 				when 8 =>
-					CPURDAT2<=SMEMDAT;
+					cpu_read_words(2)<=SMEMDAT;
 				when 9 =>
-					CPURDAT3<=SMEMDAT;
+					cpu_read_words(3)<=SMEMDAT;
 				when others =>
 				end case;
 			when ST_SUBREAD |ST_SUBRMW =>
@@ -2257,8 +2296,8 @@ begin
             -- Capture request metadata in its source clock domain before the
             -- existing request synchronizer admits the job to SDRAM. Avoid
             -- live CPU/DMA address-decode paths feeding the 100 MHz pins.
-            -- RMW write data deliberately stays live: it depends on this
-            -- transaction's returned graphics-plane data.
+            -- The optional write bundle is captured on this same edge; its
+            -- preserve mask is applied to fresh RMW data in the memory domain.
             if (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
                and (lcpustb='0' or lCPUADR/=CPUADR) then
                 lCPUBNK<=CPUBNK; lCPUBSEL<=CPUBSEL; lCPUPSEL<=CPUPSEL;

@@ -753,3 +753,17 @@ The separately named Native50 test RBF on the SuperStation matches this hash.
 - Scaler metadata confirms 640x400 captured into a 1728x1080 native-fit
   viewport. After changing only the isolated core's scaling bits, integer
   fit reports a 1280x800 viewport. Global HDMI/HDR settings are unchanged.
+- Integer zoom reports 640x360 captured into 1920x1080, consistent with the
+  centered 3x crop. Fit native was restored afterward. A separate direct-game
+  Rusty launch reaches a coherent portrait/story scene at 12:51:31; this is
+  not a measured gameplay frame rate.
+
+### Prefetch optimization at 60 MHz
+
+`quartus-20260921-123624-22e6a5` completes in 29m34s with 34484 ALMs,
+453 RAM blocks and 66 DSPs. CPU-internal setup now passes at +0.030 ns.
+Eleven full-design checks fail, worst -5.898 ns from CPU byte-enable control
+to SDRAMC MEMDAT. Other failures include DMA readback, video crossings and
+memory-ready reset recovery. This RBF was not deployed; Native50 stays on
+the device. The next fit tests registered CPU write set/preserve bundles and
+CPU-domain release of memory-ready reset.

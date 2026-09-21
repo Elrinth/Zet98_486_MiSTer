@@ -13,3 +13,13 @@ if {[get_collection_size $reset_loader] != 1 ||
 }
 set_false_path -from $reset_loader -to $reset_video_stages
 set_false_path -from $reset_video_release -to $reset_pixel_stages
+
+# Memory initialization completes in ramclk; its CPU-domain consumers release
+# together after two cpuclk edges. Only this reset synchronizer is excepted.
+set reset_memory_ready [get_registers {*|ram|mem_inidone}]
+set reset_memory_stages [get_registers {*|memory_ready_reset|stages*}]
+if {[get_collection_size $reset_memory_ready] != 1 ||
+    [get_collection_size $reset_memory_stages] != 2} {
+    error "Expected the memory-ready CPU reset-release chain"
+}
+set_false_path -from $reset_memory_ready -to $reset_memory_stages

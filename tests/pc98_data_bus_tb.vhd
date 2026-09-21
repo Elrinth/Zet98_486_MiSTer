@@ -102,6 +102,8 @@ architecture test of pc98_data_bus_tb is
     signal plane_select : std_logic_vector(3 downto 0);
     signal grcg_ppsel : std_logic_vector(1 downto 0) := "00";
     signal grcg_rdata : std_logic_vector(15 downto 0);
+    signal split_write : planes_t;
+    signal split_mask : std_logic_vector(15 downto 0);
 begin
     clk <= not clk after 5 ns;
     graphics : entity work.grcg
@@ -114,7 +116,18 @@ begin
             memrdat2=>plane_read(2), memrdat3=>plane_read(3),
             memwdat0=>plane_write(0), memwdat1=>plane_write(1),
             memwdat2=>plane_write(2), memwdat3=>plane_write(3),
-            memwrpsel=>plane_select, clk=>clk, rstn=>rstn);
+            memwmask=>open, memwrpsel=>plane_select, clk=>clk, rstn=>rstn);
+    split_graphics : entity work.grcg generic map(SPLIT_RMW=>true)
+        port map(iocs=>'1', ioaddr=>grcg_ioaddr, iowr=>grcg_iowr,
+            iowdat=>io_wdata(7 downto 0), pmemcs=>'1', ppsel=>grcg_ppsel,
+            prd=>'0', pwr=>grcg_write, prddat=>open, pwrdat=>mem_wdata, poe=>open,
+            memrd1=>open, memrd4=>open, memwr1=>open, memwr4=>open,
+            memrmw1=>open, memrmw4=>open,
+            memrdat0=>plane_read(0), memrdat1=>plane_read(1),
+            memrdat2=>plane_read(2), memrdat3=>plane_read(3),
+            memwdat0=>split_write(0), memwdat1=>split_write(1),
+            memwdat2=>split_write(2), memwdat3=>split_write(3),
+            memwmask=>split_mask, memwrpsel=>open, clk=>clk, rstn=>rstn);
     process
         variable random : unsigned(31 downto 0) := x"98c0ffee";
         variable cases : natural := 0;
@@ -342,6 +355,8 @@ begin
                 for p in 0 to 3 loop
                     assert plane_write(p)=((tiles(p) and mem_wdata) or (plane_read(p) and not mem_wdata))
                         report "GRCG lost live write mask or delayed plane read" severity failure;
+                    assert (split_write(p) or (plane_read(p) and split_mask))=plane_write(p)
+                        report "Split GRCG set/preserve pair changed the RMW result" severity failure;
                 end loop;
             end loop;
         end loop;

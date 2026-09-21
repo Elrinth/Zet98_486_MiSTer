@@ -29,5 +29,9 @@ With eight bus wait cycles, the cached ALU kernel remains 6361 cycles and
 the VRAM-copy kernel 4543 cycles; enabling the 8 KB conventional-memory
 cache gives 6393 and 3720 respectively. These match the current bridge
 baseline. This change targets clock headroom, not fewer cycles per operation.
-The full 60 MHz FPGA fit is pending; higher clock or hardware stability is
-not established by these simulations.
+The full 60 MHz fit `quartus-20260921-123624-22e6a5` now passes CPU-internal
+setup at +0.030 ns. Its new limiting CPU path is write-result to decoder count.
+The complete design still fails 11 timing checks, worst -5.898 ns on CPU
+write-data to SDRAM. It uses 34484 ALMs, 453 RAM blocks and 66 DSPs and was
+not deployed. The next change separates the static graphics write set/mask
+from the live memory-domain merge; see [SDRAM writes](SDRAM_WRITE_BUNDLE.md).

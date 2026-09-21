@@ -50,7 +50,9 @@ mode changes and small-output fallback. The previous V-Integer mode's
 with no negative reported timing slack. Hardware scaler metadata confirms
 640x400 to 1728x1080 for Fit native and 640x400 to 1280x800 for Integer fit.
 These metadata readings are not measurements of the physical HDMI transport.
-Integer zoom still awaits its hardware viewport/crop check.
+Integer zoom also reports a 640x360 capture into 1920x1080, matching a 3x
+integer scale with 20 source rows cropped from each end of the 400-row image.
+Fit native was restored after these checks.
 
 ## Analogue output
 
