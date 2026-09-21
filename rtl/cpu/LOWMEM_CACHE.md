@@ -79,3 +79,21 @@ CPU sources. They are simulation results, not Rusty FPS or hardware results.
 The full CPU sweep also passes with both caches disabled and with only the
 instruction cache enabled, including the same stack and coherence checks.
 The new allocation policy still needs full FPGA timing and hardware tests.
+
+
+## Banked-write invalidation decode
+
+The cache invalidation signal now decodes the CPU's 80000h and A0000h
+windows and their bank registers directly. Bank values 00h..07h select the
+fixed cached RAM (bank bit 0 is ignored). DMA still invalidates throughout
+its ownership interval, and I/O, reads, idle cycles and loader transfers
+retain their previous behavior. This removes the DMA/address-map arithmetic
+from the instruction-fetch control path without registering or delaying
+invalidation.
+
+The test extracts the real top-level predicate and compares it with the
+original predicate driven by the actual memory mapper. It passes 4,197,632
+bank/read/write/I/O cases, including all 256 bank values, both independent
+windows, all 4 KB boundaries and 64 ROM/EMS/display setting combinations.
+It also checks loader exclusion and DMA ownership with changing addresses.
+A widened bank match is rejected. New physical timing results are pending.

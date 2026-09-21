@@ -38,3 +38,19 @@ arithmetic is available before the final selection. All sums still wrap at
 4,637,520 cases, full CPU smoke test, cached coherency/benchmark tests and
 16/64 MB protected-mode memory tests pass; cycle counts are unchanged.
 FPGA timing and hardware validation of these retained sums remain pending.
+
+## Virtual-access length decode
+
+System descriptor/TSS reads select special word/dword lengths through the
+full command decoder. Virtual memory accesses now use a separate length
+expression before segment checking. The memory interface retains the original
+length expression. Yosys proves both lengths equal for all command inputs
+whenever read, read/modify/write or write-only virtual checking is active;
+a deliberately wrong byte length produces a counterexample. Cached and
+uncached full-CPU regressions pass with unchanged 576 bus transfers.
+
+The complete 60 MHz fit of 80ed62f reports +0.084 ns on the worst CPU-internal
+setup path, but the complete core still fails. The slow/cold corner's
+-0.583 ns path runs from DMA address selection through the PC-98 memory map
+and cache invalidation into instruction decoding. Palette-to-video transfer
+also fails by -0.179 ns. This build was not loaded on hardware.

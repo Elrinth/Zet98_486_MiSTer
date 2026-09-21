@@ -2670,10 +2670,15 @@ begin
     -- matching ao486's physical-address snoop. Hold invalidation until the
     -- entire write/bus ownership interval ends, not merely its first cycle.
     -- BEGIN PC98 CACHE INVALIDATION
+    -- Decode the two CPU windows directly. Following CB_ADDR here also
+    -- traversed the DMA mux and full SDRAM map into the CPU fetch pipeline.
+    -- Bank values 00..07 (bit 0 is ignored) select fixed RAM below 80000h;
+    -- higher bank values select upper RAM, peripherals or extended memory.
+    -- Keep the loader exclusion and the entire DMA ownership interval.
     cache_invalidate <= '1' when DMAen='1' else
-        '1' when MWR='1' and MSD_CS='1' and cpuaddr(19)='1' and
-                 CB_ADDR>=RAM_MAIN(21 downto 0) and
-                 CB_ADDR<(RAM_MAIN(21 downto 0)+x"40000") else '0';
+        '1' when cpuoe='1' and stb='1' and tga='0' and LDR_OE='0' and
+          ((cpuaddr(19 downto 17)="100" and BNK89_SEL(7 downto 3)="00000") or
+           (cpuaddr(19 downto 17)="101" and BNKAB_SEL(7 downto 3)="00000")) else '0';
     -- END PC98 CACHE INVALIDATION
 	
 	DMAU_CS<='1' when ioaddr_odd(15 downto 3)=(x"002" & "0") and ioaddr_odd(0)='1' else '0';

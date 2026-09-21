@@ -12,3 +12,13 @@ printf 'end architecture;\n' >> "$out/cache_map_tb.vhd"
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/mem_addr_pkg_MiSTer.vhd Zet98/memorymap.vhd "$out/cache_map_tb.vhd"
 ghdl -e --std=08 -fsynopsys --workdir="$out" cache_map_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" cache_map_tb --assert-level=error --ieee-asserts=disable-at-0
+# A widened bank match aliases peripheral banks into the invalidation range.
+# The independent mapper comparison must reject it.
+sed 's/7 downto 3)="00000"/7 downto 4)="0000"/g' "$out/cache_map_tb.vhd" > "$out/bad-map.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/bad-map.vhd"
+ghdl -e --std=08 -fsynopsys --workdir="$out" cache_map_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" cache_map_tb --assert-level=error --ieee-asserts=disable-at-0 > "$out/negative.log" 2>&1; then
+    echo 'FAIL: widened bank decode was accepted'; exit 1
+fi
+grep -q 'Wrong RAM alias invalidation' "$out/negative.log"
+echo 'PASS: widened bank decode rejected'
