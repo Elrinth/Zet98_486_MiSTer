@@ -3,6 +3,7 @@
 module ao486_cache_tb;
     parameter ICACHE_ENABLE = 1;
     parameter LOWMEM_CACHE = 0;
+    parameter LOWMEM_CACHE_KB = 8;
     parameter INVALIDATION_CONNECTED = 1;
     reg clk = 0;
     always #5 clk = !clk;
@@ -24,7 +25,7 @@ module ao486_cache_tb;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
-    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE),.LOWMEM_CACHE(LOWMEM_CACHE)) dut (.*);
+    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE),.LOWMEM_CACHE(LOWMEM_CACHE),.LOWMEM_CACHE_KB(LOWMEM_CACHE_KB)) dut (.*);
     reg [7:0] memory [0:1048575];
     integer cycles = 0, transactions = 0, phase = 0, delay_left = 0;
     integer memory_wait = 8, dma_left = 0, dma_tests = 0;

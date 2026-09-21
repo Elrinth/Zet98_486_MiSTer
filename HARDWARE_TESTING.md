@@ -663,7 +663,12 @@ two-bit input keepers. The corrected guard accepts that representation while
 still requiring all 64 source registers. A mapped-netlist check matches
 14/13/64/32 address-source/address-target/data-source/data-target registers
 and both control synchronizers. The fresh retry is
-`quartus-20260921-070116-c80cce`. Hardware validation is pending; this is not
+`quartus-20260921-070116-c80cce`. It completes in 26m12s with 33218 ALMs,
+435 RAM blocks and 65 DSP blocks. CPU-internal setup passes at +0.764 ns,
+but 19 full-design checks fail, worst -0.951 ns. Remaining paths include
+text-RAM-to-pixel hold (-0.951), CPU write-data-to-SDRAM setup (-0.623),
+the MiSTer scaler (-0.441), and video reset recovery (-0.195 ns).
+Hardware validation is pending; this is not
 yet a demonstrated fix for Rusty's black transition or the earlier HDMI issue.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.

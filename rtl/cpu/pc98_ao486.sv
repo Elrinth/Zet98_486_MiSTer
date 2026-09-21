@@ -8,7 +8,8 @@ module pc98_ao486 #(
     parameter ICACHE_ENABLE = 1'b1,
     parameter EXT_RAM_MB = 0,
     parameter EXT_RAM_READ_CACHE = 1'b1,
-    parameter LOWMEM_CACHE = 1'b0
+    parameter LOWMEM_CACHE = 1'b0,
+    parameter LOWMEM_CACHE_KB = 8
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -88,7 +89,7 @@ module pc98_ao486 #(
     wire legacy_ack;
     wire [15:0] legacy_readdata;
     generate if(LOWMEM_CACHE) begin : lowmem_cache
-        pc98_lowmem_cache cache (
+        pc98_lowmem_cache #(.INDEX_BITS($clog2(LOWMEM_CACHE_KB*512))) cache (
             .clk(clk), .reset(cpu_reset), .invalidate(cache_invalidate),
             .address(bus_address), .select(bus_select), .write(bus_write), .io(bus_io),
             .strobe(legacy_request), .legacy_strobe(bus_strobe), .legacy_ack(bus_ack),

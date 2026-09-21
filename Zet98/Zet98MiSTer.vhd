@@ -12,7 +12,8 @@ generic(
 	SND			:integer	:=2;			--0:none 1:OPN(-26) 2:OPNA(-73) 3:experimental -86 PCM
 	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
 	EXT_RAM_MB  :integer :=0;          -- experimental DDR-backed extended memory
-	LOWMEM_CACHE:integer :=0           -- experimental conventional-RAM read cache
+	LOWMEM_CACHE:integer :=0;          -- experimental conventional-RAM read cache
+	LOWMEM_CACHE_KB:integer :=8
 );
 port(
 	ramclk	:in std_logic;
@@ -153,7 +154,7 @@ port(
 end component;
 
 component pc98_ao486
-generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0);
+generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8);
 port(
     clk, reset :in std_logic;
     cache_invalidate :in std_logic;
@@ -2393,7 +2394,7 @@ begin
     end generate;
 
     ao486_cpu: if CPU486/=0 generate
-        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE) port map(
+        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB) port map(
             clk=>cpuclk, reset=>not srstn,
             interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,

@@ -122,7 +122,7 @@ module altddio_out #(
 endmodule
 
 // Pin-compatible machine stub. The bench acts as the serialized disk engine.
-module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, SND = 2) (
+module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWMEM_CACHE = 0, LOWMEM_CACHE_KB = 8, SND = 2) (
     input ramclk, cpuclk, vidclk, plllock,
     input [64:0] sysrtc,
     output pMemCke, pMemCs_n, pMemRas_n, pMemCas_n, pMemWe_n, pMemUdq, pMemLdq, pMemBa1, pMemBa0,

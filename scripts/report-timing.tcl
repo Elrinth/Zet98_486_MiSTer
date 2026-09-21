@@ -5,6 +5,7 @@ create_timing_netlist
 read_sdc
 update_timing_netlist
 report_timing -setup -npaths 12 -detail full_path -file output_files/critical-setup-paths.txt
+report_timing -hold -npaths 8 -detail full_path -file output_files/critical-hold-paths.txt
 report_timing -recovery -npaths 4 -detail full_path -file output_files/critical-recovery-paths.txt
 report_clock_fmax_summary -file output_files/clock-fmax.txt
 set system_clock [get_clocks {*emu*general?1?*divclk}]

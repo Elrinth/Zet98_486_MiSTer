@@ -3,7 +3,9 @@
 Add `-LowMemoryCache` to an ao486 build. This optional 8 KB direct-mapped
 cache serves complete 16-bit reads from fixed RAM below 80000h. Each of its
 4096 entries stores one word, physical tag and valid bit in synchronous FPGA
-RAM. It is disabled by default during validation.
+RAM. It is disabled by default during validation. Experimental
+`-LowMemoryCacheKB 32` and `-LowMemoryCacheKB 64` sizes retain the same mapping
+and coherence rules; 8 KB remains the default when enabled.
 
 All writes reach the original bus and invalidate the corresponding slot.
 DMA ownership and writes through banked aliases immediately disable hits and
@@ -14,8 +16,9 @@ ROM, I/O, VRAM and banked upper windows bypass this cache. Extended DDR uses
 its separate read buffer. CPU-only reset clears cache state, retaining RAM.
 The cache is a physical bus buffer independent of ao486's CR0 cache controls.
 
-The sweep takes 4096 clocks (81.92 microseconds at 50 MHz), and also runs on
-reset. During it, reads and writes continue through the original bus, with
+The sweep takes one clock per word: 4096 clocks (81.92 microseconds at 50 MHz)
+for 8 KB, 16384 for 32 KB, and 32768 (655.36 microseconds) for 64 KB. It also
+runs on reset. During it, reads and writes continue through the original bus, with
 no cache fills. It does not stall DMA or make the CPU wait for the sweep.
 Repeated invalidation while clearing needs no restart because no new entries
 can become valid. This avoids thousands of resettable validity registers.
@@ -37,5 +40,14 @@ fits at 36964 ALMs (88%) and 438 RAM blocks. Its hardware DOS benchmark rises
 from 98 to 119 RAM-copy blocks per ten seconds at 50 MHz, with unchanged
 arithmetic (243 versus 244 blocks). It also passes the 64 MB HIMEMX diagnostic.
 Pixel timing still fails. The RAM-held validity revision preserves the same
-simulation kernel results and passes the CPU/memory regressions; its FPGA
-fit and hardware tests remain pending.
+simulation kernel results. The compact 8 KB version fits in 33348 ALMs and
+438 RAM blocks, then repeats ALU 244 / RAM-copy 119 blocks on hardware. Its
+64 MB HIMEMX and silent PCM86/IRQ tests also pass, with remaining video timing
+violations.
+
+Standalone regressions cover every slot at 8/32/64 KB, including full-capacity
+warm reads, complete flushes, byte writes and in-flight invalidation. The real
+CPU/coherence regression also passes at 64 KB. Its tiny VRAM kernel runs while
+the larger cache's post-DMA clear is still in progress, so that result is a
+correctness check, not a warmed-cache performance comparison. A 64 KB FPGA fit
+is underway; no hardware speedup is established for the larger sizes.

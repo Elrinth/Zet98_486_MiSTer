@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 module pc98_lowmem_cache_tb;
+    parameter CACHE_KB=8;
+    localparam WORDS=CACHE_KB*512;
     reg clk=0; always #5 clk=!clk;
     reg reset=1, invalidate=0;
     reg [19:1] address=0;
@@ -10,7 +12,7 @@ module pc98_lowmem_cache_tb;
     reg [15:0] legacy_readdata=0;
     wire [15:0] readdata;
     reg [15:0] writedata=0;
-    pc98_lowmem_cache dut(.*);
+    pc98_lowmem_cache #(.INDEX_BITS($clog2(WORDS))) dut(.*);
     reg [15:0] memory[0:524287];
     reg [15:0] ports[0:32767];
     integer phase=0, delay_left=0, transfers=0, reads=0, writes=0;
@@ -92,7 +94,7 @@ module pc98_lowmem_cache_tb;
             transact(0,20'h1234,3,0,0);
         end
         // Same index, distinct physical tags.
-        transact(0,20'h3234,3,0,0); transact(0,20'h1234,3,0,0);
+        transact(0,(20'h1234+WORDS*2),3,0,0); transact(0,20'h1234,3,0,0);
         // I/O and every upper-memory region must always fetch current data.
         for(n=0;n<9;n=n+1) begin
             a=n==8 ? 20'h1234 : 20'h80000+n*20'h10000;
@@ -104,12 +106,17 @@ module pc98_lowmem_cache_tb;
             if(transfers!=before_count+1) $fatal(1,"uncacheable read hit cache");
         end
         // Clear all valid slots, including entries away from the current index.
-        for(n=0;n<4096;n=n+1) transact(0,n*2,3,0,0);
+        for(n=0;n<WORDS;n=n+1) transact(0,n*2,3,0,0);
+        before_count=transfers;
+        for(n=0;n<WORDS;n=n+1) transact(0,n*2,3,0,0);
+        if(transfers!=before_count) $fatal(1,"cache did not retain its entire configured capacity");
         @(negedge clk); invalidate=1;
-        for(n=0;n<4096;n=n+1) memory[n]=memory[n]^16'h49d3;
+        for(n=0;n<WORDS;n=n+1) memory[n]=memory[n]^16'h49d3;
         repeat(4) @(negedge clk); invalidate=0;
-        for(n=0;n<4096;n=n+1) transact(0,n*2,3,0,0);
+        for(n=0;n<WORDS;n=n+1) transact(0,n*2,3,0,0);
         // Invalidation during an outstanding miss must prevent stale refills.
+        // Explicitly evict this word: large caches retained it in the sweep.
+        transact(1,20'h6234,3,16'h79bc,0);
         begin_request(0,20'h6234,3,0,0);
         @(negedge clk); while(!legacy_strobe) @(negedge clk);
         invalidate=1; memory[20'h6234>>1]=16'hfa91;
@@ -143,7 +150,7 @@ module pc98_lowmem_cache_tb;
         transact(0,20'h6234,3,0,0);
         // Held and repeated invalidation must never admit stale cached data.
         @(negedge clk); invalidate=1;
-        repeat(4200) @(negedge clk);
+        repeat(WORDS+104) @(negedge clk);
         begin_request(0,20'h2468,3,0,0);
         repeat(10) @(negedge clk);
         if(!legacy_strobe || dut.clearing) $fatal(1,"held invalidation restarted sweep or admitted hit");
@@ -154,8 +161,8 @@ module pc98_lowmem_cache_tb;
         memory[20'h2468>>1]=16'h728a;
         @(negedge clk); invalidate=0;
         transact(0,20'h2468,3,0,0);
-        $display("PASS: low RAM read cache: warm hits, tags, all byte masks, 4096-slot flush, in-flight invalidation, uncached I/O/VRAM/ROM, reset; %0d transfers",transfers);
+        $display("PASS: low RAM read cache: warm hits, tags, all byte masks, %0d-slot flush, in-flight invalidation, uncached I/O/VRAM/ROM, reset; %0d transfers",WORDS,transfers);
         $finish;
     end
-    initial begin #5000000; $fatal(1,"low RAM cache watchdog"); end
+    initial begin #50000000; $fatal(1,"low RAM cache watchdog"); end
 endmodule

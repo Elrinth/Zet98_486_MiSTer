@@ -21,7 +21,7 @@ arithmetic and 2.13x RAM-copy throughput versus its matching 20 MHz build.
 The 64 MB physical-memory probe also passes at 50 MHz. A separate 40 MHz build
 passes a silent 86-board FIFO/IRQ diagnostic. Full-design timing still fails;
 these measurements do not certify gameplay stability or audio quality.
-An optional [8 KB conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
+An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
 50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
 with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
 The first 60 MHz full build fails timing, including CPU-internal paths.

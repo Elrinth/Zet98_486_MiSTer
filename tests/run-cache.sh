@@ -19,7 +19,8 @@ for config in ${CACHE_CONFIGS:-00 10 11}; do
     cache=${config:0:1}
     lowmem=${config:1:1}
     iverilog -g2012 -I rtl/vendor/ao486 -s ao486_cache_tb \
-        -Pao486_cache_tb.ICACHE_ENABLE="$cache" -Pao486_cache_tb.LOWMEM_CACHE="$lowmem" -o "$out/cache.vvp" \
+        -Pao486_cache_tb.ICACHE_ENABLE="$cache" -Pao486_cache_tb.LOWMEM_CACHE="$lowmem" \
+        -Pao486_cache_tb.LOWMEM_CACHE_KB="${LOWMEM_CACHE_KB:-8}" -o "$out/cache.vvp" \
         "${sources[@]}" "$out/l1_icache.v" "$out/simple_fifo_mlab.v" \
         rtl/vendor/common/simple_mult.v rtl/cpu/*.sv tests/cpu_export.sv \
         tests/ao486_cache_tb.sv "$intel_lib/altera_mf.v" 2>"$out/compile.log" || { cat "$out/compile.log"; exit 1; }
@@ -28,7 +29,8 @@ done
 # Negative control: the warmed routine must stay stale if DMA invalidation is
 # disconnected. This guards against a test that accidentally never hits cache.
 iverilog -g2012 -I rtl/vendor/ao486 -s ao486_cache_tb \
-    -Pao486_cache_tb.INVALIDATION_CONNECTED=0 -Pao486_cache_tb.LOWMEM_CACHE=1 -o "$out/stale.vvp" \
+    -Pao486_cache_tb.INVALIDATION_CONNECTED=0 -Pao486_cache_tb.LOWMEM_CACHE=1 \
+    -Pao486_cache_tb.LOWMEM_CACHE_KB="${LOWMEM_CACHE_KB:-8}" -o "$out/stale.vvp" \
     "${sources[@]}" "$out/l1_icache.v" "$out/simple_fifo_mlab.v" \
     rtl/vendor/common/simple_mult.v rtl/cpu/*.sv tests/cpu_export.sv \
     tests/ao486_cache_tb.sv "$intel_lib/altera_mf.v" 2>"$out/compile.log" || { cat "$out/compile.log"; exit 1; }

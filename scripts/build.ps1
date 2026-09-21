@@ -10,12 +10,15 @@ param(
     [ValidateSet('OPNA', 'PC9801_86')]
     [string]$SoundBoard = 'OPNA',
     [switch]$LowMemoryCache,
+    [ValidateSet(8, 32, 64)]
+    [int]$LowMemoryCacheKB = 8,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
+if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildName = 'quartus-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6)
 $buildRoot = Join-Path $projectRoot ('build/' + $buildName)
@@ -44,9 +47,12 @@ try {
     $ExtendedRamMB | Set-Content -LiteralPath (Join-Path $buildRoot 'extended-ram-mb.txt')
     $SoundBoard | Set-Content -LiteralPath (Join-Path $buildRoot 'sound-board.txt')
     [bool]$LowMemoryCache | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache.txt')
+    $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     if ($LowMemoryCache) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_LOWMEM_CACHE=1"
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_LOWMEM_CACHE_KB=$LowMemoryCacheKB"
     }
     if ($SoundBoard -eq 'PC9801_86') {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
