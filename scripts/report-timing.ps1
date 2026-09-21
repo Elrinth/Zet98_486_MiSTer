@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$BuildDirectory,
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
-    [string]$DockerContext = 'desktop-linux'
+    [string]$DockerContext = 'desktop-linux',
+    [ValidateRange(1, 16)][int]$BuildCpus = 1
 )
 $ErrorActionPreference = 'Stop'
 $buildRoot = (Resolve-Path -LiteralPath $BuildDirectory).Path
@@ -11,7 +12,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectPath 'db') -PathType Contain
     throw 'Expected a completed build snapshot with its Quartus database.'
 }
 $containerName = 'zet98-timequest-' + [guid]::NewGuid().ToString('N').Substring(0, 12)
-$containerId = & docker --context $DockerContext create --name $containerName --network none `
+$containerId = & docker --context $DockerContext create --name $containerName --network none --cpus $BuildCpus `
     --workdir /project/Zet98/v17 $Image bash -lc 'quartus_sta -t ../../scripts/report-timing.tcl'
 if ($LASTEXITCODE -ne 0) { throw 'Cannot create TimeQuest container.' }
 $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'timequest-container-id.txt')
