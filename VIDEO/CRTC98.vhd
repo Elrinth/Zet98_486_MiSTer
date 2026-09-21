@@ -319,6 +319,7 @@ signal glinenum1_pixel_source : std_logic_vector(9 downto 0);
 signal gpitch_pixel_source : std_logic_vector(7 downto 0);
 signal dotpline_pixel_source : std_logic_vector(4 downto 0);
 signal graphen_pixel_source : std_logic;
+signal txten_video : std_logic;
 signal lowbl_pixel_source : std_logic;
 
 begin
@@ -350,6 +351,7 @@ begin
 			gpitch_video <= GPITCH;
 			dotpline_video <= DOTPLINE;
 			graphen_video <= GRAPHEN;
+			txten_video <= TXTEN;
 			lowbl_video <= LOWBL;
 		end if;
 	end process;
@@ -517,15 +519,15 @@ begin
 	-- Use the same delayed visible window for DE; HS/VS and RGB do not change.
 	VIDEOEN<=VISIBLE;
 
-	GRPHB<=	x"0" when GRAPHEN='0' else
+	GRPHB<=	x"0" when graphen_video='0' else
 				x"0" when G_DOTE='0' else
 				GPALB;
 
-	GRPHR<=	x"0" when GRAPHEN='0' else
+	GRPHR<=	x"0" when graphen_video='0' else
 				x"0" when G_DOTE='0' else
 				GPALR;
 
-	GRPHG<=	x"0" when GRAPHEN='0' else
+	GRPHG<=	x"0" when graphen_video='0' else
 				x"0" when G_DOTE='0' else
 				GPALG;
 
@@ -534,20 +536,20 @@ begin
 	BOUT<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(0)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(0)) when EMUMODE='1' and ET_BIT='0' else
-			"1111" when TCOLOR(0)='1' and T_BIT='1' and TXTEN='1' else 
-			"0000" when T_BIT='1' and TXTEN='1' else 
+			"1111" when TCOLOR(0)='1' and T_BIT='1' and txten_video='1' else
+			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHB;
 	ROUT<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(2)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(2)) when EMUMODE='1' and ET_BIT='0' else
-			"1111" when TCOLOR(1)='1' and T_BIT='1' and TXTEN='1' else 
-			"0000" when T_BIT='1' and TXTEN='1' else 
+			"1111" when TCOLOR(1)='1' and T_BIT='1' and txten_video='1' else
+			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHR;
 	GOUT<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(1)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(1)) when EMUMODE='1' and ET_BIT='0' else
-			"1111" when TCOLOR(2)='1' and T_BIT='1' and TXTEN='1' else 
-			"0000" when T_BIT='1' and TXTEN='1' else 
+			"1111" when TCOLOR(2)='1' and T_BIT='1' and txten_video='1' else
+			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHG;
 
 	gclk<=clk3;

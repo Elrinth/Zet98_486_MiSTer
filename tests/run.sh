@@ -48,6 +48,7 @@ iverilog -g2012 -Wall -s video_output_tb -o "$out/video.vvp" rtl/video_output.sv
 vvp "$out/video.vvp"
 bash tests/run-floppy-overlay.sh
 bash tests/run-crtc-reset.sh
+bash tests/run-crtc-compositor.sh
 bash tests/run-disk-interface.sh
 bash tests/run-ide.sh
 bash tests/run-data-bus.sh

@@ -185,3 +185,17 @@ late-data negative fails. Two-frame address tests pass split lengths
 fetches. The tested source hash was checked against the workspace after
 correcting an initial Docker copy that used the previous source. FPGA
 fitting and hardware validation of this capture stage remain pending.
+
+## Final colour-enable timing
+
+The OSD-stage 60 MHz fit still exposed a direct CPU-clock graphics-enable
+path into the final RGB output (-0.283 ns worst video setup). The compositor
+now uses the existing parent-video-clock graphics-enable register, with a
+matching register for text enable. Pixel data, palette selection, sync and
+visible-window timing are unchanged. Enable writes take effect on the next
+parent-video-clock edge. Both clock crossings retain normal timing checks.
+
+The actual compositor expressions pass 256 colour/coverage/enable cases and
+reject a deliberately bypassed stage. The complete CRTC reset/render test
+still produces 640 visible pixels, including 636 white test-font pixels,
+at all six reset phases. Integrated fitting and hardware checks are pending.
