@@ -71,3 +71,10 @@ font data, and separately reports unstable reads. It returns failure for any
 byte mismatch. In NP2kai, all 736 pairs match the known-working development
 ROM (`647b5fa9...42f21db7`), with zero unstable reads. A changed capture byte
 and a truncated record are rejected. Hardware capture remains pending.
+
+For a standalone diagnostic floppy, assemble with `-DPROBE_SHELL=1` and set
+`SHELL=Z98FONT.COM` in its minimal CONFIG.SYS. That version flushes its result
+and halts with interrupts enabled rather than returning from DOS's shell.
+The DOS 3.30 D88 boot produced the same 1,528-byte capture as the DOS 6.20
+hard-disk run in NP2kai. Keep source images unchanged and use a new copy for
+each hardware capture because an existing result filename is refused.

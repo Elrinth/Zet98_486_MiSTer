@@ -73,8 +73,8 @@ start:
     mov dx,success_text
     mov ah,9
     int 21h
-    mov ax,4c00h
-    int 21h
+    xor al,al
+    jmp finish
 close_failed:
     mov bx,[handle]
     mov ah,3eh
@@ -83,8 +83,17 @@ failed:
     mov dx,failure_text
     mov ah,9
     int 21h
-    mov ax,4c01h
+    mov al,1
+finish:
+%ifdef PROBE_SHELL
+    sti
+.halt:
+    hlt
+    jmp .halt
+%else
+    mov ah,4ch
     int 21h
+%endif
 critical_error:
     mov al,3
     iret
