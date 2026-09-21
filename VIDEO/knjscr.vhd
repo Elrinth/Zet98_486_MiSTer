@@ -69,6 +69,10 @@ signal	C0ADDR	:std_logic_vector(12 downto 0);
 signal	wPITCH	:std_logic_vector(12 downto 0);
 signal	TRAMADRx	:std_logic_vector(12 downto 0);
 signal	iskanji	:std_logic;
+signal cursor_addr_pixel :std_logic_vector(12 downto 0);
+signal cursor_enable_pixel, cursor_blink_pixel :std_logic;
+signal cursor_upper_pixel, cursor_lower_pixel :integer range 0 to 19;
+signal cursor_rate_pixel :std_logic_vector(4 downto 0);
 
 component delayer
 generic(
@@ -96,6 +100,24 @@ signal	tramdatm	:std_logic_vector(15 downto 0);
 signal	tramdatl	:std_logic_vector(15 downto 0);
 
 begin
+
+	-- Register the CPU-domain cursor settings before the glyph comparison.
+	-- These clocks share the PLL and remain fully timed: the short register
+	-- crossing replaces a CPU-to-pixel compare/invert path with only 6.666 ns.
+	-- Cursor updates take effect one pixel later without changing scan timing.
+	process(clk,rstn)begin
+		if rstn='0' then
+			cursor_addr_pixel<=(others=>'0');
+			cursor_enable_pixel<='0'; cursor_blink_pixel<='0';
+			cursor_upper_pixel<=0; cursor_lower_pixel<=0;
+			cursor_rate_pixel<="01000";
+		elsif rising_edge(clk) then
+			cursor_addr_pixel<=CURADDR;
+			cursor_enable_pixel<=CURE; cursor_blink_pixel<=CBLINK;
+			cursor_upper_pixel<=CURUPPER; cursor_lower_pixel<=CURLOWER;
+			cursor_rate_pixel<=BLINKRATE;
+		end if;
+	end process;
 
 	Hdelay	:delayer generic map(1) port map(HCOMP,DHCOMP,clk,rstn);
 	Vdelay	:delayer generic map(2) port map(VCOMP,DVCOMP,clk,rstn);
@@ -168,7 +190,7 @@ begin
 		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn);
 	C_COL<=0 when HUCOUNT<HIV else HUCOUNT-HIV;
 
-	CBLINKINT<=conv_integer(BLINKRATE);
+	CBLINKINT<=conv_integer(cursor_rate_pixel);
 	
 	process(clk,rstn)begin
 		if(rstn='0')then
@@ -202,7 +224,7 @@ begin
 		end if;
 	end process;
 
-	CURV<=CURE when CBLINK='0' else (CURE and CURF);
+	CURV<=cursor_enable_pixel when cursor_blink_pixel='0' else (cursor_enable_pixel and CURF);
 
 	process(clk,rstn)begin
 		if(rstn='0')then
@@ -268,7 +290,7 @@ begin
 					if(TRAMATR(bit_RV)='1')then
 						BNXTDOT:=not BNXTDOT;
 					end if;
-					if(CURV='1' and TRAMADRb=CURADDR and (C_LIN>CURUPPER and C_LIN<CURLOWER))then
+					if(CURV='1' and TRAMADRb=cursor_addr_pixel and (C_LIN>cursor_upper_pixel and C_LIN<cursor_lower_pixel))then
 						NXTDOT<=not BNXTDOT;
 					else
 						NXTDOT<=BNXTDOT;

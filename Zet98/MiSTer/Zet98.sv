@@ -40,8 +40,8 @@ module emu
 	output        CE_PIXEL,
 
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output  [7:0] VIDEO_ARX,
-	output  [7:0] VIDEO_ARY,
+	output [12:0] VIDEO_ARX,
+	output [12:0] VIDEO_ARY,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -148,14 +148,15 @@ assign BUTTONS   = 0;
  
 // MiSTer treats a zero ratio as full-screen scaling. Keep bit 1's existing
 // 4:3/16:9 meanings so saved settings remain compatible.
-assign VIDEO_ARX = status[2] ? 8'd0 : (status[1] ? 8'd16 : 8'd4);
-assign VIDEO_ARY = status[2] ? 8'd0 : (status[1] ? 8'd9  : 8'd3);
+wire [11:0] aspect_x = status[2] ? 12'd0 : (status[1] ? 12'd16 : 12'd4);
+wire [11:0] aspect_y = status[2] ? 12'd0 : (status[1] ? 12'd9 : 12'd3);
 
 `include "build_id.v" 
 parameter CONF_STR = {
 	"Zet98;;",
 	"-;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
+	"ONO,HDMI scaling,V-Integer,HV-Integer,Aspect;",
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
 	"O5,Floppy icon,On,Off;",
@@ -164,7 +165,11 @@ parameter CONF_STR = {
 	"-;",
 	"S0,D88,FDD0;",
 	"S1,D88,FDD1;",
+`ifdef ZET98_RAW_IDE
+	"S2,VHD,IDE hard disk;",
+`else
 	"S2,HDF,SASI;",
+`endif
 	"S3,RAM,NVRAM;",
 	"-;",
 	"R7,SYNC FD0;",
@@ -280,6 +285,20 @@ wire        ps2_mouse_data_in;
 wire  [31:0] sd_lba;
 wire   [3:0] sd_rd;
 wire   [3:0] sd_wr;
+wire   [3:0] legacy_sd_rd, legacy_sd_wr;
+wire  [31:0] ide_lba;
+wire         ide_rd, ide_wr;
+wire   [7:0] ide_buff_din;
+wire  [15:0] ide_address, ide_writedata, ide_readdata;
+wire   [1:0] ide_select;
+wire         ide_read, ide_write, ide_oe, ide_irq, ide_resetn;
+`ifdef ZET98_RAW_IDE
+localparam RAW_IDE=1;
+`else
+localparam RAW_IDE=0;
+`endif
+assign sd_rd = RAW_IDE ? {legacy_sd_rd[3],ide_rd,legacy_sd_rd[1:0]} : legacy_sd_rd;
+assign sd_wr = RAW_IDE ? {legacy_sd_wr[3],ide_wr,legacy_sd_wr[1:0]} : legacy_sd_wr;
 
 wire  [3:0] sd_ack;
 wire  [8:0] sd_buff_addr;
@@ -291,9 +310,9 @@ wire  [7:0] sd_slot_buff_din [4];
 genvar slot;
 generate
 for (slot = 0; slot < 4; slot = slot + 1) begin : disk_slots
-	assign sd_slot_lba[slot] = sd_lba;
+	assign sd_slot_lba[slot] = RAW_IDE && slot==2 ? ide_lba : sd_lba;
 	assign sd_slot_blk_cnt[slot] = 6'd0; // One 512-byte block per diskemu request.
-	assign sd_slot_buff_din[slot] = sd_buff_din;
+	assign sd_slot_buff_din[slot] = RAW_IDE && slot==2 ? ide_buff_din : sd_buff_din;
 end
 endgenerate
 wire        sd_buff_wr;
@@ -301,6 +320,22 @@ wire [15:0] sd_req_type = 0;
 wire  [3:0] img_mounted;
 wire        img_readonly;
 wire [63:0] img_size;
+
+generate if(RAW_IDE) begin : raw_ide
+	pc98_ide controller (
+		.clk(clk_sys), .reset(!ide_resetn),
+		.io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
+		.io_read(ide_read), .io_write(ide_write), .io_readdata(ide_readdata),
+		.io_oe(ide_oe), .irq(ide_irq),
+		.image_mounted(img_mounted[2]), .image_readonly(img_readonly), .image_size(img_size),
+		.sd_lba(ide_lba), .sd_rd(ide_rd), .sd_wr(ide_wr), .sd_ack(sd_ack[2]),
+		.sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout),
+		.sd_buff_din(ide_buff_din), .sd_buff_wr(sd_buff_wr)
+	);
+end else begin : no_raw_ide
+	assign {ide_lba,ide_rd,ide_wr,ide_buff_din,ide_oe,ide_irq}=0;
+	assign ide_readdata=16'hffff;
+end endgenerate
 
 wire [65:0] ps2_key;
 wire [64:0] sysrtc;
@@ -378,7 +413,7 @@ assign CLK_VIDEO = clk_vid;
 assign AUDIO_S = 1;
 
 wire disk_led;
-wire floppy_access;
+wire [1:0] floppy_access;
 wire native_ce, native_hs, native_vs, native_de;
 wire [7:0] native_r, native_g, native_b;
 wire output_ce, output_hs, output_vs, output_de;
@@ -393,11 +428,22 @@ video_output video_out (
 );
 floppy_overlay floppy_icon (
 	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
-	.activity(floppy_access | (|sd_rd[1:0]) | (|sd_wr[1:0])),
+	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]),
 	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
 	.in_r(output_r), .in_g(output_g), .in_b(output_b),
 	.out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
 	.out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
+);
+
+// MiSTer's standard scaler helper reports an explicit pixel-sized viewport.
+// It changes HDMI placement only; native RGB and sync timings are untouched.
+video_freak hdmi_scale (
+	.CLK_VIDEO(clk_vid), .CE_PIXEL(CE_PIXEL), .VGA_VS(VGA_VS),
+	.HDMI_WIDTH(HDMI_WIDTH), .HDMI_HEIGHT(HDMI_HEIGHT),
+	.VGA_DE(), .VIDEO_ARX(VIDEO_ARX), .VIDEO_ARY(VIDEO_ARY),
+	.VGA_DE_IN(VGA_DE), .ARX(aspect_x), .ARY(aspect_y),
+	.CROP_SIZE(12'd0), .CROP_OFF(5'd0),
+	.SCALE(status[24:23]==2 ? 3'd0 : status[24:23]==1 ? 3'd4 : 3'd1)
 );
 
 `ifdef ZET98_EXT_RAM_MB
@@ -463,21 +509,24 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pFDSYNC(fdsync),
 	.pFDEJECT(fdeject),
 
-	.mist_mounted(img_mounted),
+	.mist_mounted(img_mounted & (RAW_IDE ? 4'b1011 : 4'b1111)),
 	.mist_readonly({4{img_readonly}}),
 	.mist_imgsize(img_size),
 
 	.mist_lba(sd_lba),
-	.mist_rd(sd_rd),
-	.mist_wr(sd_wr),
+	.mist_rd(legacy_sd_rd),
+	.mist_wr(legacy_sd_wr),
 	// diskemu serializes all four image slots onto one buffer/acknowledgement.
 	// hps_io returns a one-hot ACK: narrowing it to one bit loses slots 1..3.
-	.mist_ack(|sd_ack),
+	.mist_ack(|(sd_ack & (RAW_IDE ? 4'b1011 : 4'b1111))),
 
 	.mist_buffaddr(sd_buff_addr),
 	.mist_buffdout(sd_buff_dout),
 	.mist_buffdin(sd_buff_din),
-	.mist_buffwr(sd_buff_wr),
+	.mist_buffwr(sd_buff_wr & (!RAW_IDE || !sd_ack[2])),
+	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
+	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
+	.pIDEReadData(ide_readdata), .pIDEOE(ide_oe), .pIDEIRQ(ide_irq),
 
 	.pLed(disk_led),
 	.pFloppyAccess(floppy_access),

@@ -50,4 +50,8 @@ warm reads, complete flushes, byte writes and in-flight invalidation. The real
 CPU/coherence regression also passes at 64 KB. Its tiny VRAM kernel runs while
 the larger cache's post-DMA clear is still in progress, so that result is a
 correctness check, not a warmed-cache performance comparison. A 64 KB FPGA fit
-is underway; no hardware speedup is established for the larger sizes.
+completes in `quartus-20260921-073124-f4b543`: 33226 ALMs and 503/553 RAM
+blocks. Hardware gives ALU 246 / RAM copy 121 blocks, exactly matching the
+8 KB version with the same pixel-clock changes. This benchmark demonstrates
+no benefit from 64 KB; 8 KB remains the baseline. Timing still fails two
+checks, worst -0.164 ns. Rusty gameplay benefit from 64 KB remains unmeasured.

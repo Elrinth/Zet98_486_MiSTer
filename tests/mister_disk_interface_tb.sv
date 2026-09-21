@@ -16,6 +16,7 @@ module mister_disk_interface_tb;
     // generate scope rules differ from Quartus for this upstream PS/2 block.
     defparam dut.hps_io.CONF_STR_BRAM = 0;
     defparam dut.hps_io.PS2DIV = 0;
+    defparam dut.floppy_icon.ROM_FILE = "rtl/assets/floppy-animation.hex";
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;
@@ -149,13 +150,22 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     input [7:0] mist_buffdout,
     output [7:0] mist_buffdin,
     input mist_buffwr,
-    output pLed, pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
+    output reg [15:0] pIDEAddress, pIDEWriteData,
+    output reg [1:0] pIDESelect,
+    output reg pIDERead, pIDEWrite, pIDEResetn,
+    input [15:0] pIDEReadData,
+    input pIDEOE, pIDEIRQ,
+    output pLed, output [1:0] pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
     input pSramld, pSramst,
     output [7:0] pVideoR, pVideoG, pVideoB,
     output pVideoHS, pVideoVS, pVideoEN, pVideoClk,
     output [15:0] pSndL, pSndR,
     input pStartupBeeps, rstn
 );
+    initial begin
+        pIDEAddress=0; pIDEWriteData=0; pIDESelect=3;
+        pIDERead=0; pIDEWrite=0; pIDEResetn=0;
+    end
     assign mist_buffdin = mist_buffaddr[7:0] ^ 8'ha5;
     assign LDR_ACK = 0;
     assign pFloppyAccess = 0;

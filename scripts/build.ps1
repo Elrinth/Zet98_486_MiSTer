@@ -12,6 +12,7 @@ param(
     [switch]$LowMemoryCache,
     [ValidateSet(8, 32, 64)]
     [int]$LowMemoryCacheKB = 8,
+    [switch]$RawIde,
     [switch]$PrepareOnly
 )
 
@@ -48,6 +49,11 @@ try {
     $SoundBoard | Set-Content -LiteralPath (Join-Path $buildRoot 'sound-board.txt')
     [bool]$LowMemoryCache | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache.txt')
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
+    [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
+    if ($RawIde) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RAW_IDE=1"
+    }
     if ($LowMemoryCache) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_LOWMEM_CACHE=1"

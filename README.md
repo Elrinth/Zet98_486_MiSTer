@@ -55,12 +55,20 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    separate format and are not promised by a `.vhd` file selector.
    Provide a bootable, user-supplied DOS setup with documented CONFIG.SYS and
    AUTOEXEC.BAT settings for a multi-game disk.
+   The experimental [`-RawIde` controller](rtl/storage/README.md) now passes
+   task-file and real HPS-interface simulations. Its disk BIOS and HDD boot
+   path are still missing; hardware sector/IRQ testing is pending.
 4. Add the PC-98 MIDI interface used by games and route it through MiSTer MidiLink
    for local MUNT/FluidSynth synthesis and USB MIDI hardware. External MT32-pi
    support is a further option, not a requirement for listening to MIDI.
 5. Keep full-screen scaling and provide an optional rotating floppy activity
    icon, enabled by default. Assess the SuperStation One optical drive as a
    later storage extension once its host interface is established.
+   New [video options](VIDEO_OUTPUT.md) add HDMI integer scaling, capture the
+   actual 400-line picture and show the supplied 59-frame disk animation with
+   a D0/D1 label and cycling dots. Simulations pass; FPGA fitting and hardware
+   verification are pending. Standard 15 kHz SCART scan conversion is not yet
+   implemented.
 
 ## Current source and build
 

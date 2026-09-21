@@ -9,6 +9,7 @@ ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd \
 ghdl -e --std=08 -fsynopsys --workdir="$out" text_pixel_memory_tb
 for delay in 0 12 25; do
     ghdl -r --std=08 -fsynopsys --workdir="$out" text_pixel_memory_tb -gRAM_DELAY_NS="$delay" --assert-level=error
+    ghdl -r --std=08 -fsynopsys --workdir="$out" text_pixel_memory_tb -gRAM_DELAY_NS="$delay" -gCURSOR_TEST=true --assert-level=error
 done
 # Model a memory that misses the pixel pipeline deadline: checking only the
 # address stream would miss this, so require a rendered-pixel failure.

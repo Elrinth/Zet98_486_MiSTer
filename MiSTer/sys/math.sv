@@ -2,8 +2,8 @@
 // result = num/div
 module sys_udiv
 #(
-	parameter NB_NUM, 
-	parameter NB_DIV
+	parameter NB_NUM = 24,
+	parameter NB_DIV = 12
 )
 (
 	input  clk,
@@ -16,7 +16,7 @@ module sys_udiv
 	output reg [NB_DIV-1:0] remainder
 );
 
-reg run;
+reg run = 0;
 assign busy = run;
 
 always @(posedge clk) begin
@@ -45,8 +45,8 @@ endmodule
 // result = mul1*mul2
 module sys_umul
 #(
-	parameter NB_MUL1, 
-	parameter NB_MUL2
+	parameter NB_MUL1 = 12,
+	parameter NB_MUL2 = 12
 )
 (
 	input  clk,
@@ -58,7 +58,7 @@ module sys_umul
 	output reg [NB_MUL1+NB_MUL2-1:0] result
 );
 
-reg run;
+reg run = 0;
 assign busy = run;
 
 always @(posedge clk) begin
@@ -84,9 +84,9 @@ endmodule
 // result = (mul1*mul2)/div
 module sys_umuldiv
 #(
-	parameter NB_MUL1, 
-	parameter NB_MUL2,
-	parameter NB_DIV
+	parameter NB_MUL1 = 12,
+	parameter NB_MUL2 = 12,
+	parameter NB_DIV = 12
 )
 (
 	input  clk,

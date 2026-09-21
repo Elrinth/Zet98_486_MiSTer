@@ -32,7 +32,7 @@ module video_freak
 	input       [2:0] SCALE     //0 - normal, 1 - V-integer, 2 - HV-Integer-, 3 - HV-Integer+, 4 - HV-Integer
 );
 
-reg         mul_start;
+reg         mul_start = 0;
 wire        mul_run;
 reg  [11:0] mul_arg1, mul_arg2;
 wire [23:0] mul_res;
@@ -157,14 +157,14 @@ module video_scale_int
 	output reg [12:0] ary_o
 );
 
-reg         div_start;
+reg         div_start = 0;
 wire        div_run;
 reg  [23:0] div_num;
 reg  [11:0] div_den;
 wire [23:0] div_res;
-sys_udiv #(24,12) div(CLK_VIDEO,div_start,div_run, div_num,div_den,div_res);
+sys_udiv #(24,12) div(CLK_VIDEO,div_start,div_run, div_num,div_den,div_res,);
 
-reg         mul_start;
+reg         mul_start = 0;
 wire        mul_run;
 reg  [11:0] mul_arg1, mul_arg2;
 wire [23:0] mul_res;
@@ -175,7 +175,7 @@ wire [11:0] wideres = mul_res[11:0] + hsize;
 always @(posedge CLK_VIDEO) begin
 	reg [11:0] oheight,wres;
 	reg [12:0] arxf,aryf;
-	reg  [3:0] cnt;
+	reg  [3:0] cnt = 0;
 	reg        narrow;
 
 	div_start <= 0;
@@ -255,7 +255,7 @@ always @(posedge CLK_VIDEO) begin
 				end
 
 			10: begin
-					narrow    <= ((div_num[11:0] - mul_res[11:0]) <= (wideres - div_num[11:0])) || (wideres > HDMI_WIDTH);
+					narrow    <= (mul_res >= div_num) || ((div_num[11:0] - mul_res[11:0]) <= (wideres - div_num[11:0])) || (wideres > HDMI_WIDTH);
 					wres      <= wideres;
 				end
 

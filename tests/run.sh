@@ -18,6 +18,7 @@ bash tests/run-extmem-bridge.sh
 bash tests/run-sdram.sh
 bash tests/run-video-sdram.sh
 bash tests/run-text-pixel-memory.sh
+bash tests/run-video-scale.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \
     LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
@@ -42,6 +43,7 @@ vvp "$out/video.vvp"
 iverilog -g2012 -Wall -s floppy_overlay_tb -o "$out/floppy-overlay.vvp" rtl/floppy_overlay.sv tests/floppy_overlay_tb.sv
 vvp "$out/floppy-overlay.vvp"
 bash tests/run-disk-interface.sh
+bash tests/run-ide.sh
 bash tests/run-data-bus.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
@@ -51,3 +53,7 @@ ghdl -r --std=08 -fsynopsys --workdir="$out" dma_grant_tb --assert-level=error
 ghdl -a --std=08 --workdir="$out" rtl/startup_mute.vhd tests/startup_mute_tb.vhd
 ghdl -e --std=08 --workdir="$out" startup_mute_tb
 ghdl -r --std=08 --workdir="$out" startup_mute_tb --assert-level=error
+
+ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd rtl/reset_release.vhd tests/video_reset_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" video_reset_tb
+ghdl -r --std=08 -fsynopsys --workdir="$out" video_reset_tb --assert-level=error

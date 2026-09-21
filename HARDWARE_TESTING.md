@@ -668,8 +668,40 @@ and both control synchronizers. The fresh retry is
 but 19 full-design checks fail, worst -0.951 ns. Remaining paths include
 text-RAM-to-pixel hold (-0.951), CPU write-data-to-SDRAM setup (-0.623),
 the MiSTer scaler (-0.441), and video reset recovery (-0.195 ns).
-Hardware validation is pending; this is not
-yet a demonstrated fix for Rusty's black transition or the earlier HDMI issue.
+The 07:39:16 hardware benchmark passes with ALU 246 / RAM copy 121 blocks
+(`graphicssync50-bench-return-1.d88`). Rusty launched at 07:42:49 reaches the
+title at 07:47:08 and the introductory map at 07:52:36. This still uses the
+private intro-skipping disk; it does not establish original intro completion,
+frame rate, or a fix for the earlier HDMI issue.
+
+### Subsequent text-clock, cache-size and reset builds
+
+The text-clock build `quartus-20260921-072136-f80571` fits in 27m19s with
+33286 ALMs, 435 RAM blocks and 65 DSPs. Reported failing checks drop from
+19 to 2, worst -0.231 ns: CPU text-cursor settings still cross directly into
+the glyph comparison. RBF SHA-256 is
+`7b0436fce926ad744235abefb1805af357c614b81dc064c147a57009d2250d6c`.
+Its benchmark launched at 08:00:41 passes ALU 246 / RAM copy 121 blocks
+(`pixeltext50-bench-return-1.d88`).
+
+The matching 64 KB conventional-cache build `quartus-20260921-073124-f4b543`
+fits in 29m31s with 33226 ALMs, 503 RAM blocks and 65 DSPs. Two timing checks
+fail, worst -0.164 ns. RBF SHA-256 is
+`f0f0f134f076dca0187418f1f45ad0fc2f7637a237d5ff2da78a0286cbbef9ad`.
+The 08:05:06 benchmark also passes ALU 246 / RAM copy 121 blocks
+(`cache64k50-bench-return-1.d88`). This does not demonstrate an advantage
+over 8 KB, which remains the working baseline.
+
+The reset-release build `quartus-20260921-073713-f711bc` adds separate
+two-stage video/pixel reset release. Its simulation verifies 40 release
+phases and stopped-clock recovery. Its full fit nevertheless fails 14 checks,
+worst -0.647 ns; it is not deployed. Source now also pipelines cursor settings
+into the pixel domain, with all original cursor paths still timed. Rendered
+text tests cover cursor on/off, font/attribute alignment and late-data rejection.
+
+The raw IDE hardware probe and the later integer-scaling/animated-overlay
+builds are in preparation. See `rtl/storage/README.md` and `VIDEO_OUTPUT.md`
+for exactly what has been implemented versus verified on hardware.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable unmodified intro-to-game loading, repeatable gameplay

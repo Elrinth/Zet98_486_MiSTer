@@ -84,12 +84,18 @@ port(
 
 	psramld			:in std_logic;
 	psramst			:in std_logic;
+	-- Optional PC-98 ATA task file in the MiSTer wrapper (same CPU clock).
+	pIDEAddress, pIDEWriteData :out std_logic_vector(15 downto 0);
+	pIDESelect :out std_logic_vector(1 downto 0);
+	pIDERead, pIDEWrite, pIDEResetn :out std_logic;
+	pIDEReadData :in std_logic_vector(15 downto 0);
+	pIDEOE, pIDEIRQ :in std_logic;
 
 -- DIP switch, Lamp ports
 	pDip1			: in std_logic_vector(1 downto 0);
 	pDip2			: in std_logic_vector(7 downto 0);
 	pLed			: out std_logic;
-	pFloppyAccess : out std_logic;
+	pFloppyAccess : out std_logic_vector(1 downto 0);
 
 	-- Video, Audio/CMT ports
 	pVideoR     : out	std_logic_vector( 7 downto 0);  -- RGB_Red / Svideo_C
@@ -1755,6 +1761,7 @@ signal	srstn	:std_logic;
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
+signal video_logic_rstn :std_logic;
 signal	grpclk	:std_logic;
 
 --text ram
@@ -2366,6 +2373,7 @@ begin
 	srstn<=rstn and LDR_DONE and EMU_INIDONE;
 	
 	vrstn<=LDR_DONE;-- and rstn;
+	video_reset : entity work.reset_release port map(vidclk,vrstn,video_logic_rstn);
 
 	tgc<=INTM;
 	
@@ -2990,12 +2998,12 @@ DBIO_ODAT<=(others=>'1');
 
 		gclk		=>grpclk,
 		clk			=>vidclk,
-		rstn		=>vrstn
+		rstn		=>video_logic_rstn
 	);
 	
 	-- Keep retrace decoding out of the CPU read mux and PIC priority path.
 	retrace_status : entity work.video_retrace_cdc port map (
-		video_clk => vidclk, video_rstn => vrstn,
+		video_clk => vidclk, video_rstn => video_logic_rstn,
 		cpu_clk => cpuclk, cpu_rstn => srstn,
 		vrtc_in => VRTC_video, hrtc_in => HRTC_video,
 		vrtc_out => VRTC, hrtc_out => HRTC
@@ -3508,7 +3516,8 @@ DBIO_ODAT<=(others=>'1');
 						"1011" when FDC_USEL="10" else
 						"1000" when FDC_USEL="11" else
 						"1111";
-	pFloppyAccess <= FDC_BUSY;
+	pFloppyAccess <= "01" when FDC_BUSY='1' and FDC_USEL="00" else
+	                 "10" when FDC_BUSY='1' and FDC_USEL="01" else "00";
 	
 	DISKE	:component diskemu_mister 	generic map(SYSFREQ,SYSFREQ,10) port map(
 	--SASI
@@ -3727,6 +3736,15 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	COM_CS<='1' when (ioaddr_even(15 downto 2)=x"003" & "00") and ioaddr_even(0)='0' else '0';
+	pIDEAddress<=ioaddr_even;
+	pIDESelect<=cpusel when DMAen='0' else "00";
+	pIDEWriteData<=io_wdata;
+	pIDERead<=iord;
+	pIDEWrite<=iowr;
+	pIDEResetn<=srstn;
+	IDE_ODAT<=pIDEReadData;
+	IDE_DOE<=pIDEOE;
+	IDE_INT<=pIDEIRQ;
 	
 --	IDE	:pseudoide port map(
 --		ioaddr	=>ioaddr,

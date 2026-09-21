@@ -264,6 +264,7 @@ signal GRPHB		:std_logic_vector(3 downto 0);
 	
 signal clk2		:std_logic;
 signal clk3		:std_logic;
+signal pixel_rstn :std_logic;
 
 signal TCOLOR	:std_logic_vector(2 downto 0);
 signal T_BIT	:std_logic;
@@ -296,6 +297,8 @@ begin
 	KNJSEL	<=KNJFNT_SEL when EMUMODE='0' else "00";
 	KNJADR	<=KNJFNT_ADDR when EMUMODE='0' else ('0' & x"0800")+EFNT_ADDR;
 	
+	pixel_reset : entity work.reset_release port map(clk3,rstn,pixel_rstn);
+
 	TXT	:knjscr port map(
 		TRAMADR	=>TRAM_ADR,
 		TRAMDAT	=>TRAM_DAT,
@@ -327,7 +330,7 @@ begin
 		VCOMP	=>VCOMP,
 
 		clk		=>clk3,
-		rstn	=>rstn
+		rstn	=>pixel_rstn
 	);
 	
 	ETXT	:TEXTSCR generic map(4,20,40) port map(
@@ -359,7 +362,7 @@ begin
 		VCOMP		=>VCOMP,
 
 		clk		=>clk3,
-		rstn		=>rstn
+		rstn		=>pixel_rstn
 	);
 	ETRAM_ADR<=ETRAM_ADRX(0) & ETRAM_ADRX(11 downto 1);
 	
@@ -393,7 +396,7 @@ begin
 		PITCH	=>GPITCH,
 		
 		clk		=>clk3,
-		rstn	=>rstn
+		rstn	=>pixel_rstn
 	);
 
 	sync:synccont2 generic map(
@@ -408,7 +411,11 @@ begin
 	HSY		=>HSY,
 	VFP		=>VFP,
 	VSY		=>VSY
-) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,VIDEOEN,HRTC,VRTC,clk3,rstn);
+) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,open,HRTC,VRTC,clk3,pixel_rstn);
+	-- RGB is already forced black outside VISIBLE (640x400). Capturing 480
+	-- lines included an 80-line black border and distorted HDMI aspect/scaling.
+	-- Use the same delayed visible window for DE; HS/VS and RGB do not change.
+	VIDEOEN<=VISIBLE;
 
 	GRPHB<=	x"0" when GRAPHEN='0' else
 				x"0" when G_DOTE='0' else
@@ -446,5 +453,3 @@ begin
 	gclk<=clk3;
 
 end MAIN;
-
-	

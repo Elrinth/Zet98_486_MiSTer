@@ -8,7 +8,7 @@ use std.env.all;
 -- Alternating Latin and two-cell Kanji catches reuse of the previous cell's
 -- RAM output, which a faster 75 MHz memory clock used to hide.
 entity text_pixel_memory_tb is
-    generic (RAM_DELAY_NS : natural := 12);
+    generic (RAM_DELAY_NS : natural := 12; CURSOR_TEST : boolean := false);
 end;
 architecture test of text_pixel_memory_tb is
     signal clk : std_logic := '0';
@@ -23,6 +23,7 @@ architecture test of text_pixel_memory_tb is
     signal fs : std_logic_vector(1 downto 0);
     signal bitout : std_logic;
     signal color : std_logic_vector(2 downto 0);
+    signal cursor_enable : std_logic;
     type chars_t is array(0 to 7) of std_logic_vector(15 downto 0);
     constant chars : chars_t := (x"0041",x"2110",x"0020",x"0042",x"2350",x"0020",x"0043",x"0044");
     -- Independent known font locations for A, Kanji 2110 (both halves), B,
@@ -39,10 +40,11 @@ architecture test of text_pixel_memory_tb is
     end;
 begin
     clk <= not clk after 20 ns;
+    cursor_enable <= '1' when CURSOR_TEST else '0';
     dut : entity work.KNJSCR port map(
         TRAMADR=>ta, TRAMDAT=>td, TRAMATR=>attr, FROMSEL=>fs, FROMADR=>fa, FROMDAT=>fd,
         BITOUT=>bitout, COLOR=>color,
-        CURADDR=>(others=>'0'), CURE=>'0', CURUPPER=>0, CURLOWER=>15,
+        CURADDR=>std_logic_vector(to_unsigned(3,13)), CURE=>cursor_enable, CURUPPER=>3, CURLOWER=>12,
         CBLINK=>'0', BLINKRATE=>"01000", BASEADDR=>(others=>'0'), HMODE=>'1',
         VLINES=>"01111", PITCH=>x"50", UCOUNT=>u, HUCOUNT=>hu, VCOUNT=>v,
         HCOMP=>hc, VCOMP=>vc, clk=>clk, rstn=>rstn);
@@ -91,6 +93,7 @@ begin
                         expected := font_byte(bases(cell)+row,bank);
                         if cell=6 then expected:=not expected; end if;
                         if cell=7 and row=15 then expected:=x"ff"; end if;
+                        if CURSOR_TEST and cell=3 and row>3 and row<12 then expected:=not expected; end if;
                         assert bitout=expected(7-dot)
                             report "Wrong text pixel: row=" & integer'image(row) &
                                 " cell=" & integer'image(cell) & " dot=" & integer'image(dot)
