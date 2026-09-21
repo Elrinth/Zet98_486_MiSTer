@@ -901,13 +901,15 @@ end
 
 `ifndef MISTER_DEBUG_NOHDMI
 wire [15:0] lltune;
+wire [15:0] measured_lltune;
+hdmi_tune_gate tune_gate(hdmi_config_done | cfg_dis, lltune, measured_lltune);
 pll_hdmi_adj pll_hdmi_adj
 (
 	.clk(FPGA_CLK1_50),
 	.reset_na(~reset_req),
 
 	.llena(lowlat),
-	.lltune({16{hdmi_config_done | cfg_dis}} & lltune),
+	.lltune(measured_lltune),
 	.locked(led_locked),
 	.i_waitrequest(adj_waitrequest),
 	.i_write(adj_write),

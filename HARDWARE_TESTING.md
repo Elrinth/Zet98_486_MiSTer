@@ -897,3 +897,20 @@ Full CRTC render tests pass six reset phases (640 visible pixels), raster
 counter tests pass, and 40 reset phases/stopped-clock recovery pass. A test
 that reconnects raster reset to the parent domain fails as intended. Physical
 timing and hardware verification of these video changes remain pending.
+
+The same 60 MHz netlist also reports -1.284 ns from video_calc measurements
+through its CPU-clock parameter mux and -1.593 ns from cfg_dis into the HDMI
+PLL's video measurement logic. Measurement words are now registered before
+the status mux, retaining normal timing checks. The real video_calc passes
+two raster modes and all width/height/line/frame/pixel parameter reads at
+four system rates. The test raster includes a vertical back porch, as the
+core does; putting active video on the VS falling edge incorrectly omitted
+its first pixel in the initial test model.
+
+HDMI tuning now keeps both scaler measurement clocks unmasked and registers
+configuration enable on the input-video clock before masking data/CE. Forty
+enable phases pass, with exactly preserved clock-edge counts. A deliberately
+restored configuration clock gate fails. No global MiSTer configuration or
+physical HDMI output mode is changed. These framework changes still require
+full FPGA timing and hardware validation; they do not establish the cause
+of the user's earlier display-chain glitches.

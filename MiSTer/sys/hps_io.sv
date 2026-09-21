@@ -852,21 +852,41 @@ module video_calc
 	output reg [15:0] dout
 );
 
+// Capture measurements before the parameter mux. This keeps the mux
+// entirely in clk_sys; all incoming register paths retain timing checks.
+reg [1:0] vid_int_sys = 0;
+reg [7:0] vid_nres_sys = 0;
+reg [31:0] vid_hcnt_sys = 0;
+reg [31:0] vid_vcnt_sys = 0;
+reg [31:0] vid_htime_sys = 0;
+reg [31:0] vid_vtime_sys = 0;
+reg [31:0] vid_pix_sys = 0;
+reg [31:0] vid_vtime_hdmi_sys = 0;
+
 always @(posedge clk_sys) begin
+    vid_int_sys <= vid_int;
+    vid_nres_sys <= vid_nres;
+    vid_hcnt_sys <= vid_hcnt;
+    vid_vcnt_sys <= vid_vcnt;
+    vid_htime_sys <= vid_htime;
+    vid_vtime_sys <= vid_vtime;
+    vid_pix_sys <= vid_pix;
+    vid_vtime_hdmi_sys <= vid_vtime_hdmi;
+
 	case(par_num)
-		1: dout <= {|vid_int, vid_nres};
-		2: dout <= vid_hcnt[15:0];
-		3: dout <= vid_hcnt[31:16];
-		4: dout <= vid_vcnt[15:0];
-		5: dout <= vid_vcnt[31:16];
-		6: dout <= vid_htime[15:0];
-		7: dout <= vid_htime[31:16];
-		8: dout <= vid_vtime[15:0];
-		9: dout <= vid_vtime[31:16];
-	  10: dout <= vid_pix[15:0];
-	  11: dout <= vid_pix[31:16];
-	  12: dout <= vid_vtime_hdmi[15:0];
-	  13: dout <= vid_vtime_hdmi[31:16];
+		1: dout <= {|vid_int_sys, vid_nres_sys};
+		2: dout <= vid_hcnt_sys[15:0];
+		3: dout <= vid_hcnt_sys[31:16];
+		4: dout <= vid_vcnt_sys[15:0];
+		5: dout <= vid_vcnt_sys[31:16];
+		6: dout <= vid_htime_sys[15:0];
+		7: dout <= vid_htime_sys[31:16];
+		8: dout <= vid_vtime_sys[15:0];
+		9: dout <= vid_vtime_sys[31:16];
+	  10: dout <= vid_pix_sys[15:0];
+	  11: dout <= vid_pix_sys[31:16];
+	  12: dout <= vid_vtime_hdmi_sys[15:0];
+	  13: dout <= vid_vtime_hdmi_sys[31:16];
 	  default dout <= 0;
 	endcase
 end
