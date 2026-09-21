@@ -922,3 +922,17 @@ BARE was saved at 15:35:47 and reloaded at 15:36:39; the 15:39:56 capture
 shows the expected DOS 6.20 shell without launching the menu. All four
 FPGA-oriented profiles have now booted on Bundle50. Restoring the default
 full-memory profile follows this check.
+
+### GDC/read-capture 50 MHz fit and caption pipeline
+
+`quartus-20260921-151039-e5e123` (b02ac1e) finishes in 29m29s with 33921
+ALMs, 453 RAM blocks and 66 DSPs. Its single reported failing check is slow
+-40 C video setup, -0.117 ns, from floppy-overlay x[0] through its caption
+font logic. All other reported checks are nonnegative. The build was not
+deployed. It predates the floppy-bundle and newer video/framework changes.
+
+The caption now splits coordinate division and glyph selection over the
+two existing internal stages, retaining the same three-clock output latency
+as the animated sprite. All 59 GIF frames and wrap, dots, D0/D1 labels,
+hold/disable, crop/mode placement, CE/sync and 56576 continuous/bursty pixel
+checks pass. Its FPGA timing is still pending.

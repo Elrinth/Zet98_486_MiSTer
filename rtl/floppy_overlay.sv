@@ -80,9 +80,16 @@ module floppy_overlay #(
     wire [6:0] tx=dx-7'd5;
     wire [3:0] character=tx/6;
     wire [2:0] column=tx%6;
-    wire [34:0] font=glyph(character,drive,dot_phase[4:3]);
-    wire text_pixel=box && dx>=5 && dx<83 && dy>=60 && dy<67 && column<5 &&
-                    font[34-((dy-60)*5+column)];
+    wire text_area=box && dx>=5 && dx<83 && dy>=60 && dy<67;
+    // The caption has the same three clocks of latency as the tiled image.
+    // Split coordinate division from glyph selection across its two internal
+    // stages, instead of doing the whole font lookup before the first one.
+    reg [3:0] text_character;
+    reg [2:0] text_column,text_row;
+    reg text_drive;
+    reg [1:0] text_dots;
+    wire [34:0] font=glyph(text_character,text_drive,text_dots);
+    wire [5:0] font_index=6'd34-({3'd0,text_row}*6'd5+{3'd0,text_column});
     reg ce_pipe,hs_pipe,vs_pipe,de_pipe,box_pipe,disk_pipe,text_pipe;
     reg [23:0] rgb_pipe;
     reg ce_pipe2,hs_pipe2,vs_pipe2,de_pipe2,box_pipe2,disk_pipe2,text_pipe2;
@@ -105,6 +112,7 @@ module floppy_overlay #(
             animation_frame<=0;frame_base<=0;animation_ticks<=0;dot_phase<=0;
             ce_pipe<=0;hs_pipe<=0;vs_pipe<=0;de_pipe<=0;rgb_pipe<=0;
             box_pipe<=0;disk_pipe<=0;text_pipe<=0;
+            text_character<=0;text_column<=0;text_row<=0;text_drive<=0;text_dots<=0;
             ce_pipe2<=0;hs_pipe2<=0;vs_pipe2<=0;de_pipe2<=0;rgb_pipe2<=0;
             box_pipe2<=0;disk_pipe2<=0;text_pipe2<=0;
             out_ce<=0;out_hs<=0;out_vs<=0;out_de<=0;out_r<=0;out_g<=0;out_b<=0;
@@ -150,12 +158,15 @@ module floppy_overlay #(
             ce_pipe<=in_ce;
             if(in_ce) begin
                 hs_pipe<=in_hs;vs_pipe<=in_vs;de_pipe<=in_de;rgb_pipe<={in_r,in_g,in_b};
-                box_pipe<=box;disk_pipe<=disk_pixel;text_pipe<=text_pixel;
+                box_pipe<=box;disk_pipe<=disk_pixel;text_pipe<=text_area;
+                text_character<=character;text_column<=column;text_row<=dy-7'd60;
+                text_drive<=drive;text_dots<=dot_phase[4:3];
             end
             ce_pipe2<=ce_pipe;
             if(ce_pipe) begin
                 hs_pipe2<=hs_pipe;vs_pipe2<=vs_pipe;de_pipe2<=de_pipe;rgb_pipe2<=rgb_pipe;
-                box_pipe2<=box_pipe;disk_pipe2<=disk_pipe;text_pipe2<=text_pipe;
+                box_pipe2<=box_pipe;disk_pipe2<=disk_pipe;
+                text_pipe2<=text_pipe && text_column<5 && font[font_index];
             end
             out_ce<=ce_pipe2;
             if(ce_pipe2) begin
