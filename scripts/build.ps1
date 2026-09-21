@@ -1,6 +1,10 @@
 param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
     [string]$DockerContext = 'desktop-linux',
+    [ValidateRange(1, 16)]
+    [int]$BuildCpus = 3,
+    [ValidateRange(1, 3)]
+    [int]$MaxConcurrentBuilds = 1,
     [ValidateSet(20, 40, 50, 60)]
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486')]
@@ -21,6 +25,15 @@ $ErrorActionPreference = 'Stop'
 if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
+# Avoid saturating an interactive workstation. This inventory does not use
+# Docker stats, whose dashboard polling previously accumulated hung clients.
+if (-not $PrepareOnly) {
+    $activeBuilds = @(& docker --context $DockerContext ps --filter 'name=zet98-quartus-' --format '{{.Names}}')
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot check active builds; no new build started.' }
+    if ($activeBuilds.Count -ge $MaxConcurrentBuilds) {
+        throw "Already running $($activeBuilds.Count) Quartus build(s); limit is $MaxConcurrentBuilds. Let those finish before starting another."
+    }
+}
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildName = 'quartus-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6)
 $buildRoot = Join-Path $projectRoot ('build/' + $buildName)
@@ -52,6 +65,9 @@ try {
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
+    $BuildCpus | Set-Content -LiteralPath (Join-Path $buildRoot 'build-cpus.txt')
+    Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+        -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
     if ($MidiUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_MPU_UART=1"
@@ -105,7 +121,7 @@ try {
     $requireUart = if ($MidiUart) { 1 } else { 0 }
     $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
     $containerId = & docker --context $DockerContext create --name $containerName `
-        --network none --workdir /project/Zet98/v17 $Image bash -lc `
+        --cpus $BuildCpus --network none --workdir /project/Zet98/v17 $Image bash -lc `
         $compileCommand
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated Quartus container.' }
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')

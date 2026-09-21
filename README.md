@@ -131,6 +131,10 @@ With Docker Desktop running, from PowerShell:
 The script uses the locally installed `theypsilon/quartus-lite-c5:17.0` image
 by default. Override `-Image` and `-DockerContext` if needed. It compiles an
 isolated source snapshot under `build/`, retaining the log and Quartus reports.
+Builds default to three CPU cores and one concurrent Quartus container.
+`-BuildCpus` controls both the container CPU quota and Quartus worker count;
+`-MaxConcurrentBuilds` allows an explicit concurrency override (up to three).
+A launch is rejected while the chosen number of build containers is running.
 Quartus runs on Docker's native Linux filesystem, with source copied in and the
 complete project database/reports copied back. This avoids observed stalls on
 Docker Desktop's Windows bind share. Failed exports retain the named container
