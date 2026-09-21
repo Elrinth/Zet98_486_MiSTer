@@ -40,7 +40,9 @@ A reproduced OPNA bug can lose a one-cycle timer-clear write between sound
 clock enables, leaving the FM interrupt asserted. The source now consumes clears
 every CPU cycle and resets timer/channel/IRQ state explicitly. Timer A/B clear
 and repeat-IRQ simulations pass all enable phases at 20/40/50/60 MHz; the old
-source fails. Hardware confirmation and audible music quality are still pending.
+source fails. The prior Integer50 hardware build also reproduces a lost clear
+after two timer-B IRQs. Verification of the fixed FPGA build and audible music
+quality are still pending.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -112,7 +114,9 @@ The imported 20 MHz baseline completed Quartus compilation on 2026-09-20, using
 `-22.563 ns`, plus unconstrained paths). Its generated RBF is not a verified
 release. The timing failures must be understood before claiming stable higher
 clock rates. `scripts/report-timing.tcl` generates detailed paths from a fitted
-project for this investigation.
+project for this investigation. `./scripts/report-timing.ps1 -BuildDirectory
+build/<snapshot>` runs that audit on native Linux storage and exports the
+critical-path and CPU/system-clock reports back to the snapshot.
 
 An experimental **40 MHz Zet** build can be prepared with
 `./scripts/build.ps1 -SystemClockMHz 40`. It is an intermediate performance

@@ -51,3 +51,17 @@ Behavioral references (not copied source):
 - [NP2kai sample formats](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/sound/pcm86g.c)
 - [Original FreeBSD(98)/Linux98 driver](https://lkml.indiana.edu/hypermail/linux/kernel/0210.3/1103.html)
 - [MAME register map and playback](https://github.com/mamedev/mame/blob/master/src/devices/bus/pc98_cbus/pc9801_86.cpp)
+
+## FM timer acknowledgement
+
+The OPNA's timer-clear bits were previously consumed only on the divided sound
+clock enable. A CPU write can pulse between those enables and be discarded,
+leaving the IRQ asserted. The source consumes timer clears every shared CPU/
+sound logic clock and gives clear priority over a simultaneous overflow. Timer
+load/enable, channel key state, C3M and the auxiliary IRQ latch reset explicitly.
+
+A real-OPNA timer bench reproduces the old lost-clear failure and verifies the
+fix at every enable phase for system clocks 20/40/50/60 MHz. The previous
+Integer50 hardware build fails the silent FM probe after two timer-B interrupts
+with reason 2 (clear lost). The replacement FPGA build is still being tested;
+this does not yet establish correct music playback or performance.

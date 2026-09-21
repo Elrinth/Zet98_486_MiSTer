@@ -222,7 +222,10 @@ synthesis components unbound. It checks timer A/B flags, one-cycle clears at eve
 sound-enable phase and repeat IRQ assertion for dividers 2/4/5/6. The inherited
 source loses the first timer-B clear at phase zero with divider two. This is an
 interrupt regression, not a test of generated audio waveforms. `OPNA_SOURCE` can
-select a prior source file for the negative control.
+select a prior source file. The default run also reintroduces the enable-gated
+clear in a temporary copy and requires the regression to reject it. Selective
+clears preserve the other pending timer, and reset must release IRQ without a
+software status read.
 
 `hardware/fm_timer_probe.asm` checks 100 consecutive timer-B IRQ12 deliveries,
 flag assertion/clearing and cascaded PIC EOI, with the 86-board FM/PSG muted.

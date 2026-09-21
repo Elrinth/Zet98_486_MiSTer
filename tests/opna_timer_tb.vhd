@@ -76,6 +76,17 @@ begin
             regwrite(x"27",x"30"); cycles(20);
             -- Both reset bits also work while no timer enable tick occurs.
         end loop;
+        -- Timer clears preserve the other pending source. Reset must release
+        -- IRQ without relying on a later extended-status read from software.
+        regwrite(x"27",x"0f"); wait_flag(0); wait_flag(1);
+        regwrite(x"27",x"1f"); status;
+        assert dout(0)='0' and dout(1)='1' and irqn='0'
+            report "timer A clear erased pending timer B" severity failure;
+        regwrite(x"27",x"2f"); status;
+        assert dout(1)='0' report "timer B selective clear failed" severity failure;
+        wait_flag(0); rstn<='0'; cycles(5); rstn<='1'; cycles(256); status;
+        assert dout(1 downto 0)="00" and irqn='1'
+            report "reset left FM timer/IRQ state active" severity failure;
         report "PASS OPNA timer A/B one-cycle clears and repeated IRQs, divisor " & integer'image(DIVISOR) severity note;
         stop; wait;
     end process;
