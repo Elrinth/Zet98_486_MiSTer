@@ -35,6 +35,12 @@ where the earlier three-second delay did not. The cached 50 MHz build now
 reaches Rusty's first stage with coherent player/enemy/HUD graphics, using a
 private disk copy that skips the opening program. The original opening
 transition, measured gameplay speed and sound quality remain unresolved.
+
+A reproduced OPNA bug can lose a one-cycle timer-clear write between sound
+clock enables, leaving the FM interrupt asserted. The source now consumes clears
+every CPU cycle and resets timer/channel/IRQ state explicitly. Timer A/B clear
+and repeat-IRQ simulations pass all enable phases at 20/40/50/60 MHz; the old
+source fails. Hardware confirmation and audible music quality are still pending.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities
@@ -57,7 +63,9 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    AUTOEXEC.BAT settings for a multi-game disk.
    The experimental [`-RawIde` controller](rtl/storage/README.md) now passes
    task-file and real HPS-interface simulations. Its disk BIOS and HDD boot
-   path are still missing; hardware sector/IRQ testing is pending.
+   path are still missing. A disposable hardware diagnostic passes IDENTIFY,
+   sector write/read checksum and four IRQ9 deliveries; only the designated
+   test sector changed in the returned image.
 4. Add the PC-98 MIDI interface used by games and route it through MiSTer MidiLink
    for local MUNT/FluidSynth synthesis and USB MIDI hardware. External MT32-pi
    support is a further option, not a requirement for listening to MIDI.
@@ -66,8 +74,9 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    later storage extension once its host interface is established.
    New [video options](VIDEO_OUTPUT.md) add HDMI integer scaling, capture the
    actual 400-line picture and show the supplied 59-frame disk animation with
-   a D0/D1 label and cycling dots. Simulations pass; FPGA fitting and hardware
-   verification are pending. Standard 15 kHz SCART scan conversion is not yet
+   a D0/D1 label and cycling dots. The animation matches the imported frames in hardware captures. New
+   native-aspect fit (default), exact integer fit and HDMI-only integer crop
+   choices pass simulation; their FPGA/hardware verification is pending. Standard 15 kHz SCART scan conversion is not yet
    implemented.
 
 ## Current source and build
@@ -88,6 +97,10 @@ With Docker Desktop running, from PowerShell:
 The script uses the locally installed `theypsilon/quartus-lite-c5:17.0` image
 by default. Override `-Image` and `-DockerContext` if needed. It compiles an
 isolated source snapshot under `build/`, retaining the log and Quartus reports.
+Quartus runs on Docker's native Linux filesystem, with source copied in and the
+complete project database/reports copied back. This avoids observed stalls on
+Docker Desktop's Windows bind share. Failed exports retain the named container
+for inspection. A post-fit guard also verifies global routing of the pixel clock.
 Compilation alone does not establish working hardware or acceptable timing.
 After compilation, the script records the reported slack in `timing-results.json`
 and exits with an error if any timing check reports negative slack. The RBF and

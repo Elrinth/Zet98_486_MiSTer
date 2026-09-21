@@ -355,11 +355,14 @@ begin
 			CPU_RWR1<='0';
 			TARST<='0';
 			TBRST<='0';
+			TALD<='0'; TBLD<='0'; TAEN<='0'; TBEN<='0';
+			C3M<="00";
 			TARDAT<=(others=>'0');
 			TBRDAT<=(others=>'0');
 			Key1<=(others=>'0');
 			Key2<=(others=>'0');
 			Key3<=(others=>'0');
+			Key4<=(others=>'0'); Key5<=(others=>'0'); Key6<=(others=>'0');
 			CPU_WDAT<=(others=>'0');
 			SCH<='0';
 			IRQE<=(others=>'1');
@@ -741,15 +744,6 @@ begin
 		elsif(clk' event and clk='1')then
 			if(BUSY='0' and sft='1')then
 				intend<='0';
-				if(FLAGRES='1')then
-					FLAG<="00";
-				end if;
-				if(TARST='1')then
-					FLAG(0)<='0';
-				end if;
-				if(TBRST='1')then
-					FLAG(1)<='0';
-				end if;
 				case FMSTATE is
 				when FS_TIMER =>
 					if(intbgn='1')then
@@ -788,6 +782,12 @@ begin
 				when others =>
 				end case;
 			end if;
+			-- The PC-98 wrapper ties clk and cpuclk together. Register writes
+			-- pulse for one CPU cycle, independent of the divided sound enable.
+			-- Consume clears every cycle and give them priority over overflow.
+			if(FLAGRES='1')then FLAG<="00"; end if;
+			if(TARST='1')then FLAG(0)<='0'; end if;
+			if(TBRST='1')then FLAG(1)<='0'; end if;
 		end if;
 	end process;
 	
@@ -1169,6 +1169,7 @@ begin
 	begin
 		if(rstn='0')then
 			lSTATUS:=(others=>'0');
+			intl:='0';
 			INTn<='1';
 		elsif(clk' event and clk='1')then
 			tmp:='0';

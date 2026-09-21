@@ -8,6 +8,7 @@ module floppy_overlay #(
 ) (
     input wire clk, reset, enabled,
     input wire [1:0] activity,
+    input wire [11:0] crop_left, crop_top, crop_width, crop_height,
     input wire in_ce, in_hs, in_vs, in_de,
     input wire [7:0] in_r, in_g, in_b,
     output reg out_ce, out_hs, out_vs, out_de,
@@ -25,9 +26,14 @@ module floppy_overlay #(
     reg [22:0] animation_ticks;
     reg [4:0] dot_phase;
     wire frame_start=in_ce && in_vs && !prev_vs;
+    wire crop_valid=crop_width>=96 && crop_height>=78 &&
+        {1'b0,crop_left}+{1'b0,crop_width}<=width &&
+        {1'b0,crop_top}+{1'b0,crop_height}<=height;
+    wire [11:0] right_edge=crop_valid ? crop_left+crop_width : width;
+    wire [11:0] bottom_edge=crop_valid ? crop_top+crop_height : height;
     wire box=enabled_sync && sized && hold_frames!=0 && in_de &&
-        x>=width-92 && x<width-4 && y>=height-74 && y<height-4;
-    wire [6:0] dx=x-(width-92), dy=y-(height-74);
+        x>=right_edge-92 && x<right_edge-4 && y>=bottom_edge-74 && y<bottom_edge-4;
+    wire [6:0] dx=x-(right_edge-92), dy=y-(bottom_edge-74);
     wire disk_pixel=box && dx>=19 && dx<69 && dy<56;
     wire [17:0] rom_address=disk_pixel ? frame_base + dy*18'd50 + (dx-18'd19) : 18'd0;
     (* ramstyle="M10K" *) reg [1:0] pixels[0:165199];

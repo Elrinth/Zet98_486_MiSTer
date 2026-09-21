@@ -91,16 +91,33 @@ try {
         Set-Content -LiteralPath (Join-Path $buildRoot 'toolchain-image.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Quartus Docker image is not installed.' }
     Write-Host "Build directory: $buildRoot"
-    & docker --context $DockerContext run --rm --network none `
-        --mount "type=bind,source=$sourceRoot,target=/project" `
-        --workdir /project/Zet98/v17 $Image bash -lc `
-        'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer' 2>&1 |
+    # Quartus performs many small random database reads. Build on Docker's
+    # Linux filesystem: Windows bind shares can stall these accesses in 9P.
+    # Keep the source snapshot and export the complete database for TimeQuest.
+    $containerName = 'zet98-' + $buildName
+    $containerId = & docker --context $DockerContext create --name $containerName `
+        --network none --workdir /project/Zet98/v17 $Image bash -lc `
+        'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated Quartus container.' }
+    $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
+    & docker --context $DockerContext cp "$sourceRoot/." "${containerName}:/project/"
+    if ($LASTEXITCODE -ne 0) { throw "Cannot copy source into $containerName; container retained." }
+    & docker --context $DockerContext start -a $containerName 2>&1 |
         Tee-Object -FilePath (Join-Path $buildRoot 'quartus.log')
-    if ($LASTEXITCODE -ne 0) { throw "Quartus failed. See $buildRoot/quartus.log" }
+    $compileExit = & docker --context $DockerContext inspect $containerName --format '{{.State.ExitCode}}'
+    if ($LASTEXITCODE -ne 0) { throw "Cannot inspect $containerName; container retained." }
+    & docker --context $DockerContext cp "${containerName}:/project/Zet98/v17/." `
+        (Join-Path $sourceRoot 'Zet98/v17')
+    if ($LASTEXITCODE -ne 0) { throw "Cannot export results from $containerName; container retained." }
+    & docker --context $DockerContext rm $containerName | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Export succeeded; cleanup of $containerName failed." }
+    if ($compileExit -ne '0') { throw "Quartus failed. See $buildRoot/quartus.log" }
     Write-Host "RBF and reports: $sourceRoot/Zet98/v17/output_files"
     $timing = & (Join-Path $PSScriptRoot 'read-timing.ps1') -SummaryPath `
         (Join-Path $sourceRoot 'Zet98/v17/output_files/release-Zet98MiSTer.sta.summary')
     $timing | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $buildRoot 'timing-results.json')
+    & (Join-Path $PSScriptRoot 'check-pixel-clock.ps1') -FitterReport `
+        (Join-Path $sourceRoot 'Zet98/v17/output_files/release-Zet98MiSTer.fit.rpt')
     if ($timing.ReportedTimingViolations -gt 0) {
         throw "RBF generated, but timing FAILED: $($timing.ReportedTimingViolations) checks with negative slack; worst $($timing.WorstSlackNs) ns. This is not a verified release. See $buildRoot/timing-results.json"
     }

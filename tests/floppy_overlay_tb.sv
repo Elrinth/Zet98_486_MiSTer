@@ -2,6 +2,8 @@
 module floppy_overlay_tb;
     reg clk=0,reset=1,enabled=1;
     reg [1:0] activity=0;
+    reg [11:0] crop_left=0,crop_top=0,crop_width=0,crop_height=0;
+    integer expected_right=0,expected_bottom=0;
     always #5 clk=!clk;
     reg in_ce=0,in_hs=0,in_vs=0,in_de=0;
     reg [7:0] in_r=8'h11,in_g=8'h22,in_b=8'h33;
@@ -41,7 +43,10 @@ module floppy_overlay_tb;
                     if({out_r,out_g,out_b}!==24'h112233) begin
                         changed=changed+1;
                         if(!in_de) $fatal(1,"overlay drew in blanking");
-                        if(bounds && !(px>=w-92 && px<w-4 && py>=h-74 && py<h-4))
+                        if(bounds && !(px>=(expected_right ? expected_right : w)-92 &&
+                            px<(expected_right ? expected_right : w)-4 &&
+                            py>=(expected_bottom ? expected_bottom : h)-74 &&
+                            py<(expected_bottom ? expected_bottom : h)-4))
                             $fatal(1,"overlay outside bottom-right rectangle");
                     end
                     if(animation>=0 && px>=w-73 && px<w-23 && py>=h-74 && py<h-18) begin
@@ -93,6 +98,14 @@ module floppy_overlay_tb;
         if(changed) $fatal(1,"indicator failed to expire");
         activity=1;frame(160,120,-1,-1,0);frame(160,120,-1,-1,1);
         if(changed!=88*70) $fatal(1,"mode-change placement failed");
+        crop_left=20;crop_top=10;crop_width=120;crop_height=100;
+        expected_right=140;expected_bottom=110;
+        frame(160,120,-1,-1,1);
+        if(changed!=88*70) $fatal(1,"cropped viewport clipped loading caption");
+        // Ignore invalid crop dimensions, including stale mode-change data.
+        crop_width=200;expected_right=0;expected_bottom=0;
+        frame(160,120,-1,-1,1);
+        if(changed!=88*70) $fatal(1,"invalid crop did not use native bounds");
         $display("PASS floppy animation: all 59 frames/wrap, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);
         $finish;
     end

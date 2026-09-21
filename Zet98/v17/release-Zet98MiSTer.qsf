@@ -534,4 +534,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
 
 # The fabric divide-by-three pixel clock must use a clock network.
 # General routing adds skew and excessive hold-delay compensation.
-set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to {*|VID|TIM|clk3sft[2]}
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to "emu:emu|Zet98MiSTer:Zet98_top|CRTC98:VID|VTIMING:TIM|clk3sft[2]"
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pc98_video_scale.sv

@@ -665,7 +665,7 @@ ascal
 	.i_hs     (hhs_fix),
 	.i_vs     (hvs_fix),
 	.i_fl     (f1),
-	.i_de     (hde_emu),
+	.i_de     (hdmi_capture_de),
 	.iauto    (1),
 	.himin    (0),
 	.himax    (0),
@@ -1495,6 +1495,14 @@ assign hhs_fix  = vga_hs_sl;
 assign hvs_fix  = vga_vs_sl;
 assign hde_emu  = vga_de_sl;
 
+wire [11:0] hdmi_crop_left, hdmi_crop_top, hdmi_crop_width, hdmi_crop_height;
+wire hdmi_capture_de;
+pc98_hdmi_crop hdmi_crop (
+    .clk(clk_ihdmi), .reset(reset), .ce(ce_hpix), .vs(hvs_fix), .de(hde_emu),
+    .left(hdmi_crop_left), .top(hdmi_crop_top),
+    .width(hdmi_crop_width), .height(hdmi_crop_height), .cropped_de(hdmi_capture_de)
+);
+
 wire uart_dtr;
 wire uart_dsr;
 wire uart_cts;
@@ -1555,6 +1563,8 @@ emu emu
 	.HDMI_WIDTH(direct_video ? 12'd0 : hdmi_width),
 	.HDMI_HEIGHT(direct_video ? 12'd0 : hdmi_height),
 	.HDMI_FREEZE(freeze),
+	.HDMI_CROP_LEFT(hdmi_crop_left), .HDMI_CROP_TOP(hdmi_crop_top),
+	.HDMI_CROP_WIDTH(hdmi_crop_width), .HDMI_CROP_HEIGHT(hdmi_crop_height),
 
 	.CLK_VIDEO(clk_vid),
 	.CE_PIXEL(ce_pix),

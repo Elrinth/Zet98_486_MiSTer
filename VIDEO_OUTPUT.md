@@ -5,23 +5,49 @@ previous 640x480 capture included 80 permanently black lines above it.
 Changing capture DE does not change native RGB, pixel frequency or sync.
 Color bars retain their separate 640x480 diagnostic raster.
 
-`HDMI scaling` has three choices. The new default, **V-Integer**, preserves
-the selected aspect ratio and scales vertically by a whole number.
-**HV-Integer** also chooses a whole horizontal multiplier nearest the desired
-aspect ratio. **Aspect** uses the ordinary MiSTer aspect fit.
+`HDMI scaling` now defaults to **Fit native**: preserve the measured source
+pixel aspect and fit the whole picture into the output. At 1920x1080, the
+normal 640x400 source occupies **1728x1080** (2.7x on both axes).
 
-At 1920x1080, a 640x400 picture with 4:3 selected occupies 1066x800 pixels in
-V-Integer mode, or 1280x800 in HV-Integer mode. The latter has uniformly
-replicated pixels but is wider than 4:3. Borders are intentional. Use a
-sharp/nearest-neighbor MiSTer video preset if softened pixels are unwanted.
-Output resolution remains a MiSTer setting; `video_mode=8` selects 1080p60.
-No global HDMI/HDR or television configuration is changed by the core.
+Other menu choices are:
+- **Integer fit**: largest equal whole-number multiplier that fits completely.
+  The normal 1080p result is **1280x800**, with borders and exact 2x2 pixels.
+- **Integer zoom**: next whole-number multiplier, with a centered crop where
+  necessary. At 1080p, 640x400 becomes 1920x1200 at 3x; the middle **1920x1080**
+  is displayed. This removes 20 source rows (60 output rows) at each edge.
+  Game HUD/text at those edges may be lost. The loading indicator moves inside
+  the retained rectangle so its caption remains visible.
+- **Stretch**: fill the entire HDMI viewport, changing the picture's proportions.
+- **CRT 4:3**: fit to the traditional display shape, independently of pixel aspect.
+- **Custom aspect**: use the separate existing Aspect ratio menu.
 
-The MiSTer scaler interface uses 13-bit aspect outputs; bit 12 marks explicit
-viewport dimensions. The old 8-bit interface could not carry these sizes.
-The standard helper's narrow-image comparison is fixed to avoid unsigned
-underflow when the desired aspect width is below one native source width.
-Tests check 720p, 1080p, 1440p and both 400/480-line inputs.
+Native fit avoids aspect distortion but fractional nearest-neighbor scaling
+still produces unequal pixel widths/heights; use Integer fit or Integer zoom
+for uniform replicated pixels. Interpolation/filtering is controlled by the
+MiSTer video preset. No scaler filter or global HDMI/HDR setting is changed.
+`video_mode=8` selects 1080p60. The test machine has a scoped `[Zet98_Test]`
+1080p profile; other cores retain their existing output settings.
+
+The helper measures the actual core raster, not a game's advertised internal
+resolution. This core currently emits 640x400 (640x480 for diagnostic bars).
+If a future video mode genuinely emits 320x200, integer fit at 1080p is 1600x1000
+at 5x; 320x240 is 1280x960 at 4x. These input sizes are simulated, not claimed
+as new hardware video modes. Repeated/doubled pixels are not automatically
+removed, since doing so could discard text or mixed-resolution graphics.
+
+The MiSTer interface uses 13-bit aspect outputs; bit 12 marks explicit viewport
+dimensions. Crop is a DE mask only at the HDMI scaler's final capture input.
+Native RGB, sync, CE and analogue DE remain intact. A crop rectangle is latched
+at vertical sync; integer math uses sequential addition/subtraction rather than
+a combinational divider. Source modes larger than the output safely fall back
+to fractional native fit.
+
+`tests/run-video-scale.sh` verifies 720p/1080p/1440p, 400/480-line and 320x200/
+320x240 source measurements, crop pixel coordinates, CE stalls, exact-fit cases,
+mode changes and small-output fallback. The previous V-Integer mode's
+1066x800 viewport was measured on hardware, but it intentionally changed the
+640:400 source proportions to 4:3. It is no longer the default. The new choices
+await FPGA fitting and hardware viewport checks.
 
 ## Analogue output
 
@@ -65,7 +91,9 @@ continues to the bottom of the screen; additional parameter-RAM partitions,
 wrapping through drawing-pattern RAM, and display zoom remain unsupported.
 GDC settings are registered before pixel-domain address arithmetic with their
 clock crossings still timed. A global clock-network assignment for the pixel
-divider is under FPGA-fit evaluation.
+divider is under full FPGA-fit evaluation. An isolated Quartus fit confirms
+the corrected quoted QSF destination uses a global clock network; the build
+script checks the full Fitter report and rejects a missing assignment.
 
 `tests/run-graphics-address.sh` checks both complete frames at split lengths
 1, 3, 200, 400, 513, 1023 and zero, repeat counts 0/1/3/31, 14-bit VRAM wrap,

@@ -209,3 +209,21 @@ lengths and four repeat settings, including high length bits, 14-bit address
 wrap and no SDRAM requests during vertical blank. It reproduced the original
 backwards-counter bug before correction; the existing video/SDRAM test still
 checks six clock phases and intentionally rejects late data.
+
+## Native-aspect scaling and FM interrupt regressions
+
+`run-video-scale.sh` includes measured-raster native fit, integer fit and integer
+zoom with HDMI-only cropping. Full-frame pixel-coordinate checks cover CE stalls,
+400/480-line and 320x200/320x240 sources, mode changes and small-output fallback.
+`floppy_overlay_tb` also verifies that the caption stays inside a cropped viewport.
+
+`run-opna-timer.sh` instantiates the real OPNA register/timer logic, leaving audio
+synthesis components unbound. It checks timer A/B flags, one-cycle clears at every
+sound-enable phase and repeat IRQ assertion for dividers 2/4/5/6. The inherited
+source loses the first timer-B clear at phase zero with divider two. This is an
+interrupt regression, not a test of generated audio waveforms. `OPNA_SOURCE` can
+select a prior source file for the negative control.
+
+`hardware/fm_timer_probe.asm` checks 100 consecutive timer-B IRQ12 deliveries,
+flag assertion/clearing and cascaded PIC EOI, with the 86-board FM/PSG muted.
+It writes `Z98FM.TXT` on a disposable boot disk and does not measure audio quality.

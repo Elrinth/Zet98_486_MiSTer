@@ -55,6 +55,7 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
+	output [11:0] HDMI_CROP_LEFT, HDMI_CROP_TOP, HDMI_CROP_WIDTH, HDMI_CROP_HEIGHT,
 	output        HDMI_FREEZE,
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
@@ -156,7 +157,7 @@ parameter CONF_STR = {
 	"Zet98;;",
 	"-;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
-	"ONO,HDMI scaling,V-Integer,HV-Integer,Aspect;",
+	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
 	"O5,Floppy icon,On,Off;",
@@ -429,21 +430,21 @@ video_output video_out (
 floppy_overlay floppy_icon (
 	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
 	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]),
+	.crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
+	.crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
 	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
 	.in_r(output_r), .in_g(output_g), .in_b(output_b),
 	.out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
 	.out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
 );
 
-// MiSTer's standard scaler helper reports an explicit pixel-sized viewport.
-// It changes HDMI placement only; native RGB and sync timings are untouched.
-video_freak hdmi_scale (
-	.CLK_VIDEO(clk_vid), .CE_PIXEL(CE_PIXEL), .VGA_VS(VGA_VS),
-	.HDMI_WIDTH(HDMI_WIDTH), .HDMI_HEIGHT(HDMI_HEIGHT),
-	.VGA_DE(), .VIDEO_ARX(VIDEO_ARX), .VIDEO_ARY(VIDEO_ARY),
-	.VGA_DE_IN(VGA_DE), .ARX(aspect_x), .ARY(aspect_y),
-	.CROP_SIZE(12'd0), .CROP_OFF(5'd0),
-	.SCALE(status[24:23]==2 ? 3'd0 : status[24:23]==1 ? 3'd4 : 3'd1)
+// Report native pixel aspect by default. Optional crop is HDMI-only.
+pc98_video_scale hdmi_scale (
+    .clk(clk_vid), .reset(!pll_locked), .ce(CE_PIXEL), .vs(VGA_VS), .de(VGA_DE),
+    .hdmi_width(HDMI_WIDTH), .hdmi_height(HDMI_HEIGHT), .mode(status[25:23]),
+    .custom_x(aspect_x), .custom_y(aspect_y), .arx(VIDEO_ARX), .ary(VIDEO_ARY),
+    .crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
+    .crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT)
 );
 
 `ifdef ZET98_EXT_RAM_MB
