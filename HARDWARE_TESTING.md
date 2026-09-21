@@ -1359,3 +1359,14 @@ and memory request reception -0.101 ns. Its previous ACK-clear path is gone.
 The matched 50 MHz fit fails one slow/cold video check by -0.003 ns. Neither
 was deployed. HPS placement guards pass. All-corner detailed reports are
 retained; the working HPSCache50 hardware remains loaded with MPU disabled.
+
+The 50 MHz completion build's -0.003 ns path is the loading caption's X
+coordinate through constant division to text_character. Caption coordinates
+now use a bounded six-bit divide-by-three table and a text origin computed
+in vertical blanking. The 3-clock RGB/CE/sync pipeline and pixels are unchanged.
+All 524288 coordinate/origin combinations match the original arithmetic;
+a wrong table remainder fails. All 59 animation frames, D0/D1 captions,
+cycling dots, crop bounds, idle/disable and 56576 continuous/bursty video
+stream checks pass. Physical timing of this change is not yet verified.
+A read-only Windows bind-mount test did not start and was interrupted; the
+successful negative control instead copied the source into Docker as usual.

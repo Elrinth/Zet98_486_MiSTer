@@ -34,6 +34,7 @@ module floppy_overlay #(
     reg [12:0] crop_right_sum,crop_bottom_sum;
     reg crop_large;
     reg [11:0] right_edge,bottom_edge,box_left,box_right,box_top,box_bottom;
+    reg [6:0] text_origin_x;
     wire crop_valid=crop_large && crop_right_sum<=width && crop_bottom_sum<=height;
     wire box=enabled_sync && sized && hold_frames!=0 && in_de &&
         x>=box_left && x<box_right && y>=box_top && y<box_bottom;
@@ -77,9 +78,83 @@ module floppy_overlay #(
             endcase
         end
     endfunction
-    wire [6:0] tx=dx-7'd5;
-    wire [3:0] character=tx/6;
-    wire [2:0] column=tx%6;
+    // Bounded six-pixel caption cells: divide the upper six offset bits by
+    // three through a small combinational table. The low bit forms column
+    // parity. This avoids a serial divider after the per-pixel subtraction.
+    function automatic [5:0] caption_div3(input [5:0] half_offset);
+        case(half_offset)
+            6'd0: caption_div3=6'h00;
+            6'd1: caption_div3=6'h01;
+            6'd2: caption_div3=6'h02;
+            6'd3: caption_div3=6'h04;
+            6'd4: caption_div3=6'h05;
+            6'd5: caption_div3=6'h06;
+            6'd6: caption_div3=6'h08;
+            6'd7: caption_div3=6'h09;
+            6'd8: caption_div3=6'h0a;
+            6'd9: caption_div3=6'h0c;
+            6'd10: caption_div3=6'h0d;
+            6'd11: caption_div3=6'h0e;
+            6'd12: caption_div3=6'h10;
+            6'd13: caption_div3=6'h11;
+            6'd14: caption_div3=6'h12;
+            6'd15: caption_div3=6'h14;
+            6'd16: caption_div3=6'h15;
+            6'd17: caption_div3=6'h16;
+            6'd18: caption_div3=6'h18;
+            6'd19: caption_div3=6'h19;
+            6'd20: caption_div3=6'h1a;
+            6'd21: caption_div3=6'h1c;
+            6'd22: caption_div3=6'h1d;
+            6'd23: caption_div3=6'h1e;
+            6'd24: caption_div3=6'h20;
+            6'd25: caption_div3=6'h21;
+            6'd26: caption_div3=6'h22;
+            6'd27: caption_div3=6'h24;
+            6'd28: caption_div3=6'h25;
+            6'd29: caption_div3=6'h26;
+            6'd30: caption_div3=6'h28;
+            6'd31: caption_div3=6'h29;
+            6'd32: caption_div3=6'h2a;
+            6'd33: caption_div3=6'h2c;
+            6'd34: caption_div3=6'h2d;
+            6'd35: caption_div3=6'h2e;
+            6'd36: caption_div3=6'h30;
+            6'd37: caption_div3=6'h31;
+            6'd38: caption_div3=6'h32;
+            6'd39: caption_div3=6'h34;
+            6'd40: caption_div3=6'h35;
+            6'd41: caption_div3=6'h36;
+            6'd42: caption_div3=6'h38;
+            6'd43: caption_div3=6'h39;
+            6'd44: caption_div3=6'h3a;
+            6'd45: caption_div3=6'h3c;
+            6'd46: caption_div3=6'h3d;
+            6'd47: caption_div3=6'h3e;
+            6'd48: caption_div3=6'h00;
+            6'd49: caption_div3=6'h01;
+            6'd50: caption_div3=6'h02;
+            6'd51: caption_div3=6'h04;
+            6'd52: caption_div3=6'h05;
+            6'd53: caption_div3=6'h06;
+            6'd54: caption_div3=6'h08;
+            6'd55: caption_div3=6'h09;
+            6'd56: caption_div3=6'h0a;
+            6'd57: caption_div3=6'h0c;
+            6'd58: caption_div3=6'h0d;
+            6'd59: caption_div3=6'h0e;
+            6'd60: caption_div3=6'h10;
+            6'd61: caption_div3=6'h11;
+            6'd62: caption_div3=6'h12;
+            6'd63: caption_div3=6'h14;
+        endcase
+    endfunction
+    // Equivalent modulo 128 to (x-box_left)-5; precompute the origin in
+    // vertical blank instead of putting two subtractions in the pixel path.
+    wire [6:0] tx=x[6:0]-text_origin_x;
+    wire [5:0] cell_parts=caption_div3(tx[6:1]);
+    wire [3:0] character=cell_parts[5:2];
+    wire [2:0] column={cell_parts[1:0],tx[0]};
     wire text_area=box && dx>=5 && dx<83 && dy>=60 && dy<67;
     // The caption has the same three clocks of latency as the tiled image.
     // Split coordinate division from glyph selection across its two internal
@@ -108,6 +183,7 @@ module floppy_overlay #(
             prev_de<=0;prev_vs<=0;sized<=0;drive<=0;
             position_pending<=0;crop_right_sum<=0;crop_bottom_sum<=0;crop_large<=0;
             right_edge<=0;bottom_edge<=0;box_left<=0;box_right<=0;box_top<=0;box_bottom<=0;
+            text_origin_x<=7'd5;
             x<=0;y<=0;max_width<=0;width<=0;height<=0;hold_frames<=0;
             animation_frame<=0;frame_base<=0;animation_ticks<=0;dot_phase<=0;
             ce_pipe<=0;hs_pipe<=0;vs_pipe<=0;de_pipe<=0;rgb_pipe<=0;
@@ -131,6 +207,7 @@ module floppy_overlay #(
             end
             if(position_pending[1]) begin
                 box_left<=right_edge-12'd92; box_right<=right_edge-12'd4;
+                text_origin_x<=right_edge[6:0]-7'd87;
                 box_top<=bottom_edge-12'd74; box_bottom<=bottom_edge-12'd4;
             end
             if(activity_sync!=0) hold_frames<=HOLD_FRAMES;
