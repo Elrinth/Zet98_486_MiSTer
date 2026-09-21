@@ -32,5 +32,22 @@ at the same simulation timestamp.
 Memory-ready reset now releases on two CPU edges for its CPU-clocked
 consumers. Only the reset-release synchronizer inputs are excepted; their
 outputs remain subject to recovery/removal checks. The common reset module's
-phase/stopped-clock tests pass. The 60 MHz integrated fit is in progress in
-`quartus-20260921-132727-3d85bc`; no hardware result is claimed yet.
+phase/stopped-clock tests pass. The 60 MHz integrated fit
+`quartus-20260921-132727-3d85bc` completes with 34620 ALMs, 453 RAM blocks and
+66 DSPs. It still fails nine reported checks, worst -3.120 ns. The former
+write path is no longer the worst path; memory-domain read data now feeds
+deep CPU execution logic across an adjacent 3.332 ns clock-edge interval.
+The full CPU-clock domain fails by -0.575 ns and CPU-internal setup by
+-0.202 ns; placement changed the earlier prefetch-only +0.030 ns result.
+Memory-ready reset recovery is fixed, but a separate video-reset recovery
+path still fails by -0.080 ns. This RBF has not been deployed.
+
+The next change captures all four CPU-visible read words on the same CPU
+edge that already asserts CPUACKb. The bridge samples ACK and data together
+on its following edge. Internal RMW still uses the fresh memory-domain
+words; the legacy mode retains its live read outputs. This adds neither a
+memory command nor a completion cycle. It introduces no new timing
+exception: read data and completion controls remain normally timed.
+Varied per-transaction/per-plane read data is checked at ACK assertion;
+a deliberately one-cycle-late capture must fail. Integrated fitting and
+hardware validation of this read change remain pending.

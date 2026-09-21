@@ -220,6 +220,23 @@ begin
 
     cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
     write_bundle : if CPU_WRITE_BUNDLE generate
+        -- Capture completed reads on the existing CPUACKb assertion edge.
+        -- The bridge consumes ACK/data together on the following CPU edge;
+        -- no command state or completion cycle is added. RMW uses the fresh
+        -- memory-domain words internally, not these CPU-visible registers.
+        process(CPUCLK,rstn) begin
+            if rstn='0' then
+                CPURDAT0 <= (others=>'0'); CPURDAT1 <= (others=>'0');
+                CPURDAT2 <= (others=>'0'); CPURDAT3 <= (others=>'0');
+            elsif rising_edge(CPUCLK) then
+                if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE
+                    CPURDAT0 <= cpu_read_words(0);
+                    CPURDAT1 <= cpu_read_words(1);
+                    CPURDAT2 <= cpu_read_words(2);
+                    CPURDAT3 <= cpu_read_words(3);
+                end if;
+            end if;
+        end process;
         process(CPUCLK) begin
             if rising_edge(CPUCLK) then
                 if (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
@@ -244,11 +261,12 @@ begin
     end generate;
     legacy_cpu_write : if not CPU_WRITE_BUNDLE generate
         cpu_write_words <= (CPUWDAT0, CPUWDAT1, CPUWDAT2, CPUWDAT3);
+        -- Legacy GRCG computes its RMW result through these live outputs.
+        CPURDAT0 <= cpu_read_words(0);
+        CPURDAT1 <= cpu_read_words(1);
+        CPURDAT2 <= cpu_read_words(2);
+        CPURDAT3 <= cpu_read_words(3);
     end generate;
-    CPURDAT0 <= cpu_read_words(0);
-    CPURDAT1 <= cpu_read_words(1);
-    CPURDAT2 <= cpu_read_words(2);
-    CPURDAT3 <= cpu_read_words(3);
 
 	process(memclk,rstn)
 	variable	st_next	:std_logic;

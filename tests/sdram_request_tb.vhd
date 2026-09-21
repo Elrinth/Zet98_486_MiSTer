@@ -4,7 +4,7 @@ use ieee.numeric_std.all;
 use std.env.all;
 
 -- Exercise the actual controller's CPU request path and SDRAM command pins.
--- The tiny read-data source supplies a constant burst; it is not a SDRAM
+-- The tiny read-data source supplies varied bursts; it is not a SDRAM
 -- electrical/timing model. Addresses, byte/plane masks, live RMW write data,
 -- completion and request count are checked independently of the controller.
 entity sdram_request_tb is
@@ -22,6 +22,7 @@ architecture test of sdram_request_tb is
     type words_t is array(0 to 3) of std_logic_vector(15 downto 0);
     signal wd : words_t := (others=>x"1357");
     signal expected_wd : words_t;
+    signal expected_rd : words_t;
     signal preserve_mask : std_logic_vector(15 downto 0) := x"0000";
     signal rd : words_t;
     signal cke, cs, ras, cas, we, udq, ldq, ba1, ba0 : std_logic;
@@ -88,9 +89,11 @@ begin
                     assert (udq & ldq)=std_logic_vector'("00") report "read masked unexpectedly" severity failure;
                     reads<=reads+1;
                     if kind=2 or kind=4 then
-                        read_source<=x"a55a" after 20 ns, (others=>'Z') after 30 ns;
+                        read_source<=expected_rd(0) after 20 ns, (others=>'Z') after 30 ns;
                     else
-                        read_source<=x"a55a" after 20 ns, (others=>'Z') after 60 ns;
+                        read_source<=expected_rd(0) after 20 ns, expected_rd(1) after 30 ns,
+                            expected_rd(2) after 40 ns, expected_rd(3) after 50 ns,
+                            (others=>'Z') after 60 ns;
                     end if;
                 else
                     assert kind/=2 and kind/=3 report "unexpected SDRAM write" severity failure;
@@ -120,7 +123,7 @@ begin
     process
         variable a, r, w, beats, total : natural;
         variable rowcol : unsigned(AW-1 downto 0);
-        variable mask, value : std_logic_vector(15 downto 0);
+        variable mask, value, read_value : std_logic_vector(15 downto 0);
     begin
         wait for 137 ns; rstn<='1';
         wait until ready='1';
@@ -141,8 +144,12 @@ begin
                 preserve_mask<=mask;
                 for p in 0 to 3 loop
                     value:=std_logic_vector(to_unsigned((n*8191+p*4369+mode*349) mod 65536,16));
+                    read_value:=std_logic_vector(to_unsigned((n*977+p*12347+mode*3181) mod 65536,16));
+                    expected_rd(p)<=read_value;
                     wd(p)<=value;
-                    expected_wd(p)<=value or (x"a55a" and mask);
+                    -- A one-word RMW only refreshes plane zero; other write
+                    -- outputs are unused. Four-plane RMW refreshes all four.
+                    expected_wd(p)<=value or (read_value and mask);
                 end loop;
                 kind<=mode; active<=true;
                 a:=activations; r:=reads; w:=writes; beats:=write_beats;
@@ -155,13 +162,20 @@ begin
                 end if;
                 wait until ack='1' for 3 us;
                 assert ack='1' report "SDRAM request timed out" severity failure;
+                wait for 1 ps;
+                if mode>=2 then
+                    assert rd(0)=expected_rd(0) report "read data missing on ACK edge" severity failure;
+                    if mode=3 or mode=5 then
+                        assert rd=expected_rd report "four-plane data missing on ACK edge" severity failure;
+                    end if;
+                end if;
                 wait until falling_edge(cpuclk);
                 wait for 1 ps; -- settle coincident memory-edge output assignments
                 assert activations=a+1 report "duplicated or missing activation" severity failure;
                 if mode>=2 then
-                    assert reads=r+1 and rd(0)=x"a55a" report "read completion mismatch" severity failure;
+                    assert reads=r+1 and rd(0)=expected_rd(0) report "read completion mismatch" severity failure;
                     if mode=3 or mode=5 then
-                        assert rd(1)=x"a55a" and rd(2)=x"a55a" and rd(3)=x"a55a"
+                        assert rd=expected_rd
                             report "four-plane read data mismatch: " & to_hstring(rd(0)) & " " & to_hstring(rd(1)) & " " & to_hstring(rd(2)) & " " & to_hstring(rd(3)) severity failure;
                     end if;
                 else assert reads=r report "write performed extra read" severity failure; end if;

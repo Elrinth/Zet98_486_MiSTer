@@ -798,3 +798,26 @@ The same VHD was reloaded with a separate disposable diagnostic floppy at
 16 MB, pattern copy/verification at both ends, unlock/free and recovery of
 the original free-memory total (at least 60000 KB). The returned floppy's
 `Z98XMS.TXT` and 13:55:07 screenshot confirm PASS. No VHD write was performed.
+
+The XMS game image was loaded again at 13:57:52 with the clean BIOS-first
+floppy loader. Its menu is visible at 14:04:19. Selecting Nightslave at
+14:05:17 reaches the coherent title screen captured at 14:07:23. This is a
+VHD launch check, not a gameplay-throughput or MIDI/audio-quality result.
+
+### CPU read/write crossing work after Native50
+
+The 60 MHz write-bundle fit `quartus-20260921-132727-3d85bc` completes in
+29m17s with 34620 ALMs, 453 RAM blocks and 66 DSPs. Nine reported checks fail,
+worst -3.120 ns. The previous -5.898 ns CPU-to-SDRAM write path is replaced
+as the worst path by SDRAM read data into CPU execution logic. CPU-internal
+setup regresses to -0.202 ns; the complete CPU-clock domain fails by
+-0.575 ns. Memory and video setup also fail, as does video-reset recovery
+(-0.080 ns in the detailed post-fit report). This RBF was not deployed.
+
+The next source revision captures CPU read results with the existing ACK
+assertion, leaving internal RMW in the memory domain. All 9216 buffered and
+1536 legacy transactions pass with varied per-plane read data. Their 28
+simulation completion times exactly match the prior regression runs.
+Deliberately late write admission and a one-cycle-late read capture both
+fail as intended. Graphics arbitration and GRCG/data-bus regressions pass.
+FPGA fitting and hardware validation of this read change are pending.

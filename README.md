@@ -26,8 +26,8 @@ or a certification of gameplay stability and audio quality.
 An optional [conventional-RAM cache](rtl/cpu/LOWMEM_CACHE.md) increases the
 50 MHz hardware RAM-copy result from 98 to 119 blocks in the same interval,
 with unchanged arithmetic throughput. Its XMS and silent PCM/IRQ tests pass.
-The latest 60 MHz fit passes CPU-internal setup, but the complete core still
-fails across clock domains. It has not been deployed.
+The latest 60 MHz fit still fails timing, including CPU-internal setup and
+clock crossings. It has not been deployed.
 Optional extended RAM and 86 PCM playback are described in
 [extended RAM](rtl/cpu/EXTENDED_RAM.md) and [PCM86](rtl/PCM86.md).
 The source now fixes a truncated HPS disk acknowledgement that prevented
@@ -48,8 +48,11 @@ after two timer-B IRQs. The fixed Native50 FPGA build passes 100 consecutive
 timer-B IRQ12 deliveries, checking status assertion/clear and cascaded PIC EOI.
 Audible music quality remains unverified. A separate
 [prefetch queue optimization](rtl/cpu/PREFETCH_STORE.md) passes CPU simulation
-without adding cycles and passes CPU-internal setup at 60 MHz. A subsequent
-[SDRAM write-path change](rtl/cpu/SDRAM_WRITE_BUNDLE.md) is under FPGA validation.
+without adding cycles; its first fit passes CPU-internal setup at 60 MHz.
+The subsequent [SDRAM write-path change](rtl/cpu/SDRAM_WRITE_BUNDLE.md) reduces
+the worst full-design violation from -5.898 to -3.120 ns, but CPU-internal
+setup regresses to -0.202 ns with the changed placement. Read-path work is
+under validation; the tested hardware baseline remains Native50.
 Inherited RBFs are upstream artifacts, not releases of the new implementation.
 
 ## Priorities

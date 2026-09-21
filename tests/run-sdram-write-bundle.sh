@@ -28,3 +28,17 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \
 fi
 grep -Eq 'CPU write bundle arrived too late|SDRAM write data mismatch' "$out/negative.log"
 echo 'PASS: late CPU write bundle rejected'
+
+# Moving read capture one CPU cycle later must be rejected: the bus master
+# consumes data with the existing ACK and must never see the previous read.
+test "$(grep -c 'CPU_READ_COMPLETION_CAPTURE' Zet98/sdramc.vhd)" = 1
+sed "s/if cpuend='1' then -- CPU_READ_COMPLETION_CAPTURE/if CPUACKb='1' then -- deliberately late read/" \
+    Zet98/sdramc.vhd > "$out/sdram-late-read.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-late-read.vhd" tests/sdram_request_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \
+    -gCPU_MHZ=60 -gBUFFERED=true --assert-level=error > "$out/late-read.log" 2>&1; then
+    echo 'FAIL: late CPU read data was accepted' >&2; exit 1
+fi
+grep -q 'read data missing on ACK edge' "$out/late-read.log"
+echo 'PASS: late CPU read capture rejected'
