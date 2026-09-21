@@ -410,6 +410,7 @@ set_global_assignment -name VHDL_FILE ../../rtc/I2Crtc.vhd
 set_global_assignment -name VHDL_FILE ../../rtc/rtcbody.vhd
 set_global_assignment -name VHDL_FILE ../../rtc/rtc4990MiSTer.vhd
 set_global_assignment -name VHDL_FILE ../memorymap.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/cpu/pc98_cache_policy.vhd
 set_global_assignment -name VHDL_FILE ../grpal.vhd
 set_global_assignment -name VHDL_FILE ../tstamp.vhd
 set_global_assignment -name VHDL_FILE ../KANJI11RAMDP.vhd

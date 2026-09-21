@@ -11,6 +11,7 @@ module ao486_cache_tb;
     reg invalidate = 0;
     wire cache_invalidate = invalidate && INVALIDATION_CONNECTED;
     wire interrupt_do = 0;
+    wire cache_upper_ram_native = 0;
     wire [7:0] interrupt_vector = 0;
     wire interrupt_done;
     wire [19:1] bus_address;

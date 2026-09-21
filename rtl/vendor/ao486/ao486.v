@@ -33,6 +33,7 @@ module ao486 (
 	input               a20_enable,
 	
 	input               cache_disable,
+	input               cache_upper_ram,
 	// Zet98: invalidate instruction cache/prefetch around external memory writes.
 	input               cache_invalidate,
 
@@ -422,6 +423,7 @@ memory memory_inst(
     .rst_n              (rst_n),
     
     .cache_disable      (cache_disable),
+    .cache_upper_ram    (cache_upper_ram),
     .cache_invalidate   (cache_invalidate),
 
     //REQ:

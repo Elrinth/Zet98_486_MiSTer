@@ -93,8 +93,8 @@ against the actual module and the independent original limit expressions.
 Both limits match for arbitrary reset, update enables and descriptor values.
 Negative controls using the previous descriptor value or omitting the second
 limit's reset are rejected with counterexamples. A simulation assertion also
-checks both decoded limits on every CPU edge. Physical fitting is pending;
-this is not yet a measured clock-frequency improvement.
+checks both decoded limits on every CPU edge. This is not a measured
+clock-frequency improvement.
 
 Cached and uncached CPU smoke tests both pass with 576 bus transfers. Cache
 configurations 00/10/11 pass the DMA, self-modification and ALU/VRAM/stack
@@ -102,3 +102,12 @@ checks with unchanged cycles and transfers; disconnected DMA invalidation
 still fails. Actual CPU protected-mode tests and the DOS probe's return to
 real mode pass with both 16 MB and 64 MB RAM. The oversized-memory negative
 control is rejected. These tests ran with the limit-alignment assertion enabled.
+
+The complete GlobalLimits60 fit (`quartus-20260922-003422-b6b4ca`, source
+78318fc) still fails timing and was not deployed. Its worst setup slack is
+-0.937 ns at the slow/cold corner: ECX through string-completion, write-debug
+and pipeline-ready logic into instruction decode. At slow/hot, a CS-cache
+path into the same decoder is -0.683 ns. The reported memory crossing is
+-0.030 ns and video crossing -0.185 ns. All three fitted HPS peripheral
+guards pass. These reports supersede any expectation that registered global
+limits alone would qualify the complete core for 60 MHz.

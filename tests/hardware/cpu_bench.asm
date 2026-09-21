@@ -22,8 +22,29 @@ start:
     int 21h
     mov si, title
     call puts
+%ifdef UPPER_CODE
+    ; Optional comparison: the same arithmetic kernel at physical 90000h.
+    ; A standalone DOS shell without memory managers owns this region only
+    ; when its PSP allocation and program/stack placement satisfy both guards.
+    mov ax, cs
+    cmp ax, 6000h
+    ja fail
+    cmp word [2], 9100h
+    jb fail
+    mov ax, 9000h
+    mov es, ax
+    mov si, upper_kernel
+    xor di, di
+    mov cx, upper_kernel_end-upper_kernel
+    rep movsb
+    push cs
+    pop es
+%endif
     call start_timer
 .alu_next:
+%ifdef UPPER_CODE
+    call 9000h:0
+%else
     xor bx, bx
     xor si, si
     mov bp, 32
@@ -36,6 +57,7 @@ start:
     jnz .alu
     dec bp
     jnz .alu_outer
+%endif
     call elapsed
     or bx, bx
     jnz fail
@@ -299,7 +321,11 @@ puts:
     pop si
     pop ax
     ret
+%ifdef UPPER_CODE
+title: db 13,10,'Zet98 CPU benchmark v3: ALU at 90000h',13,10,'131072 iterations/block; at least 10s/kernel.',13,10,0
+%else
 title: db 13,10,'Zet98 CPU benchmark v3',13,10,'131072 iterations/block; at least 10s/kernel.',13,10,0
+%endif
 alu_text: db 'ALU blocks=',0
 ram_text: db 'RAM copy blocks=',0
 stack_text: db 'Stack blocks=',0
@@ -316,5 +342,23 @@ start_hi: dw 0
 write_length: dw 0
 batches: dw 0
 stack_top: dw 0
+%ifdef UPPER_CODE
+upper_kernel:
+    xor bx, bx
+    xor si, si
+    mov bp, 32
+.outer:
+    mov cx, 4096
+.alu:
+    add bx, 3
+    inc si
+    dec cx
+    jnz .alu
+    dec bp
+    jnz .outer
+    retf
+upper_kernel_end:
+%endif
+
 times 0 * (1 / (($ - $$) <= 2011)) db 0
 log_buffer equ 0x2000

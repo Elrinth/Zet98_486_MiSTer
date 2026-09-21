@@ -7,6 +7,7 @@ module ao486_cpu_tb;
     reg reset = 1;
     reg cache_invalidate = 0;
     reg interrupt_do = 0;
+    wire cache_upper_ram_native = 0;
     wire interrupt_done;
     wire [7:0] interrupt_vector = interrupt_done ? 8'h80 : 8'h07;
     wire [19:1] bus_address;

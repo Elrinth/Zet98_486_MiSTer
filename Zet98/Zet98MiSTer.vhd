@@ -13,7 +13,8 @@ generic(
 	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
 	EXT_RAM_MB  :integer :=0;          -- experimental DDR-backed extended memory
 	LOWMEM_CACHE:integer :=0;          -- experimental conventional-RAM read cache
-	LOWMEM_CACHE_KB:integer :=8
+	LOWMEM_CACHE_KB:integer :=8;
+    UPPER_RAM_ICACHE:integer :=0
 );
 port(
 	ramclk	:in std_logic;
@@ -162,10 +163,10 @@ port(
 end component;
 
 component pc98_ao486
-generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8);
+generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8; UPPER_RAM_ICACHE :integer :=0);
 port(
     clk, reset :in std_logic;
-    cache_invalidate :in std_logic;
+    cache_invalidate, cache_upper_ram_native :in std_logic;
     interrupt_do :in std_logic;
     interrupt_vector :in std_logic_vector(7 downto 0);
     interrupt_done :out std_logic;
@@ -1885,6 +1886,7 @@ signal fdc_wdata :std_logic_vector(7 downto 0);
 signal dma_mem_high, dma_mem_low :std_logic_vector(8 downto 0);
 signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
 signal cache_invalidate :std_logic;
+signal cache_upper_ram_native :std_logic;
 signal	bussel	:std_logic_vector(1 downto 0);
 
 --io port
@@ -2424,13 +2426,13 @@ begin
     end generate;
 
     ao486_cpu: if CPU486/=0 generate
-        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB) port map(
+        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE) port map(
             clk=>cpuclk, reset=>not srstn,
             interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
             bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open,
-            cache_invalidate=>cache_invalidate,
+            cache_invalidate=>cache_invalidate, cache_upper_ram_native=>cache_upper_ram_native,
             ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
             ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
             ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
@@ -2670,20 +2672,17 @@ begin
 	
 	cpuack<=ack when DMAen='0' else '0';
 
-    -- Cache only fixed RAM below 80000h. External DMA must invalidate it;
+    -- Cache fixed low RAM, optionally native RAM through 9ffffh. DMA invalidates it;
     -- CPU writes through either banked window can also alias that RAM without
     -- matching ao486's physical-address snoop. Hold invalidation until the
     -- entire write/bus ownership interval ends, not merely its first cycle.
     -- BEGIN PC98 CACHE INVALIDATION
-    -- Decode the two CPU windows directly. Following CB_ADDR here also
-    -- traversed the DMA mux and full SDRAM map into the CPU fetch pipeline.
-    -- Bank values 00..07 (bit 0 is ignored) select fixed RAM below 80000h;
-    -- higher bank values select upper RAM, peripherals or extended memory.
-    -- Keep the loader exclusion and the entire DMA ownership interval.
-    cache_invalidate <= '1' when DMAen='1' else
-        '1' when cpuoe='1' and stb='1' and tga='0' and LDR_OE='0' and
-          ((cpuaddr(19 downto 17)="100" and BNK89_SEL(7 downto 3)="00000") or
-           (cpuaddr(19 downto 17)="101" and BNKAB_SEL(7 downto 3)="00000")) else '0';
+    cache_policy : entity work.pc98_cache_policy generic map(UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE)
+        port map(dma_active=>DMAen, load_active=>LDR_OE, cpu_address=>cpuaddr,
+                 cpu_write=>cpuoe, cpu_strobe=>stb, cpu_io=>tga,
+                 odd_io_address=>ioaddr_odd, io_write=>iowr,
+                 bank89=>BNK89_SEL, bankab=>BNKAB_SEL,
+                 invalidate=>cache_invalidate, upper_ram_native=>cache_upper_ram_native);
     -- END PC98 CACHE INVALIDATION
 	
 	DMAU_CS<='1' when ioaddr_odd(15 downto 3)=(x"002" & "0") and ioaddr_odd(0)='1' else '0';

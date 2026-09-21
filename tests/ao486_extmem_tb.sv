@@ -8,6 +8,7 @@ module ao486_extmem_tb;
     reg clk=0,reset=1;
     always #5 clk=!clk;
     wire cache_invalidate=0,interrupt_do=0;
+    wire cache_upper_ram_native = 0;
     wire [7:0] interrupt_vector=0;
     wire interrupt_done,unmapped_access;
     wire [19:1] bus_address;

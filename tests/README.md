@@ -147,6 +147,15 @@ memory and odd-port I/O, `REP MOVSD`, A20 wrapping and unmapped-memory isolation
 high reset-ROM aliases, interrupt/IRET, and a CPU-only reset that retains RAM.
 The upstream simulation observer is supplied as a read-only test hook.
 
+`run-upper-cache.sh` tests optional instruction caching at 80000h–9FFFFh
+with actual ao486 execution and the synthesized VHDL cache policy. It covers
+native self-modification, bank aliases, DMA, remapping/restoration and ROM
+bypass, with negative controls for each external invalidation source and a
+cached/uncached loop measurement. Use `Dockerfile.mixed` for this test: the
+older default image's GHDL lacks Verilog export. `run-cache-map.sh` separately
+compares the policy against the real PC-98 memory mapper with the option off
+and on. See [the cache design and hardware benchmark](../rtl/cpu/UPPER_RAM_CACHE.md).
+
 `run-extmem.sh` uses the actual CPU in protected mode with the optional 16 MB
 and 64 MB DDR maps. It checks boundaries, the reserved 15–16 MB aperture,
 partial/unaligned writes, copies between conventional and extended RAM,

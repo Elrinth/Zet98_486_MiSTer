@@ -31,6 +31,7 @@ module icache(
     input           rst_n,
     
     input           cache_disable,
+    input           cache_upper_ram,
     input           cache_invalidate,
     
     //RESP:
@@ -161,9 +162,10 @@ l1_icache l1_icache_inst(
     .RESET           (~rst_n),
     .pr_reset        (reset_combined),
     
-    // Zet98: only fixed low RAM is cacheable. Banked windows, VRAM and
-    // reset/BIOS aliases must fetch again when mappings or contents change.
-    .DISABLE         (cache_disable || readcode_cache_address >= 32'h00080000),
+    // Zet98: native conventional RAM may be cached through 9ffffh. Banked
+    // mappings, VRAM and ROM bypass it; mapping/alias changes invalidate L1.
+    .DISABLE         (cache_disable || readcode_cache_address >= 32'h000a0000 ||
+                      (readcode_cache_address >= 32'h00080000 && !cache_upper_ram)),
     .INVALIDATE      (cache_invalidate),
     
     .CPU_REQ         (readcode_cache_do),

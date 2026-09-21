@@ -16,6 +16,7 @@ param(
     [ValidateSet('OPNA', 'PC9801_86')]
     [string]$SoundBoard = 'OPNA',
     [switch]$LowMemoryCache,
+    [switch]$UpperRamICache,
     [ValidateSet(8, 32, 64)]
     [int]$LowMemoryCacheKB = 8,
     [switch]$RawIde,
@@ -26,6 +27,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
+if ($UpperRamICache -and $Cpu -ne 'ao486') { throw 'Upper conventional RAM instruction cache requires ao486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
 # Avoid saturating an interactive workstation. This inventory does not use
 # Docker stats, whose dashboard polling previously accumulated hung clients.
@@ -64,6 +66,7 @@ try {
     $ExtendedRamMB | Set-Content -LiteralPath (Join-Path $buildRoot 'extended-ram-mb.txt')
     $SoundBoard | Set-Content -LiteralPath (Join-Path $buildRoot 'sound-board.txt')
     [bool]$LowMemoryCache | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache.txt')
+    [bool]$UpperRamICache | Set-Content -LiteralPath (Join-Path $buildRoot 'upper-ram-icache.txt')
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
@@ -78,6 +81,10 @@ try {
     if ($RawIde) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RAW_IDE=1"
+    }
+    if ($UpperRamICache) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_UPPER_RAM_ICACHE=1"
     }
     if ($LowMemoryCache) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
