@@ -67,3 +67,13 @@ Run it only as the shell of a disposable DOS floppy without memory managers;
 PSP ownership and program/stack placement guards reject unsafe allocations.
 The build without this define remains byte-identical to the original low-code
 benchmark (verified by assembling and comparing both source versions).
+
+Hardware baseline, SuperStation One, FontMap50 (source 971ace7, 50 MHz),
+2026-09-22: the relocated ALU kernel completes 5 blocks in 1,000 DOS-clock
+hundredths; RAM copy completes 130 and stack 102 in their respective
+1,000-hundredth intervals. All checksums pass. `Z98PERF.TXT` was recovered
+from the diagnostic D88 after unloading the core and confirming the image
+was closed. The returned D88 has SHA-256
+`5311efcc98877916b921c2d55bb1a789c0e5527143fa3931381f60107d81b01d`.
+Upper instruction caching is disabled in this baseline; a result from the
+cache-enabled core is still required before claiming a hardware improvement.
