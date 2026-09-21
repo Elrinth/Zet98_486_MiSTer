@@ -8,6 +8,12 @@ corrected build delivers the complete 134-byte diagnostic packet to ttyS1.
 Audible playback remains unverified. It is not a complete intelligent-mode
 MPU-401.
 
+The first Nightslave hardware test with MPU enabled stalls in its MIDI driver;
+the same RBF reaches the title with MPU disabled. Keep the option off for
+ordinary play until this is fixed. A silent polling diagnostic reads FEh under
+CLI, then observes a stale pending IRQ6 and an empty-input interrupt handler.
+The driver compatibility issue is not covered by the earlier serial replay.
+
 The guest interface is the PC-98 default: low-byte data at **E0D0h**,
 command/status at **E0D2h**, and **master PIC IRQ6**, normally vector 0Eh.
 Odd bytes and IBM-PC 330h/331h ports do not select it. It does not share

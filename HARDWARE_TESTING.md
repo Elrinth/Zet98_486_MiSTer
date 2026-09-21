@@ -1285,3 +1285,34 @@ expected. Floppy and graphics-producer/consumer regressions also pass. A
 container entry-point mistake and sed delimiter mistake were corrected before
 these complete runs; their earlier logs are retained separately. Full-core
 physical timing and hardware validation of these toggles remain pending.
+
+The MPU-disabled comparison reaches Nightslave's title at 20:38:35 after
+selection at 20:35:09, on exactly the same HPSCache50 RBF. Thus the MIDI-enabled
+startup stall is not cleared for game use; the default stays off. The corrected
+FloppyToggle60 analysis now completes: slow/hot memory -0.114 ns, palette
+-0.238 ns, CPU internal +0.069 ns; slow/cold worst -0.187 ns. All hold,
+recovery and removal summaries pass. The build remains undeployed. The new
+CPU/drawing completion changes specifically remove that ACK-to-memory path.
+
+### MIDI polling acknowledgement diagnostic
+
+The original `tests/hardware/mpu_poll_probe.asm` was loaded on HPSCache50 at
+20:48:10 on 2026-09-21. It never transmits MIDI notes. Its fresh disposable
+disk returned `ACK=FE IRR=40 IRQ=01 EMPTY=01`, confirming that the PIC delivers
+IRQ6 after software has already polled and consumed the acknowledgement under
+CLI. Its bounded handler restores the prior vector and mask. The independent
+Unicorn model passes eight combinations of retained/withdrawn requests and
+normal, busy, missing-ACK and incorrect-ACK outcomes. This is diagnostic
+evidence, not a hardware fix. DOS with MPU disabled was restored at 20:58:17.
+
+Intel's 8259A datasheet, Figures 9/10 and pages 17-18, describes a transparent
+request latch: withdrawing an input before acknowledgement must not deliver
+that input's normal vector. The legacy PIC retains edge requests until EOI.
+Some other core peripherals intentionally supply one-clock pulses, so changing
+all inputs at once also requires adapting those producers. Roland's MPU-401
+technical reference, page 22, separately specifies no FEh acknowledgement for
+FFh when leaving UART mode; the current prototype incorrectly acknowledges it.
+Both compatibility defects are being addressed; MPU stays off by default.
+
+Sources: [Intel 8259A datasheet](https://www.cs.umb.edu/cs341/Intel8259/I8259APIC.pdf)
+and [Roland MPU-401 technical reference](https://cdn.roland.com/assets/media/pdf/MPU-401_OM.pdf).

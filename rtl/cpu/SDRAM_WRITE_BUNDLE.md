@@ -144,3 +144,20 @@ The delayed-route regression passes 110,592 single/four-plane read, write
 and RMW transactions across both ports, six CPU rates and 24 memory phases,
 with 5 ns route delay and another 5 ns of required stability. Deliberately
 late 80 ns return data fails independently on both ports.
+
+### Completion without feedback clearing
+
+CPU and drawing completion registers now toggle once per finished command.
+Each destination compares against its last sampled value to capture returned
+data on the existing ACK edge. No extra bus cycle is added. CPU ACK pulses
+once; drawing ACK still remains asserted until its request is released.
+This removes the CPUACKb/SUBACKb feedback paths into memory-domain completion
+clearing. These are related PLL domains and their control paths remain timed;
+this change introduces no false path or relaxed data bound.
+
+`tests/run-completion-toggle.sh` holds completed requests for eight more
+source clocks at six clock rates and four phases on both ports. It checks
+for repeated operations/completions, early drawing ACK release and changed
+read data. Replacing either toggle by a stale high level must fail. Existing
+request/return delay and RMW regressions also pass; fitted timing and hardware
+verification of the change are still required.
