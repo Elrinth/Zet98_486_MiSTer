@@ -74,7 +74,9 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    task-file and real HPS-interface simulations. Its
    [read BIOS prototype](software/DISK_BIOS.md) passes hardware geometry,
    partition, cylinder-crossing and 64 KB read checks against the private VHD.
-   ROM integration and the HDD boot path are still missing.
+   A BIOS-first diagnostic floppy now boots that VHD into DOS 6.20 on Native50
+   and launches Rusty's illustrated intro. ROM integration, HDD writes and
+   general image/geometry discovery remain unfinished.
    A disposable hardware diagnostic passes IDENTIFY,
    sector write/read checksum and four IRQ9 deliveries; only the designated
    test sector changed in the returned image.

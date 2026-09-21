@@ -44,6 +44,15 @@ current core's extended-memory BIOS initializer/HIMEMX setup is separate
 remain experimental on FPGA. No resident mouse, CD, MIDI or sound-board
 initialization driver is automatically installed by these templates.
 
-The core's raw IDE controller still needs a disk BIOS and HDD boot path.
-A valid DOS image and successful ATA sector tests do not supply those parts.
-These templates must not be advertised as an already-working FPGA HDD boot.
+A BIOS-first diagnostic floppy now boots the private DOS 6.20 VHD on Native50
+and reaches this menu and Rusty's illustrated intro. This is still a fixed-image
+read-only experiment, not general ROM-based HDD boot. Profile changes and game
+saves cannot work until the disk BIOS implements writes.
+
+The additional `PROFILES/FPGA.SYS` uses `Z98MEM.SYS` and the PC-98 HIMEMX
+driver instead of the old BIOS's memory report. It requires the optional
+16/64 MB ao486 build and those separately supplied drivers. On Native50 the
+separate private VHD copy boots with a 608,912-byte largest conventional
+block and passes direct 17 MB XMS allocation, copy, verification and free.
+NEC MEM reports zero XMS despite this passing API check. Keep EMM386/VEM disabled with the
+current resident disk BIOS; they may reuse its D8000-DFFFF RAM area.

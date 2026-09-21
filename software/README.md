@@ -71,4 +71,11 @@ refuse existing output files. Keep the original disk unmodified. This workflow
 does not implement a hard-disk controller or a bootable VHD.
 
 The separate [experimental ATA read BIOS](DISK_BIOS.md) provides tested
-PC-98 disk-read calls. It has no ROM installer or HDD bootstrap yet.
+PC-98 disk-read calls and a BIOS-first diagnostic floppy that boots the private
+DOS 6.20 VHD. It has no ROM installer or write service yet. The DOS 6.20
+`PROFILES/FPGA.SYS` template adds this initializer and HIMEMX. On Native50 it
+boots with DOS in high memory and a 608,912-byte largest conventional block.
+Its direct XMS diagnostic also passes the 17 MB allocation/copy/free test
+above, with at least 60,000 KB free. NEC DOS 6.20 MEM displays zero XMS in
+this configuration despite the successful API test; do not use that summary
+alone to judge memory availability.

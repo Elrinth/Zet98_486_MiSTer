@@ -767,3 +767,34 @@ to SDRAMC MEMDAT. Other failures include DMA readback, video crossings and
 memory-ready reset recovery. This RBF was not deployed; Native50 stays on
 the device. The next fit tests registered CPU write set/preserve bundles and
 CPU-domain release of memory-ready reset.
+
+### First DOS 6.20 VHD boot on Native50
+
+The COM bootstrap's trace stopped at DOS's first root-directory read. Its
+partition IPL sets SS=0/SP=028Eh; the 512-byte caller-stack bounce buffer
+overwrote interrupt vectors. A private resident stack fixes the reproduced
+IVT failure. The COM approach still failed to reach the new DOS, so the next
+test starts the resident loader directly from a new floppy IPL, before any
+old DOS interrupt hooks are installed.
+
+`Zet98_HD_Boot6_Native50.mgl`, loaded at 13:34:06 CEST, reaches the DOS 6.20
+game menu at 13:36:28 using the full private VHD. Its 13:37:36 MEM report shows
+541 KB largest conventional block and zero XMS under the original NEC HIMEM
+profile. Rusty selected at 13:38:01 reaches an illustrated intro at 13:40:05.
+The BIOS performs reads only. This is neither HDD save/profile-write support
+nor a measured gameplay frame rate. The following test uses a separately
+verified image copy with Z98MEM/HIMEMX and no on-screen BIOS trace.
+
+The separate XMS image preserves 2026 existing files except CONFIG.SYS, plus
+the original IPL/partition bytes. It adds the exact initializer, HIMEMX, its
+source/license archive and FPGA profile. SHA-256 is
+`879d4b51964ccad3b8f553eda7507ca97a913e7bdcc982f19dd6de185dd0798e`, verified
+again on the SuperStation before loading at 13:44:25. DOS 6.20 reaches its
+menu and MEM shows DOS moved high with a 608,912-byte largest conventional
+block. NEC MEM still reports zero XMS, so a direct API probe was necessary.
+
+The same VHD was reloaded with a separate disposable diagnostic floppy at
+13:50:48. The XMS probe run from C: passes allocation/locking of 17 MB above
+16 MB, pattern copy/verification at both ends, unlock/free and recovery of
+the original free-memory total (at least 60000 KB). The returned floppy's
+`Z98XMS.TXT` and 13:55:07 screenshot confirm PASS. No VHD write was performed.

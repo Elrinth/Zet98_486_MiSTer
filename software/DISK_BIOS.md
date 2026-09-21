@@ -2,10 +2,11 @@
 
 `pc98_ide_read_bios.inc` implements the read side of a PC-98 INT 1Bh disk
 service on the core's raw ATA master. It is **not yet an installable option
-ROM or a hard-disk boot implementation**. The existing D0000h disk-ROM window
-still returns FFFFh in the FPGA. Initialization/boot entry points, ROM discovery,
-mount/geometry discovery, writes and complete DOS compatibility remain work
-in progress.
+ROM**. A separate BIOS-first diagnostic floppy now boots the private DOS 6.20
+VHD on Native50 and reaches its game menu and Rusty's illustrated intro.
+The existing D0000h disk-ROM window still returns FFFFh in the FPGA. ROM
+discovery, mount/geometry discovery, writes and complete DOS compatibility
+remain work in progress.
 
 The embedding 386-or-later program supplies `bios_previous_vector`, a far
 pointer to the previous INT 1Bh handler, and the constants `BIOS_HEADS`,
@@ -14,6 +15,9 @@ of the ATA controller's CHS translation. The private DOS game disk uses
 8162 cylinders, 8 heads and 17 sectors of 512 bytes. Transfers to ATA use LBA.
 The caller must provide at least 600 bytes of free stack below SP; the service
 uses a stack bounce buffer and requires no writable ROM storage.
+This requirement is unsuitable for directly hooking an arbitrary bootloader:
+the supplied DOS partition IPL uses SS=0, SP=028Eh. The bootstrap wrapper
+described below switches to a private stack before calling the service.
 
 Implemented behavior:
 
@@ -62,6 +66,45 @@ old handler, then saves Z98HDRO.TXT on its disposable floppy. It does not boot
 the hard disk. On the Native50 FPGA build it passes all checks against the
 prepared 568336384-byte VHD, including the full 64 KB read. The VHD was only
 read; the diagnostic result was saved to its separate disposable floppy.
+
+## BIOS-first boot experiment
+
+`tests/hardware/ide_bootsector.asm` reads our resident loader from sectors 2–5
+of a new 1.23 MB floppy. `ide_bootstrap.asm`, built with `BIOS_BOOT=1`, installs
+the read service before DOS has loaded, checks the private VHD's IPL/partition
+checksum and enters its original IPL. Selected HDD calls use a private stack;
+other devices retain the ROM handler and caller stack. IRQs remain disabled
+inside the wrapper until it restores the original caller frame, including
+IF/DF and the returned carry bit.
+
+The resident area D8000–DFFFF is ordinary RAM in this core's current map. This
+is a **core-specific experiment**, not a portable driver for physical PC-98s.
+Do not enable an upper-memory manager that can overwrite it. The geometry
+and checksum currently identify only the owner's prepared game disk. Writes
+remain disabled, including profile changes and game saves.
+
+```sh
+nasm -f bin tests/hardware/ide_bootsector.asm -o build/VHDIPL.BIN
+nasm -f bin -DBIOS_BOOT=1 tests/hardware/ide_bootstrap.asm -o build/VHDLOAD.BIN
+python tests/ide_bootstrap_preflight.py build/VHDLOAD.BIN private-game.vhd --bootsector build/VHDIPL.BIN
+python tests/build_ide_boot_disk.py build/VHDIPL.BIN build/VHDLOAD.BIN build/vhd-boot.d88
+```
+
+The packager refuses existing output files and embeds only our loader and
+zero fill. `BIOS_TRACE=1` adds request diagnostics in text RAM. Unicorn 2.1.4
+checks the floppy calling convention, resident handoff, IPL contents, ROM
+pointer guards, corrupt-image rejection, tiny caller stack, IVT preservation,
+and CF/IF/DF. Bypassing the private stack fails the IVT check. It does not
+emulate the DOS kernel after the IPL handoff.
+
+Native50 booted the private VHD menu at 13:36:28 CEST on 2026-09-21 with the
+traced BIOS-first floppy. Rusty selected from that menu reached an illustrated
+intro scene at 13:40:05. The original NEC HIMEM profile reported zero XMS;
+the initializer/HIMEMX profile subsequently boots with DOS high and passes
+the direct 17 MB XMS allocation/copy/free test. NEC MEM still shows zero XMS
+with HIMEMX; see [memory setup](README.md). The older
+COM-from-DOS bootstrap is retained as a diagnostic but is not the working
+boot method: the old DOS interrupt hooks can outlive their overwritten code.
 
 ## Calling-convention references
 
