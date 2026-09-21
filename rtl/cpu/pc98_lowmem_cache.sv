@@ -20,9 +20,12 @@ module pc98_lowmem_cache #(
     localparam TAG_BITS = 18 - INDEX_BITS;
     localparam IDLE=0, CHECK=1, MISS=2, HIT=3;
     reg [1:0] state;
-    reg [(1<<INDEX_BITS)-1:0] valid;
-    (* ramstyle = "M10K" *) reg [TAG_BITS+15:0] words[0:(1<<INDEX_BITS)-1];
-    reg [TAG_BITS+15:0] lookup;
+    // Keep validity in the M10K too. A background sweep clears one entry per
+    // clock after reset/DMA; reads continue on the original bus meanwhile.
+    reg clearing, invalidate_previous;
+    reg [INDEX_BITS-1:0] clear_index;
+    (* ramstyle = "M10K" *) reg [TAG_BITS+16:0] words[0:(1<<INDEX_BITS)-1];
+    reg [TAG_BITS+16:0] lookup;
     reg lookup_valid, cancelled;
     wire cacheable = !io && !address[19];
     wire [INDEX_BITS-1:0] index = address[INDEX_BITS:1];
@@ -34,29 +37,37 @@ module pc98_lowmem_cache #(
     assign ack = !reset && (state==HIT ? strobe && !invalidate : legacy_ack);
     assign readdata = state==HIT ? lookup[15:0] : legacy_readdata;
 
-    // Synchronous data/tag RAM. Valid bits have a separate immediate clear so
-    // DMA does not incur a cache-sweep delay. Reads always request both bytes.
+    // The sweep never stalls the legacy bus or DMA. No fills occur during it,
+    // so another invalidation while clearing needs no restart. Writes always
+    // invalidate their slot, and reads always request both bytes.
     always @(posedge clk) begin
         if(state==IDLE && reading) lookup<=words[index];
-        if(state==MISS && strobe && legacy_ack && !invalidate && !cancelled)
-            words[index]<={tag,legacy_readdata};
+        if(clearing) words[clear_index]<=0;
+        else if(strobe && cacheable && write) words[index]<=0;
+        else if(state==MISS && strobe && legacy_ack && !invalidate && !cancelled)
+            words[index]<={1'b1,tag,legacy_readdata};
     end
     always @(posedge clk) begin
         if(reset) begin
-            state<=IDLE; valid<=0; lookup_valid<=0; cancelled<=0;
+            state<=IDLE; lookup_valid<=0; cancelled<=0;
+            clearing<=1; clear_index<=0; invalidate_previous<=0;
         end else begin
-            if(invalidate) valid<=0;
-            else if(strobe && cacheable && write) valid[index]<=0;
-            else if(state==MISS && strobe && legacy_ack && !cancelled) valid[index]<=1;
+            invalidate_previous<=invalidate;
+            if(clearing) begin
+                clear_index<=clear_index+1'b1;
+                if(&clear_index) clearing<=0;
+            end else if(invalidate && !invalidate_previous) begin
+                clearing<=1; clear_index<=0;
+            end
             if(invalidate && state!=IDLE) cancelled<=1;
             case(state)
                 IDLE: if(reading && !legacy_ack) begin
-                    lookup_valid<=valid[index] && !invalidate;
+                    lookup_valid<=!clearing && !invalidate;
                     cancelled<=invalidate;
                     state<=CHECK;
                 end
                 CHECK: if(!strobe) state<=IDLE;
-                else if(lookup_valid && lookup[TAG_BITS+15:16]==tag && !invalidate && !cancelled)
+                else if(lookup_valid && lookup[TAG_BITS+16] && lookup[TAG_BITS+15:16]==tag && !clearing && !invalidate && !cancelled)
                     state<=HIT;
                 else state<=MISS;
                 MISS: if(!strobe && !legacy_ack) state<=IDLE;

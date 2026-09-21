@@ -564,6 +564,30 @@ passes, recording **14272 KB free**, allocation at **00110000h**
 usable with the documented drivers; the original BIOS alone still does not
 advertise extended RAM, and EMS/UMB support has not been validated.
 
+### Optional 8 KB conventional-RAM cache
+
+The first cache fit (`quartus-20260921-053817-c952db`) completes in 36m58s,
+using 36964 ALMs, 438 RAM blocks and 65 DSP blocks. Its original timing summary
+has no negative checks (minimum +0.117 ns); CPU setup is +1.258 ns. The pixel
+audit still fails setup -5.926 / -4.510 ns and hold +0.017 / -2.423 ns from/to.
+SHA-256: `6930fddc632f108ae096fee83695e7180be4b047bfe6459455906a693b2ad2e1`.
+Launched at 06:20:06, the DOS benchmark saves ALU **244** / RAM copy **119**
+blocks per 1000 hundredths, both checksums passing
+(`lowcache50-bench-return-2.d88`). This is about 21% higher RAM-copy throughput
+than the otherwise matching 50 MHz build. The XMS run launched at 06:23:58 also
+passes and reports 63424 KB free (`lowcache50-xms-return-2.d88`).
+
+The subsequent cache fit with explicit pixel clocks
+(`quartus-20260921-054634-e21f65`) completes in 39m05s with 36989 ALMs,
+437 RAM blocks and 65 DSP blocks. Its production summary now includes those
+clocks and fails 23 checks, worst -3.139 ns. A separate cache revision moves
+validity into RAM and uses a nonblocking background clear, aiming to reduce
+logic use. Its unit and full CPU/coherence/extended-memory tests pass, with
+unchanged ALU/VRAM simulation kernels; fitting and hardware tests are pending.
+
+The `-SystemClockMHz 60` experiment passes OPNA/PIT/PCM-rate and SDRAM request
+simulation. Its FPGA fit is running. No reliable 60 MHz hardware claim is made.
+
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,
 repeatable scene timing, sound pitch/tempo, and video stability. Neither the

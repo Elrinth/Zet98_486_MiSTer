@@ -79,6 +79,10 @@ module pc98_lowmem_cache_tb;
         for(i=0;i<524288;i=i+1) memory[i]=(i*907)^16'ha55a;
         for(i=0;i<32768;i=i+1) ports[i]=(i*317)^16'h916d;
         repeat(4) @(negedge clk); reset=0;
+        // Reads must remain usable while the initial valid-bit sweep runs.
+        transact(0,20'h2468,3,0,0);
+        if(!dut.clearing) $fatal(1,"read stalled until cache sweep completed");
+        while(dut.clearing) @(negedge clk);
         transact(0,20'h1234,3,0,0);
         before_count=transfers;
         repeat(8) transact(0,20'h1234,3,0,0);
@@ -116,6 +120,8 @@ module pc98_lowmem_cache_tb;
         transact(0,20'h6234,3,0,0);
         if(transfers!=before_count+1) $fatal(1,"invalidated miss incorrectly refilled cache");
         // Invalidate a hit before its ACK can be accepted.
+        while(dut.clearing) @(negedge clk);
+        transact(0,20'h6234,3,0,0);
         begin_request(0,20'h6234,3,0,0);
         @(negedge clk); while(dut.state!=3) @(negedge clk);
         invalidate=1; memory[20'h6234>>1]=16'h571c;
@@ -135,6 +141,19 @@ module pc98_lowmem_cache_tb;
         memory[20'h6234>>1]=16'ha4e6;
         repeat(3) @(negedge clk); reset=0;
         transact(0,20'h6234,3,0,0);
+        // Held and repeated invalidation must never admit stale cached data.
+        @(negedge clk); invalidate=1;
+        repeat(4200) @(negedge clk);
+        begin_request(0,20'h2468,3,0,0);
+        repeat(10) @(negedge clk);
+        if(!legacy_strobe || dut.clearing) $fatal(1,"held invalidation restarted sweep or admitted hit");
+        @(negedge clk); invalidate=0;
+        finish_request;
+        transact(0,20'h2468,3,0,0);
+        @(negedge clk); invalidate=1;
+        memory[20'h2468>>1]=16'h728a;
+        @(negedge clk); invalidate=0;
+        transact(0,20'h2468,3,0,0);
         $display("PASS: low RAM read cache: warm hits, tags, all byte masks, 4096-slot flush, in-flight invalidation, uncached I/O/VRAM/ROM, reset; %0d transfers",transfers);
         $finish;
     end
