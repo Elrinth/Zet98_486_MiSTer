@@ -162,7 +162,7 @@ the DiskFix test RBF described below. Audible hardware confirmation is pending.
 
 Source inspection found that `hps_io` returns four acknowledgement bits, but
 the wrapper connected them to a scalar wire. Only slot 0 reached the disk
-engine; slots 1Ã¢â‚¬â€œ3 could never complete their host transfers. The disk engine
+engine; slots 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“3 could never complete their host transfers. The disk engine
 serializes image operations, so a stalled Opening-disk load can also prevent
 later System-disk writes. This can prevent Opening-disk loading and is
 consistent with the mount-order stall. The hardware retests below confirm
@@ -857,7 +857,7 @@ FPGA profiles and the file diagnostic. DOS reaches the FPGA-profile menu.
 FTEST.COM run at 14:45:01 creates a new 70,001-byte Z98WRITE.BIN, flushes,
 closes, reopens, compares every byte and checks EOF. The 14:46:08 capture
 shows PASS. An independent full-image comparison at 14:48:25 finds exactly
-140 changed sectors, confined to FAT/root metadata and clusters 7026Ã¢â‚¬â€œ7030.
+140 changed sectors, confined to FAT/root metadata and clusters 7026ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“7030.
 A stricter metadata audit confirms all unrelated FAT and directory entries
 are identical to the pristine archive. Both FAT copies agree. The extracted
 payload also matches on the host, SHA-256
@@ -960,3 +960,12 @@ path now goes through segment access checking to memory-write completion.
 This is an isolated virtual-I/O result, not complete-core timing or a
 hardware clock setting. The complete uncached regression passes with
 434005 ALU cycles and 112340 VRAM cycles.
+
+The next GDC payload includes address, bank and byte/plane masks, retaining
+the same request/ACK protocol. Scaling settings are registered in the
+video domain before arithmetic, and floppy activity is registered in the
+CPU domain before its existing overlay synchronizer. Memory regressions
+and all scaling/crop/overlay cases pass. The FEC RAM port-B read is also
+registered in its RAM clock; its existing transfer wait covers the latency
+in 24 real-controller/latency-model tests, with a stale-data negative.
+All these changes await complete FPGA timing and hardware validation.

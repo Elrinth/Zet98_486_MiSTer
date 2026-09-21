@@ -3532,8 +3532,16 @@ DBIO_ODAT<=(others=>'1');
 						"1011" when FDC_USEL="10" else
 						"1000" when FDC_USEL="11" else
 						"1111";
-	pFloppyAccess <= "01" when FDC_BUSY='1' and FDC_USEL="00" else
-	                 "10" when FDC_BUSY='1' and FDC_USEL="01" else "00";
+    -- Register activity in its source domain before the overlay synchronizer.
+    process(cpuclk,irstn) begin
+        if irstn='0' then pFloppyAccess<="00";
+        elsif rising_edge(cpuclk) then
+            if FDC_BUSY='1' and FDC_USEL="00" then pFloppyAccess<="01";
+            elsif FDC_BUSY='1' and FDC_USEL="01" then pFloppyAccess<="10";
+            else pFloppyAccess<="00";
+            end if;
+        end if;
+    end process;
 	
 	DISKE	:component diskemu_mister 	generic map(SYSFREQ,SYSFREQ,10) port map(
 	--SASI

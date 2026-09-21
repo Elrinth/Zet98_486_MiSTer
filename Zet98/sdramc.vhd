@@ -169,7 +169,10 @@ type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
 signal cpu_read_words, cpu_write_words : cpu_words_t;
 signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(79 downto 0);
 signal sub_read_words, sub_write_words : cpu_words_t;
-signal sub_write_source, sub_write_crossing, sub_write_memory : std_logic_vector(79 downto 0);
+signal sub_write_source, sub_write_crossing, sub_write_memory : std_logic_vector(ADRWIDTH+87 downto 0);
+signal sub_address : std_logic_vector(ADRWIDTH-1 downto 0);
+signal sub_bank, sub_bytes : std_logic_vector(1 downto 0);
+signal sub_planes : std_logic_vector(3 downto 0);
 
 signal fde_request_source, fde_request_crossing, fde_request_memory : std_logic_vector(ADRWIDTH+17 downto 0);
 signal fec_request_source, fec_request_crossing, fec_request_memory : std_logic_vector(ADRWIDTH+17 downto 0);
@@ -297,7 +300,8 @@ begin
         process(SUBCLK) begin
             if rising_edge(SUBCLK) then
                 if SUBREQS='1' and lsubstb='0' then
-                    sub_write_source <= SUBPRESERVE & SUBWDAT3 & SUBWDAT2 & SUBWDAT1 & SUBWDAT0;
+                    sub_write_source <= SUBADR & SUBBNK & SUBBSEL & SUBPSEL &
+                        SUBPRESERVE & SUBWDAT3 & SUBWDAT2 & SUBWDAT1 & SUBWDAT0;
                 end if;
             end if;
         end process;
@@ -308,6 +312,10 @@ begin
                 end if;
             end if;
         end process;
+        sub_address <= sub_write_memory(ADRWIDTH+87 downto 88);
+        sub_bank <= sub_write_memory(87 downto 86);
+        sub_bytes <= sub_write_memory(85 downto 84);
+        sub_planes <= sub_write_memory(83 downto 80);
         planes : for i in 0 to 3 generate
             sub_write_words(i) <= sub_write_memory(i*16+15 downto i*16) or
                 (sub_read_words(i) and sub_write_memory(79 downto 64));
@@ -327,6 +335,8 @@ begin
         end process;
     end generate;
     legacy_sub_write : if not SUB_WRITE_BUNDLE generate
+        sub_address <= SUBADR; sub_bank <= SUBBNK;
+        sub_bytes <= SUBBSEL; sub_planes <= SUBPSEL;
         sub_write_words <= (SUBWDAT0, SUBWDAT1, SUBWDAT2, SUBWDAT3);
         SUBRDAT0 <= sub_read_words(0); SUBRDAT1 <= sub_read_words(1);
         SUBRDAT2 <= sub_read_words(2); SUBRDAT3 <= sub_read_words(3);
@@ -1240,9 +1250,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1253,9 +1263,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<="000" & SUBADR(9 downto 0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<="000" & sub_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 =>		--precharge all
 						MEMCKE		<='1';
@@ -1320,9 +1330,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1333,9 +1343,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<="000" & SUBADR(9 downto 2) & "00";
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<="000" & sub_address(9 downto 2) & "00";
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>	--DQ
 						MEMCKE		<='1';
@@ -1345,8 +1355,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
 						MEMADR		<=(others=>'0');
 						MEMDATOE	<='0';
 					when 6 =>		--precharge all
@@ -1412,9 +1422,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--write command & send word
@@ -1423,12 +1433,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not SUBBSEL(1);
-						MEMLDQ		<=not SUBBSEL(0);
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not SUBBSEL(1) & not SUBBSEL(0);
-						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
+						MEMUDQ		<=not sub_bytes(1);
+						MEMLDQ		<=not sub_bytes(0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not sub_bytes(1) & not sub_bytes(0);
+						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 0);
 						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
@@ -1481,9 +1491,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--write command & send 1st word
@@ -1492,12 +1502,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not (SUBPSEL(0) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(0) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(0) and SUBBSEL(1)) & not (SUBPSEL(0) and SUBBSEL(0));
-						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 2) & "00";
+						MEMUDQ		<=not (sub_planes(0) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(0) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(0) and sub_bytes(1)) & not (sub_planes(0) and sub_bytes(0));
+						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 2) & "00";
 						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 3 =>		--2nd word
@@ -1506,11 +1516,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(1) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(1) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(1) and SUBBSEL(1)) & not (SUBPSEL(1) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(1) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(1) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(1) and sub_bytes(1)) & not (sub_planes(1) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(1);
 						MEMDATOE	<='1';
@@ -1520,11 +1530,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(2) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(2) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(2) and SUBBSEL(1)) & not (SUBPSEL(2) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(2) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(2) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(2) and sub_bytes(1)) & not (sub_planes(2) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(2);
 						MEMDATOE	<='1';
@@ -1534,11 +1544,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(3) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(3) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(3) and SUBBSEL(1)) & not (SUBPSEL(3) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(3) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(3) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(3) and sub_bytes(1)) & not (sub_planes(3) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(3);
 						MEMDATOE	<='1';
@@ -1592,9 +1602,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1605,9 +1615,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<="000" & SUBADR(9 downto 0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<="000" & sub_address(9 downto 0);
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>		--DQN(Hi-Z)
 						MEMCKE		<='1';
@@ -1617,8 +1627,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
 						MEMADR(12 downto 11)	<="11";
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDATOE	<='0';
@@ -1628,12 +1638,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not SUBBSEL(1);
-						MEMLDQ		<=not SUBBSEL(0);
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not SUBBSEL(1) & not SUBBSEL(0);
-						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
+						MEMUDQ		<=not sub_bytes(1);
+						MEMLDQ		<=not sub_bytes(0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not sub_bytes(1) & not sub_bytes(0);
+						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 0);
 						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--break burst and precharge all
@@ -1686,9 +1696,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<=SUBADR(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<=sub_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
 						SUBJOB<=JOB_NOP;
 					when 2 =>		--read command
@@ -1699,9 +1709,9 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR		<="000" & SUBADR(9 downto 2) & "00";
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR		<="000" & sub_address(9 downto 2) & "00";
 						MEMDATOE	<='0';
 					when 3 | 4 | 5 =>		--DQN
 						MEMCKE		<='1';
@@ -1711,8 +1721,8 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='0';
 						MEMLDQ		<='0';
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
 						MEMADR		<=(others=>'0');
 						MEMDATOE	<='0';
 					when 11 =>		--write command & send 1st word
@@ -1721,12 +1731,12 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not (SUBPSEL(0) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(0) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(0) and SUBBSEL(1)) & not (SUBPSEL(0) and SUBBSEL(0));
-						MEMADR(10 downto 0)	<='0' & SUBADR(9 downto 0);
+						MEMUDQ		<=not (sub_planes(0) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(0) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(0) and sub_bytes(1)) & not (sub_planes(0) and sub_bytes(0));
+						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 0);
 						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 12 =>		--2nd word
@@ -1735,11 +1745,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(1) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(1) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(1) and SUBBSEL(1)) & not (SUBPSEL(1) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(1) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(1) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(1) and sub_bytes(1)) & not (sub_planes(1) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(1);
 						MEMDATOE	<='1';
@@ -1749,11 +1759,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(2) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(2) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(2) and SUBBSEL(1)) & not (SUBPSEL(2) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(2) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(2) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(2) and sub_bytes(1)) & not (sub_planes(2) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(2);
 						MEMDATOE	<='1';
@@ -1763,11 +1773,11 @@ begin
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='1';
 						MEMWE_N		<='1';
-						MEMUDQ		<=not (SUBPSEL(3) and SUBBSEL(1));
-						MEMLDQ		<=not (SUBPSEL(3) and SUBBSEL(0));
-						MEMBA1		<=SUBBNK(1);
-						MEMBA0		<=SUBBNK(0);
-						MEMADR(12 downto 11)	<=not (SUBPSEL(3) and SUBBSEL(1)) & not (SUBPSEL(3) and SUBBSEL(0));
+						MEMUDQ		<=not (sub_planes(3) and sub_bytes(1));
+						MEMLDQ		<=not (sub_planes(3) and sub_bytes(0));
+						MEMBA1		<=sub_bank(1);
+						MEMBA0		<=sub_bank(0);
+						MEMADR(12 downto 11)	<=not (sub_planes(3) and sub_bytes(1)) & not (sub_planes(3) and sub_bytes(0));
 						MEMADR(10 downto 0)	<=(others=>'0');
 						MEMDAT		<=sub_write_words(3);
 						MEMDATOE	<='1';

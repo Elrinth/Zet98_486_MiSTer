@@ -9,6 +9,22 @@ module pc98_video_scale (
     output reg [12:0] arx, ary,
     output reg [11:0] crop_left, crop_top, crop_width, crop_height
 );
+    // HPS settings originate in clk_sys. Register them before any video
+    // arithmetic; the crop rectangle is still committed only during VS.
+    (* altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    reg [50:0] settings_meta, settings_video;
+    wire [11:0] video_width=settings_video[50:39];
+    wire [11:0] video_height=settings_video[38:27];
+    wire [2:0] video_mode=settings_video[26:24];
+    wire [11:0] video_custom_x=settings_video[23:12];
+    wire [11:0] video_custom_y=settings_video[11:0];
+    always @(posedge clk) begin
+        if (reset) begin settings_meta<=0; settings_video<=0; end
+        else begin
+            settings_meta<={hdmi_width,hdmi_height,mode,custom_x,custom_y};
+            settings_video<=settings_meta;
+        end
+    end
     reg old_de, old_vs;
     reg [11:0] pixels, lines, first_width;
     reg [11:0] source_width, source_height;
@@ -51,18 +67,18 @@ module pc98_video_scale (
         end else case (state)
             START: begin
                 sw<=source_width; sh<=source_height;
-                ow<=hdmi_width; oh<=hdmi_height; selected_mode<=mode;
+                ow<=video_width; oh<=video_height; selected_mode<=video_mode;
                 candidate_w<={1'b0,source_width};
                 candidate_h<={1'b0,source_height};
                 best_w<=0; best_h<=0; factor<=1;
-                if ((mode==1 || mode==2) && hdmi_width && hdmi_height)
+                if ((video_mode==1 || video_mode==2) && video_width && video_height)
                     state<=SEARCH;
                 else begin
                     crop_left<=0; crop_top<=0; crop_width<=0; crop_height<=0;
-                    case (mode)
+                    case (video_mode)
                         3: begin arx<=0; ary<=0; end // Stretch to output.
                         4: begin arx<=4; ary<=3; end // Traditional CRT shape.
-                        5: begin arx<={1'b0,custom_x}; ary<={1'b0,custom_y}; end
+                        5: begin arx<={1'b0,video_custom_x}; ary<={1'b0,video_custom_y}; end
                         default: begin arx<={1'b0,source_width}; ary<={1'b0,source_height}; end
                     endcase
                 end

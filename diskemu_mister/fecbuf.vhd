@@ -66,6 +66,8 @@ BEGIN
 	q_a    <= sub_wire0(15 DOWNTO 0);
 	q_b    <= sub_wire1(15 DOWNTO 0);
 
+	-- Keep the buffer output in rclk before its CPU-domain request capture.
+	-- FECcont waits for this registered read before asserting SDR_WR.
 	altsyncram_component : altsyncram
 	GENERIC MAP (
 		address_reg_b => "CLOCK1",
@@ -82,7 +84,7 @@ BEGIN
 		outdata_aclr_a => "NONE",
 		outdata_aclr_b => "NONE",
 		outdata_reg_a => "UNREGISTERED",
-		outdata_reg_b => "UNREGISTERED",
+		outdata_reg_b => "CLOCK1",
 		power_up_uninitialized => "FALSE",
 		read_during_write_mode_port_a => "NEW_DATA_NO_NBE_READ",
 		read_during_write_mode_port_b => "NEW_DATA_NO_NBE_READ",

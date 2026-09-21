@@ -161,6 +161,13 @@ begin
                 kind<=mode; active<=true;
                 a:=activations; r:=reads; w:=writes; beats:=write_beats;
                 requests(mode)<='1';
+                if USE_SUB and BUFFERED then
+                    wait until rising_edge(cpuclk); wait for 1 ns;
+                    -- Poison all live metadata after request acceptance.
+                    -- SDRAM must keep the original bank/address/masks.
+                    address<=not address; bank<=not bank;
+                    bytes<=not bytes; planes<=not planes;
+                end if;
                 if mode>=4 then
                     wait until reads>r;
                     -- The actual GRCG computes new data after the SDRAM read.

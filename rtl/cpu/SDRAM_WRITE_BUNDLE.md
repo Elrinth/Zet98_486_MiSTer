@@ -84,3 +84,24 @@ legacy requests across both ports, six source rates/four phases, poisoned
 live pins after acceptance, and four deliberately late payload/read controls.
 The CPU, drawing and scanout regressions also pass. FPGA timing and hardware
 validation of this floppy change remain pending.
+
+The subsequent 60 MHz all-corner report exposes remaining live GDC address,
+bank and mask paths, worst -1.584 ns from GRCG PGEN into SDRAM byte masks.
+Those fields now accompany the existing set/preserve payload: 110 bits for
+ADRWIDTH=22. Constant address/mask bits may optimize away; the SDC still
+requires at least the original 80 data endpoints. Source/admission timing
+and normal hold checks are unchanged. The drawing regression now poisons
+all live metadata after acceptance and passes every buffered/legacy case.
+The late-payload negative may now fail first on an incorrect row/bank,
+which is also recognized as a valid test failure.
+
+The same fit places fec_request_source data in the buffer's RAM output
+register, exposing a -0.260 ns mixed-clock hold path from its write controls.
+The buffer's port-B output is now registered in its own 100 MHz clock
+before CPU request capture. FECcont already waits for the buffer read;
+its state machine and SDRAM transaction count are unchanged. The real
+FEC state machine passes 256-word write/refill/write sequences at six CPU
+rates and four RAM phases with the two-stage RAM read latency model.
+A deliberately stale 16-stage output fails. This is a functional latency
+test, not an electrical RAM/timing model; fitted hold/setup validation and
+hardware reads/writes remain required.
