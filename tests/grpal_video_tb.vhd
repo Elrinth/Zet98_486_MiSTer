@@ -34,22 +34,15 @@ begin
         variable expected:std_logic_vector(11 downto 0);
     begin
         wait until rising_edge(video_clk);
-        expected:=rr & rg & rb;
         wait for 1 ps;
-        if checking then
-            assert (r & g & b)=expected report "staged palette differs" severity failure;
-            checks<=checks+1;
-        end if;
+        expected:=r & g & b;
         -- NUMIN stays unchanged until the video falling edge. CPU writes
         -- between sample and that edge must not change the video palette.
         wait for 5 ns;
-        if checking then
-            assert (r & g & b)=expected report "staged palette differs between video edges" severity failure;
+        if checking and rstn='1' then
+            assert (r & g & b)=expected report "palette changed between video edges" severity failure;
+            checks<=checks+1;
         end if;
-    end process;
-    process begin
-        wait until falling_edge(video_clk);
-        num<=std_logic_vector(unsigned(num)+1);
     end process;
     process begin
         wait until rising_edge(clk);wait for 1 ps;
@@ -57,21 +50,53 @@ begin
     end process;
     process
         variable random:unsigned(31 downto 0):=x"98c01234";
+        variable pixels:natural:=0;
+        procedure check_bank is begin
+            cs<='0';wr<='0';
+            -- Writes may coalesce, but the final bank/mode must arrive.
+            -- One microsecond exceeds the worst round trip at 20 MHz.
+            wait for 1 us;
+            for i in 0 to 15 loop
+                wait until falling_edge(video_clk);
+                num<=std_logic_vector(to_unsigned(i,4));wait for 1 ns;
+                assert (r & g & b)=(rr & rg & rb)
+                    report "palette snapshot lost final update" severity failure;
+                pixels:=pixels+1;
+            end loop;
+        end;
+        procedure write_reg(a:natural; v:natural) is begin
+            wait until falling_edge(clk);
+            cs<='1';wr<='1';addr<=std_logic_vector(to_unsigned(a,2));wd<=std_logic_vector(to_unsigned(v,8));
+            wait until falling_edge(clk);cs<='0';wr<='0';
+        end;
     begin
         wait for 100 ns;rstn<='1';wait for 100 ns;checking<=true;
-        for i in 0 to 9999 loop
-            wait until falling_edge(clk);
-            random:=random xor shift_left(random,13);
-            random:=random xor shift_right(random,17);
-            random:=random xor shift_left(random,5);
-            cs<=random(0);wr<=random(1);rd<=random(2);colormode<=random(3);
-            wd<=std_logic_vector(random(15 downto 8));addr<=std_logic_vector(random(5 downto 4));
-            -- Include reset while switching modes and programming palettes.
-            if i=5000 then rstn<='0';else rstn<='1';end if;
+        check_bank;
+        -- Quiet isolated changes expose payload arriving after its request.
+        write_reg(0,16#17#);check_bank;
+        write_reg(1,16#62#);check_bank;
+        colormode<='1';check_bank;
+        write_reg(0,3);check_bank;
+        write_reg(1,12);check_bank;
+        write_reg(2,5);check_bank;
+        write_reg(3,9);check_bank;
+        for batch in 0 to 99 loop
+            for i in 0 to 63 loop
+                wait until falling_edge(clk);
+                random:=random xor shift_left(random,13);
+                random:=random xor shift_right(random,17);
+                random:=random xor shift_left(random,5);
+                cs<=random(0);wr<=random(1);rd<=random(2);colormode<=random(3);
+                wd<=std_logic_vector(random(15 downto 8));addr<=std_logic_vector(random(5 downto 4));
+            end loop;
+            wait until falling_edge(clk);check_bank;
+            if batch=50 then
+                rstn<='0';wait for 100 ns;rstn<='1';check_bank;
+            end if;
         end loop;
-        wait for 100 ns;
-        assert checks>7000 report "not enough palette pixel checks" severity failure;
-        report "PASS: staged palette and original CPU readback, " & integer'image(checks) & " pixel checks";
+        assert checks>7000 and pixels=1744 report "not enough palette checks" severity failure;
+        report "PASS: palette snapshots and CPU readback, " & integer'image(pixels) &
+            " final pixels / " & integer'image(checks) & " stable video intervals";
         finish;
     end process;
 end architecture;

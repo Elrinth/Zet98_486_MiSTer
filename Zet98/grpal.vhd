@@ -46,11 +46,67 @@ begin
     -- Stage settings, not pixels: palette lookup and the raster keep their
     -- existing latency. CPU readback always uses the original register bank.
     staged_palette : if VIDEO_STAGED generate
-        process(video_clk) begin
-            if rising_edge(video_clk) then
-                PAL_VIDEO <= PALREG;
-                C8_VIDEO <= C8REG;
-                COLOR_VIDEO <= COLORMODE;
+        -- Hold a complete palette until the video domain has copied it.
+        -- CPU writes continue normally; writes during a transfer mark the
+        -- next snapshot dirty. No palette mux is added to the pixel path.
+        signal palette_hold, palette_transfer : std_logic_vector(216 downto 0);
+        signal palette_request, palette_ack : std_logic;
+        signal request_sync, ack_sync : std_logic_vector(1 downto 0);
+        signal dirty, last_color : std_logic;
+        signal palette_video_rstn : std_logic;
+        attribute preserve : boolean;
+        attribute preserve of palette_hold, request_sync, ack_sync : signal is true;
+        attribute altera_attribute : string;
+        attribute altera_attribute of request_sync, ack_sync : signal is
+            "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
+    begin
+        palette_reset : entity work.reset_release
+            port map(video_clk, rstn, palette_video_rstn);
+        palette_transfer <= palette_hold;
+        process(clk,rstn) begin
+            if rstn='0' then
+                palette_hold <= (others=>'0');
+                palette_request <= '0'; ack_sync <= "00";
+                dirty <= '1'; last_color <= '0';
+            elsif rising_edge(clk) then
+                ack_sync <= ack_sync(0) & palette_ack;
+                last_color <= COLORMODE;
+                if palette_request=ack_sync(1) and dirty='1' then
+                    for i in 0 to 15 loop
+                        palette_hold(12*i+11 downto 12*i) <= PALREG(i);
+                    end loop;
+                    for i in 0 to 7 loop
+                        palette_hold(192+3*i+2 downto 192+3*i) <= C8REG(i);
+                    end loop;
+                    palette_hold(216) <= COLORMODE;
+                    palette_request <= not palette_request;
+                    dirty <= '0';
+                end if;
+                -- The snapshot above sees the preceding register bank. A
+                -- simultaneous write must therefore request another copy.
+                if (CS='1' and WR='1') or COLORMODE/=last_color then
+                    dirty <= '1';
+                end if;
+            end if;
+        end process;
+        process(video_clk,palette_video_rstn) begin
+            if palette_video_rstn='0' then
+                request_sync <= "00"; palette_ack <= '0';
+                PAL_VIDEO <= (others=>x"000");
+                C8_VIDEO <= ("000","010","001","011","100","110","101","111");
+                COLOR_VIDEO <= '0';
+            elsif rising_edge(video_clk) then
+                request_sync <= request_sync(0) & palette_request;
+                if request_sync(1)/=palette_ack then
+                    for i in 0 to 15 loop
+                        PAL_VIDEO(i) <= palette_transfer(12*i+11 downto 12*i);
+                    end loop;
+                    for i in 0 to 7 loop
+                        C8_VIDEO(i) <= palette_transfer(192+3*i+2 downto 192+3*i);
+                    end loop;
+                    COLOR_VIDEO <= palette_transfer(216);
+                    palette_ack <= request_sync(1);
+                end if;
             end if;
         end process;
     end generate;

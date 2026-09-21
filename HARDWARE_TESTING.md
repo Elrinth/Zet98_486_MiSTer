@@ -1335,3 +1335,27 @@ with 99 additional no-ACK resets; its independent normal and four failure
 models pass. Two attempted containers lacked Verilator; the completed run uses
 the video simulation image. Full-core fitting and new hardware tests remain
 pending; peripheral simulation frequencies are not full-core clock claims.
+
+### Held palette snapshot
+
+The palette transfer is now a held 217-bit request/acknowledgment snapshot
+between CPU and video. CPU reads/writes are unchanged, and no pixel pipeline
+stage is added. Rapid writes may coalesce; exact raster palette timing and
+hardware game compatibility remain unverified. A local reset-release chain
+handles reset in the receiving clock domain. Its exception targets only the
+two CLRN pins, using pin names confirmed on a fitted reset_release instance.
+
+The real RTL plus a 20 ns payload-delay variant pass 20/40/50/60/90/100 MHz
+and three phases: 1744 final-pixel comparisons per run, continuous stability
+checks, both color modes, CPU readback, random writes and reset. A 60 ns late
+payload and direct CPU palette bypass fail their negative controls. The CRTC
+compositor tests also pass. The 20 ns payload constraint keeps at least 6.66 ns
+settling time before capture after two full 75 MHz video periods. This timing
+bound applies to the held snapshot, not arbitrary changing configuration.
+
+The preceding CompletionToggle60 fit (3110081) still fails: slow/hot video
+GDC pitch -0.287 ns, palette -0.261 ns, CPU read-command to TLB -0.243 ns,
+and memory request reception -0.101 ns. Its previous ACK-clear path is gone.
+The matched 50 MHz fit fails one slow/cold video check by -0.003 ns. Neither
+was deployed. HPS placement guards pass. All-corner detailed reports are
+retained; the working HPSCache50 hardware remains loaded with MPU disabled.
