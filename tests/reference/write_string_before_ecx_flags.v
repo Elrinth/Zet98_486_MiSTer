@@ -26,7 +26,7 @@
 
 `include "defines.v"
 
-module write_string(
+module write_string_reference(
     
     input               wr_is_8bit,
     input               wr_operand_16bit,
@@ -41,7 +41,6 @@ module write_string(
     input               wr_zflag_result,
     
     input       [31:0]  ecx,
-    input       [3:0]   ecx_count_flags,
     input       [31:0]  esi,
     input       [31:0]  edi,
     
@@ -82,10 +81,10 @@ assign wr_edi_final = (wr_address_16bit)? { edi[31:16], w_edi[15:0] } : w_edi;
 assign wr_ecx_final = (wr_address_16bit)? { ecx[31:16], w_ecx[15:0] } : w_ecx;
 
 assign wr_string_ignore = wr_prefix_group_1_rep != 2'd0 &&
-    ((wr_address_16bit && ecx_count_flags[0]) || (wr_address_32bit && ecx_count_flags[1]));
+    ((wr_address_16bit && ecx[15:0] == 16'd0) || (wr_address_32bit && ecx == 32'd0));
 
 assign wr_string_finish =
-    (wr_prefix_group_1_rep != 2'd0 && ((wr_address_16bit && ecx_count_flags[2]) || (wr_address_32bit && ecx_count_flags[3])));
+    (wr_prefix_group_1_rep != 2'd0 && ((wr_address_16bit && ecx[15:0] == 16'd1) || (wr_address_32bit && ecx == 32'd1)));
     
 assign wr_string_zf_finish =
      wr_string_finish ||

@@ -5,7 +5,9 @@ intel_lib=${INTEL_SIM_LIB:-/project/build/intel-sim}
 test -f "$intel_lib/altera_mf.v" || { echo "Set INTEL_SIM_LIB to the installed Quartus eda/sim_lib directory" >&2; exit 1; }
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-nasm -f bin tests/ao486_smoke.asm -o "$out/smoke.bin"
+asm_flags=()
+if [ "${CPU_REP_COUNTS:-0}" = 1 ]; then asm_flags+=(-DREP_COUNT_TESTS=1); fi
+nasm -f bin "${asm_flags[@]}" tests/ao486_smoke.asm -o "$out/smoke.bin"
 # Icarus 11 propagates Intel model tri0/tri1 input defaults back into connected
 # procedural registers. Isolate those inputs with identity expressions in
 # temporary simulation copies; synthesis and the vendored originals are intact.
@@ -18,3 +20,4 @@ iverilog -g2012 -I rtl/vendor/ao486 -s ao486_cpu_tb -Pao486_cpu_tb.LOWMEM_CACHE=
     "${sources[@]}" "$out/l1_icache.v" "$out/simple_fifo_mlab.v" \
     rtl/vendor/common/simple_mult.v rtl/cpu/*.sv tests/cpu_export.sv tests/ao486_cpu_tb.sv "$intel_lib/altera_mf.v"
 vvp "$out/cpu.vvp" "+program=$out/smoke.bin" "$@"
+if [ "${CPU_REP_COUNTS:-0}" = 1 ]; then echo 'PASS: real CPU REP count zero/one, CL/CH writes, 16/32-bit address size and high-word boundary'; fi

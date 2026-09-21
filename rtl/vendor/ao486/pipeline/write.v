@@ -509,6 +509,7 @@ wire [2:0]  wr_push_length;
 wire [31:0] wr_esi_final;
 wire [31:0] wr_edi_final;
 wire [31:0] wr_ecx_final;
+wire [3:0] ecx_count_flags;
 
 wire        wr_string_ignore;
 
@@ -1350,6 +1351,7 @@ write_register write_register_inst(
     .eax                 (eax),                 //output [31:0]
     .ebx                 (ebx),                 //output [31:0]
     .ecx                 (ecx),                 //output [31:0]
+    .ecx_count_flags     (ecx_count_flags),
     .edx                 (edx),                 //output [31:0]
     .esi                 (esi),                 //output [31:0]
     .edi                 (edi),                 //output [31:0]
@@ -1484,6 +1486,7 @@ write_string write_string_inst(
     .wr_zflag_result            (wr_zflag_result),          //input
     
     .ecx                        (ecx),                      //input [31:0]
+    .ecx_count_flags            (ecx_count_flags),
     .esi                        (esi),                      //input [31:0]
     .edi                        (edi),                      //input [31:0]
     

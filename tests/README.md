@@ -147,6 +147,13 @@ memory and odd-port I/O, `REP MOVSD`, A20 wrapping and unmapped-memory isolation
 high reset-ROM aliases, interrupt/IRET, and a CPU-only reset that retains RAM.
 The upstream simulation observer is supplied as a read-only test hook.
 
+`CPU_REP_COUNTS=1 bash tests/run-cpu.sh` additionally exercises zero/one
+repeated-string counts, partial CL/CH updates, 16/32-bit address sizes and
+counts crossing the low-word boundary. `tests/prove-ecx-count-flags.py` proves
+the registered count predicates against the actual register update logic
+and all outputs of the original string unit; see
+[the timing change and evidence](../rtl/cpu/STRING_COUNTS.md).
+
 `run-upper-cache.sh` tests optional instruction caching at 80000h–9FFFFh
 with actual ao486 execution and the synthesized VHDL cache policy. It covers
 native self-modification, bank aliases, DMA, remapping/restoration and ROM

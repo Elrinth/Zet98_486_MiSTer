@@ -36,6 +36,76 @@ start:
     cmp dword [0x210d], 0x91827364
     jne fail
 
+%ifdef REP_COUNT_TESTS
+    ; 16-bit REP uses CX even with nonzero ECX high bits. Partial CL/CH
+    ; writes must update the count predicates on the same edge as ECX.
+    mov dword [0x2400], 0x11223344
+    mov dword [0x2410], 0xa5a5a5a5
+    mov esi, 0x2400
+    mov edi, 0x2410
+    mov ecx, 0x12340000
+    rep movsb
+    cmp edi, 0x2410
+    jne fail
+    cmp ecx, 0x12340000
+    jne fail
+    mov cl, 1
+    rep movsb
+    cmp ecx, 0x12340000
+    jne fail
+    cmp dword [0x2410], 0xa5a5a544
+    jne fail
+    mov cx, 0x0101
+    mov ch, 0
+    mov al, 0x5a
+    rep stosb
+    cmp ecx, 0x12340000
+    jne fail
+    cmp dword [0x2410], 0xa5a55a44
+    jne fail
+
+    ; ECX=10000h is not zero for 32-bit-address REP. End on the first
+    ; mismatch rather than performing 65536 iterations in the simulator.
+    mov byte [0x2410], 0xff
+    mov esi, 0x2400
+    mov edi, 0x2410
+    mov ecx, 0x10000
+    a32 repe cmpsb
+    cmp ecx, 0xffff
+    jne fail
+    cmp edi, 0x2411
+    jne fail
+
+    ; ECX=10001h is not one: continue past the first equal byte and stop
+    ; on the second unequal byte. This also crosses the low-word boundary.
+    mov byte [0x2410], 0x44
+    mov esi, 0x2400
+    mov edi, 0x2410
+    mov ecx, 0x10001
+    a32 repe cmpsb
+    cmp ecx, 0xffff
+    jne fail
+    cmp esi, 0x2402
+    jne fail
+    cmp edi, 0x2412
+    jne fail
+
+    mov edi, 0x2420
+    xor ecx, ecx
+    mov eax, 0x91827364
+    a32 rep stosd
+    cmp edi, 0x2420
+    jne fail
+    inc ecx
+    a32 rep stosd
+    test ecx, ecx
+    jnz fail
+    cmp edi, 0x2424
+    jne fail
+    cmp dword [0x2420], 0x91827364
+    jne fail
+%endif
+
     ; A20 disabled at reset; enabling it must not wrap unavailable high RAM.
     mov byte [1], 0xa5
     mov ax, 0xffff

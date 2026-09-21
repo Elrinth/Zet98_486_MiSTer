@@ -213,6 +213,7 @@ module write_register(
     output reg  [31:0]  eax,
     output reg  [31:0]  ebx,
     output reg  [31:0]  ecx,
+    output reg  [3:0]   ecx_count_flags,
     output reg  [31:0]  edx,
     output reg  [31:0]  esi,
     output reg  [31:0]  edi,
@@ -412,6 +413,23 @@ assign esp_value =
 always @(posedge clk) begin if(rst_n == 1'b0) eax <= `STARTUP_EAX; else if(w_write_regrm) eax <= eax_value;                                              else eax <= eax_to_reg; end
 always @(posedge clk) begin if(rst_n == 1'b0) ebx <= `STARTUP_EBX; else if(w_write_regrm) ebx <= ebx_value;                                              else ebx <= ebx_to_reg; end
 always @(posedge clk) begin if(rst_n == 1'b0) ecx <= `STARTUP_ECX; else if(w_write_regrm) ecx <= ecx_value;                                              else ecx <= ecx_to_reg; end
+
+// Zet98: predecode REP count predicates on the same edge as ECX. This removes
+// a wide equality test from the string-completion -> decoder ready path.
+// Bits 0/1 mean CX/ECX == 0, bits 2/3 mean CX/ECX == 1.
+wire [31:0] ecx_count_next = !rst_n ? `STARTUP_ECX :
+                            w_write_regrm ? ecx_value : ecx_to_reg;
+always @(posedge clk) begin
+    ecx_count_flags <= {ecx_count_next == 32'd1, ecx_count_next[15:0] == 16'd1,
+                        ecx_count_next == 32'd0, ecx_count_next[15:0] == 16'd0};
+end
+// synthesis translate_off
+always @(posedge clk) if (rst_n) begin
+    if (ecx_count_flags !== {ecx == 32'd1, ecx[15:0] == 16'd1,
+                            ecx == 32'd0, ecx[15:0] == 16'd0})
+        $fatal(1, "ECX count flags are not aligned with ECX");
+end
+// synthesis translate_on
 always @(posedge clk) begin if(rst_n == 1'b0) edx <= `STARTUP_EDX; else if(w_write_regrm) edx <= edx_value;                                              else edx <= edx_to_reg; end
 always @(posedge clk) begin if(rst_n == 1'b0) esi <= `STARTUP_ESI; else if(w_write_regrm) esi <= esi_value;                                              else esi <= esi_to_reg; end
 always @(posedge clk) begin if(rst_n == 1'b0) edi <= `STARTUP_EDI; else if(w_write_regrm) edi <= edi_value;                                              else edi <= edi_to_reg; end
