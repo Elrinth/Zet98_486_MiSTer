@@ -7,7 +7,12 @@ RAM. It is disabled by default during validation. Experimental
 `-LowMemoryCacheKB 32` and `-LowMemoryCacheKB 64` sizes retain the same mapping
 and coherence rules; 8 KB remains the default when enabled.
 
-All writes reach the original bus and invalidate the corresponding slot.
+All writes reach the original bus. Once a full-word write is acknowledged,
+its address, tag and both bytes fill the corresponding cache slot. Partial
+and zero-byte writes invalidate the slot because the untouched byte is not
+known. No entry is filled before the legacy write completes or while
+invalidation/clearing is active. This lets a following stack or data read
+reuse the completed word without another SDRAM access.
 DMA ownership and writes through banked aliases immediately disable hits and
 start a background sweep of all valid bits. A
 miss invalidated while outstanding cannot refill stale data. A hit invalidated
@@ -55,3 +60,21 @@ blocks. Hardware gives ALU 246 / RAM copy 121 blocks, exactly matching the
 8 KB version with the same pixel-clock changes. This benchmark demonstrates
 no benefit from 64 KB; 8 KB remains the baseline. Timing still fails two
 checks, worst -0.164 ns. Rusty gameplay benefit from 64 KB remains unmeasured.
+
+## Completed-word write allocation
+
+The standalone 8/32/64 KB tests pass with write allocation, including all
+byte masks, cold-word allocation, tag collisions, all-slot flushes, delayed
+ACK release, in-flight invalidation and 3000 mixed random sequences per size.
+Disabling partial-write invalidation still fails with stale data.
+
+The actual ao486 CPU passes DMA/code coherence, upper-window bypass and a
+new 128-iteration push/pop kernel that checks every returned value and the
+final stack pointer. With the instruction cache and 8 KB data cache enabled,
+and eight external bus wait cycles, the previous cache takes 6420 cycles /
+273 transfers; write allocation takes 5268 / 145. This is 17.9% fewer cycles
+(21.9% greater throughput) for that kernel. The matching ALU and VRAM kernels
+remain 6392 / 17 and 3720 / 162. These compare otherwise identical current
+CPU sources. They are simulation results, not Rusty FPS or hardware results.
+The broad instruction-cache-disabled sweep is separate and not yet complete.
+The new allocation policy still needs full FPGA timing and hardware tests.

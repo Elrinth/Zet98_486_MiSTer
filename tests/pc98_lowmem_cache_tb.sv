@@ -89,10 +89,20 @@ module pc98_lowmem_cache_tb;
         before_count=transfers;
         repeat(8) transact(0,20'h1234,3,0,0);
         if(transfers!=before_count) $fatal(1,"warm read missed");
-        for(n=0;n<4;n=n+1) begin
+        for(n=1;n<=4;n=n+1) begin
+            before_count=transfers;
             transact(1,20'h1234,n,16'h6cb7^(n*103),0);
+            if(transfers!=before_count+1) $fatal(1,"write did not reach legacy RAM");
+            before_count=transfers;
             transact(0,20'h1234,3,0,0);
+            if(transfers!=before_count+(n==3 ? 0 : 1))
+                $fatal(1,"wrong write allocation/partial invalidation behavior");
         end
+        // A full write allocates a cold word, not merely an existing hit.
+        before_count=transfers;
+        transact(1,20'h71a2,3,16'h713a,0);
+        transact(0,20'h71a2,3,0,0);
+        if(transfers!=before_count+1) $fatal(1,"cold full write did not allocate");
         // Same index, distinct physical tags.
         transact(0,(20'h1234+WORDS*2),3,0,0); transact(0,20'h1234,3,0,0);
         // I/O and every upper-memory region must always fetch current data.
@@ -116,7 +126,7 @@ module pc98_lowmem_cache_tb;
         for(n=0;n<WORDS;n=n+1) transact(0,n*2,3,0,0);
         // Invalidation during an outstanding miss must prevent stale refills.
         // Explicitly evict this word: large caches retained it in the sweep.
-        transact(1,20'h6234,3,16'h79bc,0);
+        transact(1,20'h6234,1,16'h79bc,0);
         begin_request(0,20'h6234,3,0,0);
         @(negedge clk); while(!legacy_strobe) @(negedge clk);
         invalidate=1; memory[20'h6234>>1]=16'hfa91;

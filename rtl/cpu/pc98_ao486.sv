@@ -92,6 +92,7 @@ module pc98_ao486 #(
         pc98_lowmem_cache #(.INDEX_BITS($clog2(LOWMEM_CACHE_KB*512))) cache (
             .clk(clk), .reset(cpu_reset), .invalidate(cache_invalidate),
             .address(bus_address), .select(bus_select), .write(bus_write), .io(bus_io),
+            .writedata(bus_writedata),
             .strobe(legacy_request), .legacy_strobe(bus_strobe), .legacy_ack(bus_ack),
             .legacy_readdata(peripheral_read), .ack(legacy_ack), .readdata(legacy_readdata)
         );

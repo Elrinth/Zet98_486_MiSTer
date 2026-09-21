@@ -63,6 +63,28 @@ align 32, db 0x90
     jnz .vram
     mov ax, 0x0202
     out dx, ax
+
+    ; Stack writes must reach RAM, and the immediately following read can
+    ; use write-through allocation. Check each value, not only elapsed time.
+    mov ax, 0x0103
+    out dx, ax
+    mov cx, 128
+    mov bx, 0x1234
+align 32, db 0x90
+.stack:
+    push bx
+    pop ax
+    cmp ax, bx
+    jne fail
+    inc bx
+    dec cx
+    jnz .stack
+    cmp bx, 0x12b4
+    jne fail
+    cmp sp, 0x9000
+    jne fail
+    mov ax, 0x0203
+    out dx, ax
     mov ax, 0x600d
     out dx, ax
     hlt

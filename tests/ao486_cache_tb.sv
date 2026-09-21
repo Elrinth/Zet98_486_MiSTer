@@ -74,11 +74,11 @@ module ao486_cache_tb;
                                        memory_wait, held_data[7:0], cycles-start_cycles, transactions-start_transfers);
                                end else if (held_data == 16'hdead) $fatal(1, "Cache coherence/checksum failure");
                                else if (held_data == 16'h600d) begin
-                                   if (dma_tests != 1 || measurements != 2) $fatal(1, "Missing cache checks");
+                                   if (dma_tests != 1 || measurements != 3) $fatal(1, "Missing cache checks");
                                    for (j=0; j<256; j=j+2)
                                        if ({memory[20'ha8000+j+1],memory[20'ha8000+j]} !== 16'ha55a)
                                            $fatal(1, "VRAM copy corrupted at %h", j);
-                                   $display("PASS: full CPU cache=%0d: DMA modification, CPU self-modification, upper-window bypass, ALU and VRAM checksums", ICACHE_ENABLE);
+                                   $display("PASS: full CPU cache=%0d: DMA modification, CPU self-modification, upper-window bypass, ALU, VRAM and stack checksums", ICACHE_ENABLE);
                                    $finish;
                                end
                            end

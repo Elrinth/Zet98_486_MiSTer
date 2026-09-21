@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 // Read-through, write-through cache for fixed RAM below 80000h only.
-// Each entry holds one complete 16-bit word. CPU writes invalidate their slot;
+// Each entry holds one complete 16-bit word. Completed full-word writes fill
+// their slot; partial writes invalidate it because the other byte is unknown.
 // DMA and writes through aliased bank windows invalidate all slots. No dirty
 // data is retained. VRAM, ROM, I/O and banked windows always use the legacy bus.
 module pc98_lowmem_cache #(
@@ -10,6 +11,7 @@ module pc98_lowmem_cache #(
     input wire clk, reset, invalidate,
     input wire [19:1] address,
     input wire [1:0] select,
+    input wire [15:0] writedata,
     input wire write, io, strobe,
     output wire legacy_strobe,
     input wire legacy_ack,
@@ -38,12 +40,17 @@ module pc98_lowmem_cache #(
     assign readdata = state==HIT ? lookup[15:0] : legacy_readdata;
 
     // The sweep never stalls the legacy bus or DMA. No fills occur during it,
-    // so another invalidation while clearing needs no restart. Writes always
-    // invalidate their slot, and reads always request both bytes.
+    // so another invalidation while clearing needs no restart. Writes become
+    // cacheable only after the legacy bus ACKs both bytes. Before then, and
+    // for partial writes, invalidate the slot. Reads request both bytes.
     always @(posedge clk) begin
         if(state==IDLE && reading) lookup<=words[index];
         if(clearing) words[clear_index]<=0;
-        else if(strobe && cacheable && write) words[index]<=0;
+        else if(strobe && cacheable && write) begin
+            if(select==2'b11 && legacy_ack && !invalidate)
+                words[index]<={1'b1,tag,writedata};
+            else words[index]<=0; // CPU_PARTIAL_WRITE_INVALIDATE
+        end
         else if(state==MISS && strobe && legacy_ack && !invalidate && !cancelled)
             words[index]<={1'b1,tag,legacy_readdata};
     end
