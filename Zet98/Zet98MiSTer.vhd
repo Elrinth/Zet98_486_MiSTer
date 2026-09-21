@@ -10,7 +10,8 @@ entity Zet98MiSTer is
 generic(
 	SYSFREQ		:integer	:=20000;		--CPU clock(kHz)
 	SND			:integer	:=2;			--0:No sound 1:OPN(-26) 2:OPNA(-73)
-	CPU486      :integer :=0           -- opt-in ao486 bring-up build
+	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
+	EXT_RAM_MB  :integer :=0           -- experimental DDR-backed extended memory
 );
 port(
 	ramclk	:in std_logic;
@@ -33,6 +34,12 @@ port(
 	pMemBa0     : out std_logic;                        -- SD-RAM Bank select address 0
 	pMemAdr     : out std_logic_vector(12 downto 0);    -- SD-RAM Address
 	pMemDat     : inout std_logic_vector(15 downto 0);  -- SD-RAM Data
+	pDdrAddress : out std_logic_vector(28 downto 0);
+	pDdrWriteData : out std_logic_vector(63 downto 0);
+	pDdrByteEnable, pDdrBurstCount : out std_logic_vector(7 downto 0);
+	pDdrRead, pDdrWrite : out std_logic;
+	pDdrBusy, pDdrReadValid : in std_logic;
+	pDdrReadData : in std_logic_vector(63 downto 0);
 
 	-- ROM image loader
 	LDR_ADDR		:in std_logic_vector(19 downto 0);
@@ -131,6 +138,7 @@ component SPI_IF
 end component;
 
 component pc98_ao486
+generic(EXT_RAM_MB :integer :=0);
 port(
     clk, reset :in std_logic;
     cache_invalidate :in std_logic;
@@ -143,7 +151,13 @@ port(
     bus_write, bus_strobe, bus_io :out std_logic;
     bus_readdata :in std_logic_vector(15 downto 0);
     bus_ack :in std_logic;
-    unmapped_access :out std_logic
+    unmapped_access :out std_logic;
+    ddr_address :out std_logic_vector(28 downto 0);
+    ddr_writedata :out std_logic_vector(63 downto 0);
+    ddr_byteenable, ddr_burstcount :out std_logic_vector(7 downto 0);
+    ddr_read, ddr_write :out std_logic;
+    ddr_busy, ddr_readdatavalid :in std_logic;
+    ddr_readdata :in std_logic_vector(63 downto 0)
 );
 end component;
 
@@ -2336,6 +2350,9 @@ begin
 	tgc<=INTM;
 	
     zet_cpu: if CPU486=0 generate
+	pDdrAddress<=(others=>'0'); pDdrWriteData<=(others=>'0');
+	pDdrByteEnable<=(others=>'0'); pDdrBurstCount<=(others=>'0');
+	pDdrRead<='0'; pDdrWrite<='0';
 	cpu	:zet port map(
 		wb_clk_i	=>cpuclk,
 		wb_rst_i	=>not srstn,
@@ -2357,13 +2374,17 @@ begin
     end generate;
 
     ao486_cpu: if CPU486/=0 generate
-        cpu: pc98_ao486 port map(
+        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB) port map(
             clk=>cpuclk, reset=>not srstn,
             interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
             bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open,
-            cache_invalidate=>cache_invalidate
+            cache_invalidate=>cache_invalidate,
+            ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
+            ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
+            ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
+            ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData
         );
         cyc<=stb;
         nmia<='0';

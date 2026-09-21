@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 // Initial ao486 connection to Zet98's legacy memory/peripheral fabric.
-// The existing fabric implements the low 1 MB. Reset ROM aliases are explicit;
+// The legacy fabric implements the low 1 MB. Optional extended RAM uses DDR;
 // other physical addresses read as FFFF and discard writes, never alias RAM.
 // Instruction caching is limited to fixed low RAM, with external invalidation.
 module pc98_ao486 #(
-    parameter ICACHE_ENABLE = 1'b1
+    parameter ICACHE_ENABLE = 1'b1,
+    parameter EXT_RAM_MB = 0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -21,7 +22,13 @@ module pc98_ao486 #(
     output wire        bus_io,
     input  wire [15:0] bus_readdata,
     input  wire        bus_ack,
-    output wire        unmapped_access
+    output wire        unmapped_access,
+    output wire [28:0] ddr_address,
+    output wire [63:0] ddr_writedata,
+    output wire [7:0]  ddr_byteenable, ddr_burstcount,
+    output wire        ddr_read, ddr_write,
+    input  wire        ddr_busy, ddr_readdatavalid,
+    input  wire [63:0] ddr_readdata
 );
     wire [29:0] avm_address;
     wire [31:0] avm_writedata, avm_readdata;
@@ -70,10 +77,31 @@ module pc98_ao486 #(
         bus_readdata;
 
     wire reset_alias = physical_address[31:21] == 11'h7ff && physical_address[19:16] == 4'hf;
-    wire mapped = bus_io || physical_address[31:20] == 0 || reset_alias;
+    wire legacy_mapped = bus_io || physical_address[31:20] == 0 || reset_alias;
+    wire extended_mapped, extended_ack;
+    wire [15:0] extended_readdata;
+    wire mapped = legacy_mapped || extended_mapped;
     assign bus_address = physical_address[19:1];
-    assign bus_strobe = physical_strobe && mapped;
+    assign bus_strobe = physical_strobe && legacy_mapped;
     assign unmapped_access = physical_strobe && !mapped;
+
+    generate if (EXT_RAM_MB != 0) begin : extended_ram
+        pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB)) ram (
+            .clk(clk), .reset(reset), .address(physical_address),
+            .select(bus_select), .writedata(bus_writedata), .write(bus_write),
+            .strobe(physical_strobe && !legacy_mapped),
+            .mapped(extended_mapped), .ack(extended_ack), .readdata(extended_readdata),
+            .ddr_address(ddr_address), .ddr_writedata(ddr_writedata),
+            .ddr_byteenable(ddr_byteenable), .ddr_burstcount(ddr_burstcount),
+            .ddr_read(ddr_read), .ddr_write(ddr_write), .ddr_busy(ddr_busy),
+            .ddr_readdatavalid(ddr_readdatavalid), .ddr_readdata(ddr_readdata)
+        );
+    end else begin : no_extended_ram
+        assign extended_mapped=0;
+        assign extended_ack=0;
+        assign extended_readdata=16'hffff;
+        assign {ddr_address,ddr_writedata,ddr_byteenable,ddr_burstcount,ddr_read,ddr_write}=0;
+    end endgenerate
 
     ao486 cpu (
         .clk(clk), .rst_n(!cpu_reset), .a20_enable(a20_enable), .cache_disable(!ICACHE_ENABLE),
@@ -100,7 +128,7 @@ module pc98_ao486 #(
         .io_write_data(io_write_data), .io_write_done(io_write_done), .busy(),
         .bus_address(physical_address), .bus_select(bus_select), .bus_writedata(bus_writedata),
         .bus_write(bus_write), .bus_strobe(physical_strobe), .bus_io(bus_io),
-        .bus_readdata(mapped ? peripheral_read : 16'hffff),
-        .bus_ack(bus_ack || unmapped_access)
+        .bus_readdata(legacy_mapped ? peripheral_read : extended_mapped ? extended_readdata : 16'hffff),
+        .bus_ack((legacy_mapped && bus_ack) || extended_ack || unmapped_access)
     );
 endmodule

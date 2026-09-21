@@ -5,10 +5,13 @@ param(
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486')]
     [string]$Cpu = 'Zet',
+    [ValidateSet(0, 16, 64)]
+    [int]$ExtendedRamMB = 0,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
+if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildName = 'quartus-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6)
 $buildRoot = Join-Path $projectRoot ('build/' + $buildName)
@@ -34,6 +37,11 @@ try {
     git diff --stat | Set-Content -LiteralPath (Join-Path $buildRoot 'source-changes.txt')
     $SystemClockMHz | Set-Content -LiteralPath (Join-Path $buildRoot 'system-clock-mhz.txt')
     $Cpu | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu.txt')
+    $ExtendedRamMB | Set-Content -LiteralPath (Join-Path $buildRoot 'extended-ram-mb.txt')
+    if ($ExtendedRamMB -ne 0) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_EXT_RAM_MB=$ExtendedRamMB"
+    }
     if ($Cpu -eq 'ao486') {
         $projectSettings = Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf'
         # The two CPU sources have incompatible headers both named defines.v.

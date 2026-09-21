@@ -115,6 +115,14 @@ memory and odd-port I/O, `REP MOVSD`, A20 wrapping and unmapped-memory isolation
 high reset-ROM aliases, interrupt/IRET, and a CPU-only reset that retains RAM.
 The upstream simulation observer is supplied as a read-only test hook.
 
+`run-extmem.sh` uses the actual CPU in protected mode with the optional 16 MB
+and 64 MB DDR maps. It checks boundaries, the reserved 15–16 MB aperture,
+partial/unaligned writes, copies between conventional and extended RAM,
+instruction execution from DDR, and persistence through CPU-only reset.
+The standalone bridge test also checks all byte masks/64-bit word lanes,
+backpressure and a late read response across reset. These tests model DDR;
+they do not establish real DDR operation or BIOS/XMS memory detection.
+
 Icarus 11 propagates pull defaults from some Intel model input ports into
 connected Verilog registers. The test script inserts identity expressions at
 those connections in temporary simulation copies. Vendored and synthesized

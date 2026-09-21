@@ -139,7 +139,7 @@ assign VGA_F1    = 0;
 assign VGA_SCALER = 0;
 assign HDMI_FREEZE = 0;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
+assign DDRAM_CLK = clk_sys;
 
 assign LED_USER  = ioctl_download & ~ldr_done;
 assign LED_DISK  = {disk_led, sd_act};
@@ -391,7 +391,12 @@ floppy_overlay floppy_icon (
 	.out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
 );
 
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
+`ifdef ZET98_EXT_RAM_MB
+localparam EXT_RAM_MB = `ZET98_EXT_RAM_MB;
+`else
+localparam EXT_RAM_MB = 0;
+`endif
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),
@@ -411,6 +416,10 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED)) Zet98_top
 	.pMemBa0(SDRAM_BA[0]),
 	.pMemAdr(SDRAM_A),
 	.pMemDat(SDRAM_DQ),
+	.pDdrAddress(DDRAM_ADDR), .pDdrWriteData(DDRAM_DIN),
+	.pDdrByteEnable(DDRAM_BE), .pDdrBurstCount(DDRAM_BURSTCNT),
+	.pDdrRead(DDRAM_RD), .pDdrWrite(DDRAM_WE), .pDdrBusy(DDRAM_BUSY),
+	.pDdrReadValid(DDRAM_DOUT_READY), .pDdrReadData(DDRAM_DOUT),
 
 	.LDR_ADDR(ioctl_addr[19:0]),
 	.LDR_WDAT(ioctl_dout),

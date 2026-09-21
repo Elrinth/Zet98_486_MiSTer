@@ -29,8 +29,9 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    disk timing. Increase CPU clock only with FPGA timing and hardware evidence.
 2. Develop the ao486 integration toward a faster PC-9821-class machine, including
    extended RAM (16 MB first, then assess 64 MB), interrupts, DMA and BIOS support.
-   The current CPU integration maps only the lowest 1 MB; it does not yet
-   implement extended RAM or claim complete PC-9821 compatibility.
+   Normal builds retain the lowest-1-MB map. An optional DDR-backed 16/64 MB
+   map passes CPU simulation; BIOS/XMS discovery and hardware validation are
+   still required. This does not establish complete PC-9821 compatibility.
 3. Support raw PC-98 hard-disk images, including MiSTer-style `.vhd` files, with
    a working disk controller and BIOS path. Dynamic VHD/VHDX containers are a
    separate format and are not promised by a `.vhd` file selector.
@@ -114,7 +115,7 @@ timing; the additional pixel-clock audit also finds violations. This is not
 yet a clock-rate result. The bus rewrite is included in the newer Cache test
 RBF; its full-design timing still fails at -5.704 ns, while CPU setup passes.
 
-This first integration deliberately retains the existing low-1-MB memory map.
+The default integration retains the existing low-1-MB memory map.
 Unmapped addresses return `FFFF` and discard writes instead of aliasing low RAM.
 CPU control ports F0/F2/F6 implement reset and A20 controls, using
 [NP2kai's CPU I/O implementation](https://github.com/AZO234/NP2kai/blob/5939e0c6d5985c4c08fc70f289a83290e5d3e6f7/io/cpuio.c)

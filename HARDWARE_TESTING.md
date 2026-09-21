@@ -392,8 +392,26 @@ mask. Tests add 20,000 DMA routing comparisons and 4,096 actual GRCG plane
 results with delayed memory data; the complete adapter suite passes. Exercising
 the actual GRCG also exposed an existing eight-bit-versus-sixteen-bit XOR in
 tile comparison. It now compares both bytes, with distinct high/low matches
-tested on all four planes. A fresh complete build is in progress; these
-changes are not on the device yet.
+tested on all four planes. The complete fit under
+`build/quartus-20260921-034632-5dde7d/source` finishes in 24m09s, using
+32,414 ALMs, 395 RAM blocks and 63 DSP blocks. Eight negative timing checks
+remain; worst slack improves to -2.937 ns and CPU setup passes at +20.185 ns.
+The remaining worst path carries video retrace status into CPU I/O read data.
+The pixel-clock audit still reports violations. This RBF was not deployed;
+SHA-256 `662d1a75dbbb2e83408ad9c3d669d5d5e16c8114e336e8a03eead20f9a60cdd5`.
+
+### Extended RAM and optical-drive investigation
+
+The optional 16/64 MB DDR map passes real-CPU simulation, and the 16 MB mixed
+VHDL/SystemVerilog integration passes Quartus analysis/elaboration. It has
+not been tested on hardware. See `rtl/cpu/EXTENDED_RAM.md` for the memory hole,
+cache limitations and outstanding BIOS/XMS work. Default builds still use
+the original low-memory map.
+
+Read-only inspection of the SuperStation's Linux device tree finds `/dev/sr0`,
+an HL-DT-ST DVDRAM GUD1N behind an Initio USB bridge. This establishes host
+visibility only. No PC-98 optical controller, guest driver or media transport
+has been implemented or tested, and no disc was read, written or ejected.
 
 ### Short-read optimization and usability changes
 
