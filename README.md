@@ -68,6 +68,12 @@ Inherited RBFs are upstream artifacts, not releases of the new implementation.
    path are still missing. A disposable hardware diagnostic passes IDENTIFY,
    sector write/read checksum and four IRQ9 deliveries; only the designated
    test sector changed in the returned image.
+   A private DOS 6.20 image now boots Rusty, Nightslave and Doom II in a
+   software PC-98 emulator. Its [configuration templates](disk-templates/dos620/README.md)
+   provide six memory profiles and a game launcher; this does not establish
+   FPGA HDD boot. An [import utility](scripts/import_disk_image.py) converts
+   standard HDM/FDI/NFD-R0 floppies to D88 and 512-byte-sector HDI disks to raw
+   images. Native selection of those additional container formats is pending.
 4. Add the PC-98 MIDI interface used by games and route it through MiSTer MidiLink
    for local MUNT/FluidSynth synthesis and USB MIDI hardware. External MT32-pi
    support is a further option, not a requirement for listening to MIDI.

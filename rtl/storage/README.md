@@ -1,10 +1,29 @@
 # Experimental PC-98 raw-image ATA controller
 
-Build with `-RawIde` to replace unused SASI slot 2 with `IDE hard disk` (`.vhd`).
+Build with `-RawIde` to replace unused SASI slot 2 with `IDE hard disk` (`.vhd`/`.img`).
 The image is a flat array of 512-byte sectors, not a dynamic VHD/VHDX container.
 The controller does **not** yet provide an INT 1Bh disk BIOS, a partition IPL,
 or a bootable DOS installation. The stock test ROM cannot boot this device
 yet. Do not mistake an image selector or an IDENTIFY result for HDD boot support.
+
+`scripts/import_disk_image.py source.hdi output.vhd` removes a validated HDI
+header when its logical sectors are 512 bytes and writes geometry metadata
+beside the output. It refuses 256-byte SASI HDIs; combining pairs of their
+sectors would change the guest's disk layout. Geometry-dependent boot still
+requires the appropriate BIOS/controller integration. Direct HDI selection is
+not yet implemented.
+
+The same utility imports standard HDM/FDI and error-free NFD revision 0 disks
+into D88, preserving sector order, payload, FM/MFM, deleted marks and write
+protection. NFD revision 1/retry records and NFD error/protection records are
+rejected explicitly. This is an import workflow; the current floppy selector
+still reads D88. Use a new output filename, for example:
+`python scripts/import_disk_image.py game.hdm game.d88`.
+
+The private DOS 6.20 multi-game image uses the
+[DOS configuration templates](../../disk-templates/dos620/README.md).
+Its game files and boot menu have software-emulator checks; FPGA HDD boot
+remains unimplemented. The image itself is not included in this repository.
 
 Ports follow the PC-98 layout: 0430h presence, 0432h channel selection,
 0640h 16-bit data, 0642h..064Eh even-byte task-file registers, and 074Ch

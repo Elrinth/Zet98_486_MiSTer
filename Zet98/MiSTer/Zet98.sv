@@ -167,7 +167,7 @@ parameter CONF_STR = {
 	"S0,D88,FDD0;",
 	"S1,D88,FDD1;",
 `ifdef ZET98_RAW_IDE
-	"S2,VHD,IDE hard disk;",
+	"S2,VHDIMG,IDE hard disk;",
 `else
 	"S2,HDF,SASI;",
 `endif
