@@ -120,3 +120,11 @@ A negative control disconnects invalidation and must fail on stale code.
 invalidation expression. It checks 3,328 bank/read/write/I/O cases plus DMA
 ownership. The DMA grant test separately checks requesting an already idle bus,
 waiting for an active CPU transfer, retaining ownership and release/reset.
+
+`hardware/cpu_bench.asm` assembles with NASM's `cpu 8086` restriction and runs
+on a disposable System-disk copy. It synchronizes to a DOS-clock transition,
+executes ALU and RAM-copy blocks until at least ten reported seconds elapse,
+checks their results, and writes `Z98PERF.TXT`. Each block has 131,072 iterations.
+Compare blocks per reported second using the same BIOS/settings. The clock may
+have coarse resolution despite expressing its result in hundredths; this is
+a synthetic throughput test, not a game frame-rate test.

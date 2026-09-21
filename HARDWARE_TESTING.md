@@ -296,12 +296,26 @@ results are pending. An earlier cache build was deliberately stopped to include
 the DMA grant fix. No 66/100 MHz performance claim is established.
 
 `tests/hardware/cpu_bench.asm` is an 8086-compatible DOS benchmark for an isolated
-System disk. It measures 131,072 ALU iterations and word-copy iterations using
-the DOS clock, checks results and saves `Z98PERF.TXT`. Units are hundredths;
-zero means below timer resolution, and each kernel must take less than one hour.
-It does not measure game frame rate. The uncached baseline was launched on
-DiskFix at 02:34:10 local time, with a single disposable disk and a 60-second
-reset delay. Only its BOOT.COM contents differ from the supplied System image.
+System disk. It uses the DOS clock, checks results and saves `Z98PERF.TXT`.
+Version 1 completed on DiskFix with 131,072 iterations in 200 hundredths for
+ALU and 500 hundredths for RAM copy. Both checksums passed. The reported clock
+appears to have whole-second resolution, so the revised v2 synchronizes to a
+clock transition and repeats 131,072-iteration blocks for at least ten reported
+seconds. Each kernel must still take less than one hour. This measures neither
+Rusty frame rate nor original 486 equivalence.
+
+The uncached v2 baseline was launched at 02:38:43 local time with a single
+disposable disk and a 60-second reset delay. The retrieved host D88 contains:
+ALU **4 blocks / 1100 hundredths**, RAM copy **2 blocks / 1100 hundredths**,
+and passing checksums. Each block contains 131,072 iterations. Baseline and
+future cache-test disks start byte-identical; only BOOT.COM's allocation differs
+from the supplied System image. The cache build has not yet been deployed.
+
+An independent CPU/adapter 66 MHz feasibility fit is also running under
+`build/cpu-probe-66-20260921`. `scripts/probe-cpu.tcl` uses virtual pins and
+one-nanosecond input/output delays; it is not a board design or a deployable RBF.
+Its register timing and unconstrained-path reports distinguish CPU headroom
+from the still-unresolved platform clock crossings. Results are pending.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

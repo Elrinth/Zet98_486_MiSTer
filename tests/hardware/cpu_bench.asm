@@ -1,9 +1,11 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ; 8086-compatible DOS benchmark for a disposable PC-98 System disk.
 ; Replaces BOOT.COM without reallocating its original 2011-byte allocation.
-; Uses DOS hundredths-of-a-second time, retaining interrupts. A kernel must
-; finish within one hour; zero elapsed time is below the timer's resolution.
+; Uses DOS time with interrupts enabled. Synchronizes to a clock transition,
+; then repeats each kernel for at least ten reported seconds. A run must finish
+; within one hour. Reported hundredths do not imply hundredth-second resolution.
 bits 16
+cpu 8086
 org 100h
 start:
     cli
@@ -20,9 +22,8 @@ start:
     int 21h
     mov si, title
     call puts
-    call read_clock
-    mov [start_lo], ax
-    mov [start_hi], dx
+    call start_timer
+.alu_next:
     xor bx, bx
     xor si, si
     mov bp, 32
@@ -40,6 +41,12 @@ start:
     jnz fail
     or si, si
     jnz fail
+    inc word [batches]
+    or dx, dx
+    jnz .alu_done
+    cmp ax, 1000
+    jb .alu_next
+.alu_done:
     mov si, alu_text
     call result
 
@@ -47,9 +54,8 @@ start:
     mov cx, 1024
     mov ax, 0xa55a
     rep stosw
-    call read_clock
-    mov [start_lo], ax
-    mov [start_hi], dx
+    call start_timer
+.ram_next:
     mov bp, 128
 .ram_outer:
     mov si, 0x6000
@@ -65,6 +71,12 @@ start:
     dec bp
     jnz .ram_outer
     call elapsed
+    inc word [batches]
+    or dx, dx
+    jnz .ram_done
+    cmp ax, 1000
+    jb .ram_next
+.ram_done:
     push dx
     push ax
     mov si, 0x7000
@@ -119,6 +131,25 @@ critical_error:
     mov al, 3
     iret
 
+; Synchronize to a DOS-clock transition to avoid a fractional first interval.
+; Version 1 confirmed this clock advances on the test machine, but appears to
+; expose whole seconds. Run for at least ten reported seconds, not a short loop.
+start_timer:
+    mov word [batches], 0
+    call read_clock
+    mov [start_lo], ax
+    mov [start_hi], dx
+.tick:
+    call read_clock
+    cmp ax, [start_lo]
+    jne .started
+    cmp dx, [start_hi]
+    je .tick
+.started:
+    mov [start_lo], ax
+    mov [start_hi], dx
+    ret
+
 ; DX:AX = hundredths since this hour; preserves BX/CX/SI/DI/BP/ES.
 read_clock:
     push bx
@@ -161,7 +192,16 @@ elapsed:
 .done:
     ret
 result:
+    push dx
+    push ax
     call puts
+    mov ax, [batches]
+    xor dx, dx
+    call decimal32
+    mov si, elapsed_text
+    call puts
+    pop ax
+    pop dx
     call decimal32
     mov si, units
     call puts
@@ -229,10 +269,11 @@ puts:
     pop si
     pop ax
     ret
-title: db 13,10,'Zet98 CPU benchmark v1',13,10,'DOS clock; 131072 iterations per kernel.',13,10,0
-alu_text: db 'ALU elapsed: ',0
-ram_text: db 'RAM copy elapsed: ',0
-units: db ' hundredths (0 = below resolution)',13,10,0
+title: db 13,10,'Zet98 CPU benchmark v2',13,10,'131072 iterations/block; at least 10s/kernel.',13,10,0
+alu_text: db 'ALU blocks=',0
+ram_text: db 'RAM copy blocks=',0
+elapsed_text: db ' elapsed=',0
+units: db ' hundredths',13,10,0
 passed: db 'PASS: ALU and RAM checksums.',13,10,0
 failed: db 'FAIL: kernel checksum.',13,10,0
 finished: db 'Saved Z98PERF.TXT. Benchmark finished.',13,10,0
@@ -242,5 +283,6 @@ log_pos: dw 0
 start_lo: dw 0
 start_hi: dw 0
 write_length: dw 0
+batches: dw 0
 times 0 * (1 / (($ - $$) <= 2011)) db 0
 log_buffer equ 0x2000
