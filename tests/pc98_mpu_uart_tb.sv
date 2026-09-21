@@ -60,7 +60,13 @@ module pc98_mpu_uart_tb;
         rd(addr,got,17);
         if(got!==wanted) $fatal(1,"Port %04x got %02x expected %02x",addr,got,wanted);
     endtask
-    task automatic uart_init;
+    task automatic uart_init(input bit from_uart=0);
+        if(from_uart) begin
+            wr(16'he0d2,8'hff,29);
+            if(irq) $fatal(1,"UART reset falsely acknowledged");
+            expect_read(16'he0d2,8'h80);
+            expect_read(16'he0d0,8'hff);
+        end
         wr(16'he0d2,8'hff,29);
         if(!irq) $fatal(1,"Reset ACK did not raise IRQ6 source");
         expect_read(16'he0d2,8'h00);
@@ -120,7 +126,7 @@ module pc98_mpu_uart_tb;
         serial_in(8'h42,0);
         if(!rx_framing_error || irq) $fatal(1,"Invalid framing accepted as data");
         serial_in(8'h5a);expect_read(16'he0d0,8'h5a);
-        uart_init();
+        uart_init(1);
         if(rx_overrun || rx_framing_error || tx_overrun) $fatal(1,"Reset kept error flags");
 
         // Concurrent TX/RX traffic and FIFO pointer wrap.
@@ -141,7 +147,7 @@ module pc98_mpu_uart_tb;
         wr(16'he0d0,8'ha5);
         if(!tx_overrun) $fatal(1,"TX overflow not recorded");
         wait(sent_count==expected_count);#(40000);
-        uart_init();
+        uart_init(1);
 
         // Pending receive/ACK and transmit state cannot leak across disable.
         serial_in(8'h33);if(!irq) $fatal(1,"Missing test IRQ");

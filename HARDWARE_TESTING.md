@@ -1316,3 +1316,22 @@ Both compatibility defects are being addressed; MPU stays off by default.
 
 Sources: [Intel 8259A datasheet](https://www.cs.umb.edu/cs341/Intel8259/I8259APIC.pdf)
 and [Roland MPU-401 technical reference](https://cdn.roland.com/assets/media/pdf/MPU-401_OM.pdf).
+
+The source correction now enables request withdrawal only for master IRQ6;
+legacy one-clock interrupt producers retain their previous capture behavior.
+The source still uses edge detection and does not retrigger a held-high MIDI
+request after EOI. The PIC regression passes sixteen withdrawal intervals,
+masked withdrawal/unmask, new arrivals, simultaneous sound/MIDI, and existing
+master/slave pulse cases. Restoring the retained-request behavior fails.
+This does not yet correct every legacy 8259 spurious-vector or priority mode.
+
+Roland UART reset behavior is corrected separately: FFh in UART mode clears
+state with no FEh/IRQ, while FFh outside UART mode and 3Fh still acknowledge.
+The independent wire-decoder regression passes 20/40/50/60/90/100 MHz, 137
+bytes per rate, FIFO wrap/overflow, framing, held bus strobes, reset/disable,
+and both negative controls. The real HPS wrapper tests pass disk/IDE/MIDI
+isolation and serial routing. Diagnostic v2 retains 200 acknowledged commands
+with 99 additional no-ACK resets; its independent normal and four failure
+models pass. Two attempted containers lacked Verilator; the completed run uses
+the video simulation image. Full-core fitting and new hardware tests remain
+pending; peripheral simulation frequencies are not full-core clock claims.

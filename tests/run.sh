@@ -34,9 +34,7 @@ ghdl -e --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb --assert-level=error
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=50000 --assert-level=error
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=60000 --assert-level=error
-ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/z8259.vhd tests/pc98_pic_tb.vhd
-ghdl -e --std=08 -fsynopsys --workdir="$out" pc98_pic_tb
-ghdl -r --std=08 -fsynopsys --workdir="$out" pc98_pic_tb --assert-level=error
+bash tests/run-pic.sh
 ghdl -a --std=08 --workdir="$out" VIDEO/text_row_counter.vhd tests/text_row_counter_tb.vhd
 ghdl -e --std=08 --workdir="$out" text_row_counter_tb
 ghdl -r --std=08 --workdir="$out" text_row_counter_tb --assert-level=error

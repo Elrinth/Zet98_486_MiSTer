@@ -8,11 +8,12 @@ corrected build delivers the complete 134-byte diagnostic packet to ttyS1.
 Audible playback remains unverified. It is not a complete intelligent-mode
 MPU-401.
 
-The first Nightslave hardware test with MPU enabled stalls in its MIDI driver;
+The first Nightslave hardware test with MPU enabled stalled in its MIDI driver;
 the same RBF reaches the title with MPU disabled. Keep the option off for
 ordinary play until this is fixed. A silent polling diagnostic reads FEh under
 CLI, then observes a stale pending IRQ6 and an empty-input interrupt handler.
 The driver compatibility issue is not covered by the earlier serial replay.
+The correction described below still requires a new fitted hardware test.
 
 The guest interface is the PC-98 default: low-byte data at **E0D0h**,
 command/status at **E0D2h**, and **master PIC IRQ6**, normally vector 0Eh.
@@ -21,7 +22,9 @@ PC-9801-86 sound IRQ12 or IDE IRQ9.
 
 Supported protocol:
 
-- FFh resets the queues/mode and returns FEh. Read the acknowledgement.
+- FFh resets the queues/mode. Outside UART mode it returns FEh; when leaving
+  UART mode it returns no acknowledgement, as Roland specifies on page 22 of
+  its [technical reference](https://cdn.roland.com/assets/media/pdf/MPU-401_OM.pdf).
 - 3Fh enters UART mode and returns FEh. Read it before sending MIDI data.
 - Status bit 7 is one when no input/acknowledgement is available. Bit 6 is
   one when the transmit FIFO is full; software must wait before writing.
@@ -51,6 +54,22 @@ and [Main's UART/MidiLink handling](https://github.com/MiSTer-devel/Main_MiSTer/
 No emulator implementation code was copied.
 
 ## Verification
+
+The PIC now permits withdrawal of master IRQ6 before acknowledgement when
+the MPU's last byte is polled away. The request remains edge-triggered: a
+held-high input does not retrigger after EOI. This is configured only for
+IRQ6, preserving legacy pulse producers such as `mouseint`. It is not a full
+8259 rewrite; legacy default/spurious-vector handling remains separate work.
+`tests/run-pic.sh` checks polling, sixteen withdrawal delays, reassertion,
+mask/unmask, EOI, existing pulse sources, and simultaneous MIDI/sound. Its
+negative control restores the original retained request and must fail.
+
+The MPU tests separately reject the former UART-reset acknowledgement.
+The DOS serial diagnostic is now v2: it explicitly leaves UART mode without
+expecting FEh between the 100 acknowledged reset/UART pairs. Its independent
+model rejects a fabricated UART-reset ACK as well as missing IRQ, wrong ACK
+and stuck-busy failures. Earlier hardware results below used v1 and describe
+the old prototype behavior; they do not verify this correction.
 
 `tests/run-mpu-uart.sh` uses Verilator from `tests/Dockerfile.video`. At each
 of 20/40/50/60/90/100 MHz it independently decodes 137 transmitted bytes and

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 // Original implementation of the MPU-PC98II UART subset, E0D0/E0D2, IRQ6.
-// Software must issue FF (reset), consume FE, then 3F and consume FE before
-// sending MIDI. Intelligent sequencing/clock-to-host commands are NOT emulated.
+// FF resets; FE is returned only outside UART mode. 3F enters UART mode and
+// returns FE. Intelligent sequencing/clock-to-host commands are NOT emulated.
 // All state is on clk; serial input alone crosses through a two-flop synchronizer.
 module pc98_mpu_uart #(
     parameter integer CLOCK_HZ = 50000000,
@@ -69,7 +69,9 @@ module pc98_mpu_uart #(
     always @(posedge clk) begin
         if (clear) begin
             uart_mode <= 0;
-            ack_pending <= reset_command && enable && !reset;
+            // Roland technical reference p22: leaving UART mode via FF
+            // does not return FE. A later reset outside UART mode does.
+            ack_pending <= reset_command && enable && !reset && !uart_mode;
         end else begin
             if (data_read && ack_pending) ack_pending <= 0;
             if (command_write && !uart_mode && io_writedata[7:0] == 8'h3f) begin

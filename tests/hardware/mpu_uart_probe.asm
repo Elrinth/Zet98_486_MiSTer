@@ -1,7 +1,8 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ; Silent MPU-PC98II UART diagnostic for a disposable DOS boot disk.
 ; Enable the experimental UART option before booting this program.
-; Exercises 100 reset/UART pairs (200 IRQ6 acknowledgements), then sends
+; v2: exercises 100 reset/UART pairs (200 IRQ6 acknowledgements), with silent
+; resets to leave UART mode between pairs, then sends
 ; a 134-byte noncommercial SysEx packet for independent HPS serial capture.
 ; Does not play notes. A PASS here alone does not certify the serial output.
 bits 16
@@ -40,6 +41,11 @@ start:
     mov al,03fh
     call command
     jc cleanup
+    cmp cx,1
+    je .last
+    call leave_uart
+    jc cleanup
+.last:
     loop .pair
     cmp word [irq_count],200
     jne cleanup
@@ -143,6 +149,33 @@ halt:
     hlt
     jmp halt
 
+; Roland's FF command in UART mode clears it without returning FE/IRQ.
+leave_uart:
+    push ax
+    push bx
+    push dx
+    mov bx,[irq_count]
+    mov dx,0e0d2h
+    mov al,0ffh
+    out dx,al
+    mov ah,16
+.wait:
+    in al,dx
+    test al,80h
+    jz .bad
+    dec ah
+    jnz .wait
+    cmp bx,[irq_count]
+    jne .bad
+    clc
+    jmp short .done
+.bad:
+    stc
+.done:
+    pop dx
+    pop bx
+    pop ax
+    ret
 command:
     push bx
     push dx

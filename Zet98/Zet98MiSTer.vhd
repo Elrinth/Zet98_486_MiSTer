@@ -601,6 +601,10 @@ port(
 end component;
 
 component z8259 is
+generic(
+	monlen :integer :=15;
+	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00"
+);
 port(
 	CS		:in std_logic;
 	ADDR	:in std_logic;
@@ -2889,7 +2893,9 @@ DBIO_ODAT<=(others=>'1');
 	);
 	
 	INTM_CS<='1' when ioaddr_even(15 downto 2)="00000000000000" and ioaddr_even(0)='0' else '0';
-	INT_M	:z8259 port map(
+	-- MPU deasserts its level request when software polls the last byte.
+	-- Other legacy producers include one-clock pulses and keep their latch.
+	INT_M	:z8259 generic map(RETRACTABLE_IRQS => x"40") port map(
 		CS		=>INTM_CS,
 		ADDR	=>ioaddr(1),
 		DIN		=>io_wdata(7 downto 0),

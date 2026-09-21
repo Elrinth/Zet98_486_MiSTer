@@ -68,9 +68,10 @@ def run(binary, fault):
             state['eois'] += 1
         elif port == 0xe0d2:
             assert value == 0xff or (value == 0x3f and not state['mode'])
+            acknowledge = not (value == 0xff and state['mode']) or fault == 'uart_reset_ack'
             state['mode'] = value == 0x3f
-            state['ack'] = True
-            state['pending'] = True
+            state['ack'] = acknowledge
+            state['pending'] = acknowledge
         else:
             assert port == 0xe0d0 and state['mode'] and not state['busy']
             state['stream'].append(value)
@@ -112,5 +113,5 @@ def run(binary, fault):
 
 if __name__ == '__main__':
     binary = Path(sys.argv[1]).read_bytes()
-    for fault in (None, 'no_irq', 'bad_ack', 'busy'):
+    for fault in (None, 'no_irq', 'bad_ack', 'busy', 'uart_reset_ack'):
         run(binary, fault)

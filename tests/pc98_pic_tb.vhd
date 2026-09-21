@@ -3,8 +3,13 @@ library ieee;
 use ieee.std_logic_1164.all;
 use std.env.all;
 
-entity pc98_pic_tb is end;
+entity pc98_pic_tb is
+    generic (RETRACT_MIDI :boolean := true);
+end;
 architecture test of pc98_pic_tb is
+    function retract_mask return std_logic_vector is begin
+        if RETRACT_MIDI then return x"40"; else return x"00"; end if;
+    end;
     signal clk :std_logic := '0';
     signal rstn :std_logic := '0';
     signal mcs, scs, addr, wr, inta :std_logic := '0';
@@ -15,7 +20,7 @@ architecture test of pc98_pic_tb is
     signal pcm_irq :std_logic := '0';
 begin
     clk <= not clk after 5 ns;
-    master: entity work.z8259 port map(
+    master: entity work.z8259 generic map(RETRACTABLE_IRQS=>retract_mask) port map(
         CS=>mcs, ADDR=>addr, DIN=>din, DOUT=>mdout, DOE=>mdoe, RD=>'0', WR=>wr,
         IR0=>mirq(0), IR1=>mirq(1), IR2=>mirq(2), IR3=>mirq(3),
         IR4=>mirq(4), IR5=>mirq(5), IR6=>mirq(6), IR7=>sint,
@@ -89,6 +94,34 @@ begin
             write_pic(false,'0',x"20"); cycles(12);
             assert mint='0' report "MPU IRQ6 repeated after byte consumption and EOI" severity failure;
         end loop;
+        -- The MPU FIFO can be drained under CLI before the CPU acknowledges.
+        -- A later STI must not invoke IRQ6 with an empty FIFO. IRR must clear,
+        -- and a subsequent real byte still has to interrupt normally.
+        for delay_cycles in 1 to 16 loop
+            mirq(6)<='1'; await_irq; cycles(delay_cycles);
+            mirq(6)<='0'; cycles(8);
+            assert mint='0' report "withdrawn MIDI IRQ remained pending" severity failure;
+            write_pic(false,'0',x"0a"); addr<='0'; cycles(2);
+            assert mdout(6)='0' report "withdrawn MIDI request retained in IRR" severity failure;
+            mirq(6)<='1'; await_irq; acknowledge(false,x"0e"); mirq(6)<='0';
+            write_pic(false,'0',x"20"); cycles(12);
+            assert mint='0' report "fresh MIDI IRQ repeated after EOI" severity failure;
+        end loop;
+        -- Withdrawal while masked must not survive a later unmask; a source
+        -- still high when unmasked must remain pending.
+        write_pic(false,'1',x"7d");
+        mirq(6)<='1'; cycles(8); mirq(6)<='0'; cycles(8);
+        write_pic(false,'1',x"3d"); cycles(8);
+        assert mint='0' report "masked MIDI withdrawal delivered on unmask" severity failure;
+        write_pic(false,'1',x"7d"); mirq(6)<='1'; cycles(8);
+        write_pic(false,'1',x"3d"); await_irq;
+        acknowledge(false,x"0e"); mirq(6)<='0';
+        write_pic(false,'0',x"20"); cycles(12);
+        -- An edge input held high after EOI must not act as level-triggered.
+        mirq(6)<='1'; await_irq; acknowledge(false,x"0e");
+        write_pic(false,'0',x"20"); cycles(20);
+        assert mint='0' report "held MIDI level retriggered without a new edge" severity failure;
+        mirq(6)<='0'; cycles(8);
         -- MIDI and sound can be pending together: IRQ6 outranks the cascade,
         -- then the FM/PCM interrupt must remain deliverable after its EOI.
         mirq(6)<='1'; sirq(4)<='1'; cycles(12); await_irq;
@@ -97,6 +130,7 @@ begin
         write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
         assert mint='0' report "Simultaneous MIDI/sound interrupts did not clear" severity failure;
         report "PASS: 32 MPU IRQ6 vectors/EOIs and simultaneous MIDI + cascaded IRQ12";
+        report "PASS: polled MIDI withdrawal, reassertion, masking and held-level EOI";
         report "PASS: existing PC-98 PICs: master/slave vectors, one-cycle acknowledge, masking and EOI";
         report "PASS: shared IRQ12 retains FM when PCM clears, and delivers subsequent PCM-only vector";
         finish;

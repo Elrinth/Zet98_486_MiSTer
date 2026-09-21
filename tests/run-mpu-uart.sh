@@ -21,3 +21,13 @@ if "$out/bad/Vpc98_mpu_uart_tb" > "$out/bad.log" 2>&1; then
 fi
 grep -Eq 'UART ACK repeated|MIDI byte' "$out/bad.log" || { cat "$out/bad.log"; exit 1; }
 echo 'PASS: held-write negative control rejected'
+# UART reset must not manufacture an ACK or interrupt (Roland manual p22).
+sed 's/ \&\& !uart_mode;$/;/' rtl/midi/pc98_mpu_uart.sv > "$out/reset-bad.sv"
+verilator --binary --timing -Wno-fatal --top-module pc98_mpu_uart_tb \
+    --Mdir "$out/reset-bad" "$out/reset-bad.sv" tests/pc98_mpu_uart_tb.sv \
+    > "$out/reset-bad-compile.log" 2>&1 || { cat "$out/reset-bad-compile.log"; exit 1; }
+if "$out/reset-bad/Vpc98_mpu_uart_tb" > "$out/reset-bad.log" 2>&1; then
+    echo 'FAIL: UART reset ACK negative control passed'; exit 1
+fi
+grep -q 'UART reset falsely acknowledged' "$out/reset-bad.log" || { cat "$out/reset-bad.log"; exit 1; }
+echo 'PASS: UART reset ACK negative control rejected'

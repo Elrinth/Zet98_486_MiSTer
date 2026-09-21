@@ -5,7 +5,10 @@ USE	IEEE.STD_LOGIC_UNSIGNED.ALL;
 
 entity z8259 is
 generic(
-	monlen	:integer	:=15
+	monlen	:integer	:=15;
+	-- Legacy internal producers send pulses; selected real level sources can
+	-- withdraw an unacknowledged request (8259A datasheet, Figures 9/10).
+	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00"
 );
 port(
 	CS		:in std_logic;
@@ -259,6 +262,9 @@ begin
 --					if(IRx(i)='1')then
 					if(IRx(i)='1' and lIRx(i)='0')then
 						IRL(i)<='1';
+					end if;
+					if(RETRACTABLE_IRQS(i)='1' and IRx(i)='0' and INTA='0')then
+						IRL(i)<='0';
 					end if;
 					if(LCLR='1' and LCx=i)then
 						IRL(i)<='0';
