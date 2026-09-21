@@ -124,6 +124,11 @@ checksums and gives about 29x arithmetic-loop and 22x RAM-copy throughput versus
 uncached ao486 at 20 MHz. These are small hot-loop results, not Rusty frame rates
 or a comparison against the original Zet CPU. See the hardware notes for raw
 counts, timing limits and the separate 66 MHz CPU feasibility result.
+An uninterrupted hardware run now has user-confirmed improvement in Rusty's
+animation ("a bit better"); acceptable gameplay speed is still unverified.
+Further source changes separate CPU and DMA write data from unrelated
+peripheral reads, reducing the I/O-only fit's worst reported timing failure to
+-3.864 ns. The follow-up memory/FDC change passes simulation and is being built.
 
 Run `./scripts/test.ps1` for simulation; see [tests/README.md](tests/README.md).
 Hardware observations and the isolated test setup are recorded in

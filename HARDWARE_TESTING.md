@@ -341,11 +341,17 @@ to DiskFix had already been requested in response to the first report and
 interrupted the intro the user was watching. The exact build responsible for
 the visible intro is therefore not established. A temporary split in the intro
 graphics reportedly corrected itself. Do not count this as either a confirmed
-cached-build boot failure or a successful Rusty speed comparison. The current
-run was left on DiskFix; the next comparison needs an identified build and a
+cached-build boot failure or a successful Rusty speed comparison. That
+run was left on DiskFix; the next comparison needed an identified build and a
 longer uninterrupted observation window. The ten-second speaker timer also
 does not establish a quiet complete boot; the source of the later beeps remains
 unconfirmed.
+
+A new uninterrupted Cache run was launched at 03:33:59 local time on
+2026-09-21. After a longer observation window, the user confirmed that the
+animation looked "a bit better". This establishes a visible improvement on the
+identified cached 20 MHz build, not a frame-rate measurement or satisfactory
+gameplay. The run was left intact while the next changes were compiled.
 
 An independent CPU/adapter 66 MHz feasibility fit completed under
 `build/cpu-probe-66-20260921`. `scripts/probe-cpu.tcl` uses virtual pins and
@@ -366,8 +372,28 @@ outputs (including video timing) fed those inputs through the shared priority
 mux even though selected CPU writes override them. The FDC DMA data path and
 memory/GRCG read-modify-write paths retain the shared bus. All adapter tests
 pass; the data-bus regression compares 8,556 selected write bytes against the
-historical mux, and a deliberately swapped-lane control fails. Full compilation
-and timing measurement are pending; this change is not yet on the device.
+historical mux, and a deliberately swapped-lane control fails.
+
+The I/O-only change compiled in 23m37s under
+`build/quartus-20260921-031038-7aa6c5/source`, using 32,525 ALMs (78%),
+395 RAM blocks and 63 DSP blocks. Worst reported slack improves from -5.704 ns
+to -3.864 ns, but eight negative checks remain. CPU-register setup passes at
++19.519 ns. The worst remaining path feeds VCOUNT through the shared bus into
+the floppy write-data register; NVRAM and text-memory write inputs also appear.
+The pixel-clock audit still fails setup (-4.916 / -5.684 ns from/to the pixel
+clock) and hold (+0.117 / -2.491 ns). No constraints were suppressed.
+This RBF was not deployed. SHA-256:
+`3b51e967adccf4f2f42e2037e651d8b8a9ca9768bacf005d68ef6b0e1aaef7bc`.
+
+The next change separates memory writes into loader, CPU and FDC DMA sources,
+and restricts memory-to-FDC DMA selection to memory devices. It preserves
+odd/even byte routing, loader priority and the live GRCG read-modify-write
+mask. Tests add 20,000 DMA routing comparisons and 4,096 actual GRCG plane
+results with delayed memory data; the complete adapter suite passes. Exercising
+the actual GRCG also exposed an existing eight-bit-versus-sixteen-bit XOR in
+tile comparison. It now compares both bytes, with distinct high/low matches
+tested on all four planes. A fresh complete build is in progress; these
+changes are not on the device yet.
 
 Keep BIOS, disks and settings identical when comparing Zet and ao486.
 Still required: reliable complete floppy/game loading, Rusty gameplay,

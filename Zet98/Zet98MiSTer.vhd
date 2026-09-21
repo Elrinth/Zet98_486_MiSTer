@@ -1826,6 +1826,9 @@ signal	DMAUM_CS:std_logic;
 signal	abus	:std_logic_vector(19 downto 1);
 signal	dbus	:std_logic_vector(15 downto 0);
 signal io_wdata :std_logic_vector(15 downto 0);
+signal mem_wdata :std_logic_vector(15 downto 0);
+signal fdc_wdata :std_logic_vector(7 downto 0);
+signal dma_mem_high, dma_mem_low :std_logic_vector(8 downto 0);
 signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
 signal cache_invalidate :std_logic;
 signal	bussel	:std_logic_vector(1 downto 0);
@@ -2428,8 +2431,33 @@ begin
 	dbus(7 downto 0)<=dbus_low(7 downto 0) when dbus_low(8)='1' or DMA_H2L='0' else dbus_high(7 downto 0);
 	-- CPU I/O writes never need peripheral read data. A selected lane already
 	-- has CPU priority in the shared bus; preserve loader override separately.
-	-- Keep memory writes and FDC DMA on dbus for byte routing and GRCG RMW.
 	io_wdata <= LDR_WDAT & LDR_WDAT when LDR_OE='1' else cpuod;
+	-- Only the FDC uses DMA channels 2/3; channels 0/1 have no request source.
+	-- A memory write therefore comes from the loader, CPU, or FDC byte.
+	-- GRCG still merges this live write mask with its separate memory read data.
+	mem_wdata <= LDR_WDAT & LDR_WDAT when LDR_OE='1' else
+		cpuod when DMAen='0' else
+		FDC_ODAT & FDC_ODAT when FDC_DOE='1' else x"ffff";
+	-- Memory-to-FDC DMA must retain memory-device priority and odd-byte routing,
+	-- without pulling unrelated I/O read outputs into a floppy write register.
+	dma_mem_high <=
+		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' else
+		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' else
+		'1' & CB_RDAT0(15 downto 8) when CB_RD1='1' and bussel(1)='1' else
+		'1' & tramdo(15 downto 8) when tramdoe(1)='1' else
+		'0' & x"ff";
+	dma_mem_low <=
+		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' else
+		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' else
+		'1' & CB_RDAT0(7 downto 0) when CB_RD1='1' and bussel(0)='1' else
+		'1' & tramdo(7 downto 0) when tramdoe(0)='1' else
+		'1' & aramdo(7 downto 0) when aramdoe(0)='1' else
+		'1' & NVR_ODAT when NVR_DOE='1' else
+		'0' & x"ff";
+	fdc_wdata <= LDR_WDAT when LDR_OE='1' else
+		io_wdata(7 downto 0) when DMAen='0' else
+		dma_mem_low(7 downto 0) when dma_mem_low(8)='1' or DMA_H2L='0' else
+		dma_mem_high(7 downto 0);
 	-- END PC98 DATA BUS
 		
 	CB_WR1<=
@@ -2460,7 +2488,7 @@ begin
 		bussel;
 		
 	CB_WDAT0<=	GCG_WDAT0	when GCG_MCS='1' else
-				dbus;
+				mem_wdata;
 	CB_WDAT1<=	GCG_WDAT1	when GCG_MCS='1' else
 				(others=>'0');
 	CB_WDAT2<=	GCG_WDAT2	when GCG_MCS='1' else
@@ -2678,7 +2706,7 @@ DBIO_ODAT<=(others=>'1');
 		prd			=>MRD,
 		pwr			=>MWR,
 		prddat		=>GCG_ODAT,
-		pwrdat		=>dbus,
+		pwrdat		=>mem_wdata,
 		poe			=>GCG_DOE,
 		
 		memrd1		=>GCG_RD1,
@@ -3013,8 +3041,8 @@ DBIO_ODAT<=(others=>'1');
 	GRAMADR<=	RAM_VRAMF(21 downto 16) & GADDR & "00" when gGDC_VGRAMSEL='0' else
 					RAM_VRAMB(21 downto 16) & GADDR & "00";
 	
-	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,dbus,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,vidclk,srstn);
-	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & dbus(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,vidclk,srstn);
+	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,vidclk,srstn);
+	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,vidclk,srstn);
 	vadat<=vadatw(7 downto 0);
 
 	
@@ -3181,7 +3209,7 @@ DBIO_ODAT<=(others=>'1');
 	nv	:nvram98 port map(
 		addr		=>NVR_ADDR,
 		cs			=>NVR_CS,
-		wrdat		=>dbus(7 downto 0),
+		wrdat		=>mem_wdata(7 downto 0),
 		wr			=>MWR,
 		rd			=>MRD,
 		wprot		=>NVR_WPROT,
@@ -3379,7 +3407,7 @@ DBIO_ODAT<=(others=>'1');
 		WRn		=>not iowr,
 		CSn		=>FDC_CSn,
 		A0			=>ioaddr(1),
-		WDAT		=>dbus(7 downto 0),
+		WDAT		=>fdc_wdata,
 		RDAT		=>FDC_ODAT,
 		DATOE		=>FDC_DOE,
 		DACKn		=>not FDC_DACK,

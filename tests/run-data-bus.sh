@@ -11,6 +11,6 @@ sed '$d' tests/pc98_data_bus_tb.vhd > "$out/data_bus_tb.vhd"
 sed -n '/-- BEGIN PC98 DATA BUS/,/-- END PC98 DATA BUS/p' "$source" >> "$out/data_bus_tb.vhd"
 cat tests/reference/pc98_data_bus_legacy.vhd.inc >> "$out/data_bus_tb.vhd"
 printf 'end architecture;\n' >> "$out/data_bus_tb.vhd"
-ghdl -a --std=08 --workdir="$out" "$out/data_bus_tb.vhd"
-ghdl -e --std=08 --workdir="$out" pc98_data_bus_tb
-ghdl -r --std=08 --workdir="$out" pc98_data_bus_tb --assert-level=error
+ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/grcg.vhd "$out/data_bus_tb.vhd"
+ghdl -e --std=08 -fsynopsys --workdir="$out" pc98_data_bus_tb
+ghdl -r --std=08 -fsynopsys --workdir="$out" pc98_data_bus_tb --assert-level=error

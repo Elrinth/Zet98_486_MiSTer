@@ -77,6 +77,9 @@ architecture test of pc98_data_bus_tb is
     signal cpusel : std_logic_Vector(1 downto 0) := (others => '0');
     signal dbus : std_logic_vector(15 downto 0) := (others => '0');
     signal io_wdata : std_logic_vector(15 downto 0);
+    signal mem_wdata : std_logic_vector(15 downto 0);
+    signal fdc_wdata : std_logic_vector(7 downto 0);
+    signal dma_mem_high, dma_mem_low : std_logic_vector(8 downto 0);
     signal dbus_high : std_logic_vector(8 downto 0) := (others => '0');
     signal dbus_low : std_logic_vector(8 downto 0) := (others => '0');
     signal gGDCod : std_logic_vector(7 downto 0) := (others => '0');
@@ -90,7 +93,28 @@ architecture test of pc98_data_bus_tb is
     signal tgca : std_logic := '0';
     signal tramdo : std_logic_vector(15 downto 0) := (others => '0');
     signal tramdoe : std_logic_vector(1 downto 0) := (others => '0');
+    signal clk : std_logic := '0';
+    signal rstn, grcg_ioaddr, grcg_iowr, grcg_write : std_logic := '0';
+    type planes_t is array(0 to 3) of std_logic_vector(15 downto 0);
+    signal plane_read, plane_write : planes_t := (others => (others => '0'));
+    constant tiles : planes_t := (x"5a5a", x"c3c3", x"9696", x"0f0f");
+    signal rmw4, wr1, wr4 : std_logic;
+    signal plane_select : std_logic_vector(3 downto 0);
+    signal grcg_ppsel : std_logic_vector(1 downto 0) := "00";
+    signal grcg_rdata : std_logic_vector(15 downto 0);
 begin
+    clk <= not clk after 5 ns;
+    graphics : entity work.grcg
+        port map(iocs=>'1', ioaddr=>grcg_ioaddr, iowr=>grcg_iowr,
+            iowdat=>io_wdata(7 downto 0), pmemcs=>'1', ppsel=>grcg_ppsel,
+            prd=>'0', pwr=>grcg_write, prddat=>grcg_rdata, pwrdat=>mem_wdata, poe=>open,
+            memrd1=>open, memrd4=>open, memwr1=>wr1, memwr4=>wr4,
+            memrmw1=>open, memrmw4=>rmw4,
+            memrdat0=>plane_read(0), memrdat1=>plane_read(1),
+            memrdat2=>plane_read(2), memrdat3=>plane_read(3),
+            memwdat0=>plane_write(0), memwdat1=>plane_write(1),
+            memwdat2=>plane_write(2), memwdat3=>plane_write(3),
+            memwrpsel=>plane_select, clk=>clk, rstn=>rstn);
     process
         variable random : unsigned(31 downto 0) := x"98c0ffee";
         variable cases : natural := 0;
@@ -193,16 +217,22 @@ begin
             -- including simultaneous even/odd writes and loader precedence.
             if LDR_OE='1' then
                 assert io_wdata = legacy_bus report "I/O loader override changed" severity failure;
+                assert mem_wdata = legacy_bus and fdc_wdata = legacy_bus(7 downto 0)
+                    report "Memory/FDC loader override changed" severity failure;
                 write_lanes := write_lanes + 2;
             elsif cpuoe='1' and DMAen='0' then
                 if cpusel(0)='1' then
                     assert io_wdata(7 downto 0) = legacy_bus(7 downto 0)
                         report "Even I/O write byte changed" severity failure;
+                    assert mem_wdata(7 downto 0)=legacy_bus(7 downto 0) and fdc_wdata=legacy_bus(7 downto 0)
+                        report "CPU low memory/FDC write byte changed" severity failure;
                     write_lanes := write_lanes + 1;
                 end if;
                 if cpusel(1)='1' then
                     assert io_wdata(15 downto 8) = legacy_bus(15 downto 8)
                         report "Odd I/O write byte changed" severity failure;
+                    assert mem_wdata(15 downto 8)=legacy_bus(15 downto 8)
+                        report "CPU high memory write byte changed" severity failure;
                     write_lanes := write_lanes + 1;
                 end if;
             end if;
@@ -255,6 +285,83 @@ begin
         assert dbus = x"c3c3" severity failure;
         bussel <= "10"; DMA_L2H <= '0'; DMA_H2L <= '1'; check;
         assert dbus = x"b6b6" severity failure;
+        -- Memory-to-FDC reads: preserve the old memory-device priorities with
+        -- both DMA byte addresses. Unrelated I/O read enables are inactive.
+        for trial in 1 to 5000 loop
+            data_pattern;
+            enables <= (others=>'0');
+            GCG_DOE<=random(0); DBIO_DOE<=random(1); CB_RD1<=random(2);
+            NVR_DOE<=random(3); LDR_OE<=random(4); cpuoe<=random(5);
+            DMAen<='1';
+            for odd in 0 to 1 loop
+                if odd=0 then
+                    bussel<="01"; DMA_H2L<='0'; DMA_L2H<='1';
+                else
+                    bussel<="10"; DMA_H2L<='1'; DMA_L2H<='0';
+                end if;
+                check;
+                assert fdc_wdata=legacy_bus(7 downto 0)
+                    report "DMA memory-to-FDC byte changed" severity failure;
+            end loop;
+            -- FDC-to-memory writes select just one memory byte lane.
+            enables <= (others=>'0'); tramdoe<="00"; aramdoe<="00";
+            FDC_DOE<=random(6); LDR_OE<=random(7);
+            DMA_H2L<='1'; DMA_L2H<='0'; check;
+            assert mem_wdata(7 downto 0)=legacy_bus(7 downto 0)
+                report "DMA FDC-to-memory even byte changed" severity failure;
+            DMA_H2L<='0'; DMA_L2H<='1'; check;
+            assert mem_wdata(15 downto 8)=legacy_bus(15 downto 8)
+                report "DMA FDC-to-memory odd byte changed" severity failure;
+        end loop;
+        report "PASS: 20000 DMA read/write byte-routing comparisons" severity note;
+
+        -- Exercise the actual GRCG with the production write path. Its mask
+        -- must remain live while a delayed SDRAM read supplies each plane.
+        enables<=(others=>'0'); tramdoe<="00"; aramdoe<="00";
+        DMAen<='0'; cpuoe<='1'; cpusel<="11";
+        wait until falling_edge(clk); rstn<='1';
+        grcg_ioaddr<='0'; cpuod<=x"00c0"; grcg_iowr<='1';
+        wait until falling_edge(clk); grcg_iowr<='0';
+        wait until falling_edge(clk);
+        for p in 0 to 3 loop
+            grcg_ioaddr<='1'; cpuod<=tiles(p); grcg_iowr<='1';
+            wait until falling_edge(clk); grcg_iowr<='0';
+            wait until falling_edge(clk);
+        end loop;
+        for trial in 1 to 256 loop
+            advance; cpuod<=std_logic_vector(random(15 downto 0));
+            FDC_ODAT<=std_logic_vector(random(23 downto 16));
+            DMAen<=random(24); FDC_DOE<='1'; grcg_write<='1';
+            for delay in 0 to 3 loop
+                for p in 0 to 3 loop
+                    advance; plane_read(p)<=std_logic_vector(random(15 downto 0));
+                end loop;
+                wait until falling_edge(clk);
+                assert rmw4='1' and wr1='0' and wr4='0' and plane_select="1111"
+                    report "GRCG RMW mode or plane enables changed" severity failure;
+                for p in 0 to 3 loop
+                    assert plane_write(p)=((tiles(p) and mem_wdata) or (plane_read(p) and not mem_wdata))
+                        report "GRCG lost live write mask or delayed plane read" severity failure;
+                end loop;
+            end loop;
+        end loop;
+        report "PASS: actual GRCG live CPU/DMA masks and delayed SDRAM data, 4096 plane results" severity note;
+        -- Read/compare operates on both bytes. The old source XORed an
+        -- eight-bit slice with a sixteen-bit tile, failing strict simulation.
+        DMAen<='0'; grcg_write<='0'; FDC_DOE<='0';
+        grcg_ioaddr<='0'; cpuod<=x"0080"; grcg_iowr<='1';
+        wait until falling_edge(clk); grcg_iowr<='0';
+        wait until falling_edge(clk);
+        for p in 0 to 3 loop
+            grcg_ppsel<=std_logic_vector(to_unsigned(p, 2));
+            plane_read(0)<=tiles(p)(15 downto 8) & not tiles(p)(7 downto 0);
+            wait for 1 ns;
+            assert grcg_rdata=x"ff00" report "GRCG compare lost high/low byte distinction" severity failure;
+            plane_read(0)<=not tiles(p)(15 downto 8) & tiles(p)(7 downto 0);
+            wait for 1 ns;
+            assert grcg_rdata=x"00ff" report "GRCG compare lost low/high byte distinction" severity failure;
+        end loop;
+        report "PASS: graphics tile comparison reads both bytes on all four planes" severity note;
         report "PASS: actual PC-98 bus versus legacy: " & natural'image(cases) & " cases, device priority and DMA byte routing" severity note;
         assert write_lanes > 1000 report "Insufficient selected write-lane coverage" severity failure;
         report "PASS: direct CPU I/O write path: " & natural'image(write_lanes) & " selected bytes match historical shared bus" severity note;

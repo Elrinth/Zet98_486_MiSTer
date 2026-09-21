@@ -80,13 +80,17 @@ This catches the previous scalar ACK connection, which discarded slots 1–3.
 
 `run-data-bus.sh` compiles the marked data-bus expressions directly from the
 machine top level. Its reference is the historical mux before DMA feedback
-removal, preserved under `reference/`. It compares 57,748 cases: every pair
+removal, preserved under `reference/`. It compares 77,748 cases: every pair
 of device enables, all byte-lane masks, CPU/DMA ownership, interrupt-acknowledge
 gating, sparse random selections, and both DMA byte-routing directions.
 Directed FDC-to-memory and memory-to-FDC cases check even/odd byte placement.
 It also compares each selected CPU I/O write byte (including loader precedence)
 against the historical shared bus. This verifies the direct write path while
-unrelated peripheral read enables and DMA ownership vary.
+unrelated peripheral read enables and DMA ownership vary. An additional 20,000
+DMA memory-to-FDC and FDC-to-memory comparisons cover both byte addresses and
+memory-device priority. The actual GRCG is also instantiated: 4,096 plane
+results check CPU/DMA write masks against delayed memory read data, and tile
+comparison checks distinguish matches in the high and low bytes on every plane.
 This verifies mux behavior; it does not simulate the complete DMA controller.
 
 `hardware/disk_probe.asm` is a small DOS shell for real-hardware disk diagnosis.

@@ -140,11 +140,13 @@ begin
 	memrd4<=	'0'	when pmemcs='0' else
 				'0';
 	
+	-- Each byte compares against the repeated tile; do not truncate the
+	-- sixteen-bit memory word before the XOR.
 	prddat<=	memrdat0	when CGEN='0' or RMWMODE='1' else
-				not (memrdat0(15 downto 8) xor (tile0 & tile0)) when ppsel="00" else
-				not (memrdat0(15 downto 8) xor (tile1 & tile1)) when ppsel="01" else
-				not (memrdat0(15 downto 8) xor (tile2 & tile2)) when ppsel="10" else
-				not (memrdat0(15 downto 8) xor (tile3 & tile3)) when ppsel="11" else
+				not (memrdat0 xor (tile0 & tile0)) when ppsel="00" else
+				not (memrdat0 xor (tile1 & tile1)) when ppsel="01" else
+				not (memrdat0 xor (tile2 & tile2)) when ppsel="10" else
+				not (memrdat0 xor (tile3 & tile3)) when ppsel="11" else
 				memrdat0;
 	
 	poe<=	pmemcs and prd;
