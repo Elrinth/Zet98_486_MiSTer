@@ -1708,6 +1708,7 @@ port(
 end component;
 
 component grpal
+generic (VIDEO_STAGED : boolean := false);
 port(
 	CS			:in std_logic;
 	ADDR		:in std_logic_vector(1 downto 0);
@@ -1724,7 +1725,8 @@ port(
 	vidB		:out std_logic_vector(3 downto 0);
 	
 	clk			:in std_logic;
-	rstn		:in std_logic
+	rstn		:in std_logic;
+    video_clk : in std_logic := '0'
 );
 end component;
 
@@ -3259,7 +3261,7 @@ DBIO_ODAT<=(others=>'1');
 	);	
 
 	GPAL_CS<='1' when ioaddr_even(15 downto 3)="0000000010101" and ioaddr_even(0)='0' else '0';
-	pal	:grpal port map(
+	pal	:grpal generic map(VIDEO_STAGED=>true) port map(
 		CS			=>GPAL_CS,
 		ADDR		=>ioaddr(2 downto 1),
 		WR			=>iowr,
@@ -3275,7 +3277,8 @@ DBIO_ODAT<=(others=>'1');
 		vidB		=>GPAL_B,
 		
 		clk			=>cpuclk,
-		rstn		=>srstn
+		rstn		=>srstn,
+        video_clk=>vidclk
 	);
 	
 	ITFswcs<='1' when ioaddr_odd=x"043d" else '0';

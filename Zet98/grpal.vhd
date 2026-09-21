@@ -4,6 +4,7 @@ use IEEE.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
 entity grpal is
+generic (VIDEO_STAGED : boolean := false);
 port(
 	CS			:in std_logic;
 	ADDR		:in std_logic_vector(1 downto 0);
@@ -20,7 +21,8 @@ port(
 	vidB		:out std_logic_vector(3 downto 0);
 	
 	clk			:in std_logic;
-	rstn		:in std_logic
+	rstn		:in std_logic;
+    video_clk : in std_logic := '0'
 );
 end grpal;
 
@@ -32,24 +34,43 @@ signal	PALREG	:PAL_LAT_ARRAY(0 to 15);
 subtype C8_LAT_TYPE is std_logic_vector(2 downto 0); 
 type C8_LAT_ARRAY is array (natural range <>) of C8_LAT_TYPE; 
 signal	C8REG	:C8_LAT_ARRAY(0 to 7);
+signal PAL_VIDEO : PAL_LAT_ARRAY(0 to 15);
+signal C8_VIDEO : C8_LAT_ARRAY(0 to 7);
+signal COLOR_VIDEO : std_logic;
 
 signal	iNUM	:integer range 0 to 15;
 signal	iNUM8	:integer range 0 to 7;
 signal	iSEL	:integer range 0 to 15;
 signal	SEL		:std_logic_vector(3 downto 0);
 begin
-	
+    -- Stage settings, not pixels: palette lookup and the raster keep their
+    -- existing latency. CPU readback always uses the original register bank.
+    staged_palette : if VIDEO_STAGED generate
+        process(video_clk) begin
+            if rising_edge(video_clk) then
+                PAL_VIDEO <= PALREG;
+                C8_VIDEO <= C8REG;
+                COLOR_VIDEO <= COLORMODE;
+            end if;
+        end process;
+    end generate;
+    legacy_palette : if not VIDEO_STAGED generate
+        PAL_VIDEO <= PALREG;
+        C8_VIDEO <= C8REG;
+        COLOR_VIDEO <= COLORMODE;
+    end generate;
+
 	iNUM<=conv_integer(NUMIN);
 	iNUM8<=conv_integer(NUMIN(2 downto 0));
 	
-	vidR<=	(others=>C8REG(iNUM8)(1)) when COLORMODE='0' else
-			PALREG(iNUM)(7 downto 4);
+	vidR<=	(others=>C8_VIDEO(iNUM8)(1)) when COLOR_VIDEO='0' else
+			PAL_VIDEO(iNUM)(7 downto 4);
 
-	vidG<=	(others=>C8REG(iNUM8)(2)) when COLORMODE='0' else
-			PALREG(iNUM)(11 downto 8);
+	vidG<=	(others=>C8_VIDEO(iNUM8)(2)) when COLOR_VIDEO='0' else
+			PAL_VIDEO(iNUM)(11 downto 8);
 
-	vidB<=	(others=>C8REG(iNUM8)(0)) when COLORMODE='0' else
-			PALREG(iNUM)(3 downto 0);
+	vidB<=	(others=>C8_VIDEO(iNUM8)(0)) when COLOR_VIDEO='0' else
+			PAL_VIDEO(iNUM)(3 downto 0);
 
 	process(clk,rstn)begin
 		if(rstn='0')then

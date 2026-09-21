@@ -131,3 +131,19 @@ three-row split case. Partition semantics were checked against NEC's
 [uPD7220/7220A user manual](https://www.bitsavers.org/components/nec/uPD7220/uPD7220-uPD7220A_User_Manual_Dec85.pdf),
 section 4 (PRAM), and the NP2kai scanout reference. Zero does not switch within
 the supported 400-line raster; behavior after 1024 logical rows is not tested.
+
+## Palette staging after the 60 MHz decode fit
+
+The 5bab734 fit exposes a -1.007 ns CPU palette-register to video-output
+setup path. An opt-in grpal setting now stages the 16-color bank, eight-color
+bank and color mode on the existing 75 MHz video clock before palette lookup.
+CPU palette programming/readback and the pixel/sync pipeline are unchanged;
+palette changes gain one video-clock update delay. The legacy generic keeps
+the original unstaged behavior for other integrations.
+
+The unchanged upstream palette is the simulation reference. Six CPU rates
+and three video phases pass random palette writes/reads, color-mode changes,
+mid-run reset and all pixel indices. Outputs are checked at the video edge
+and between edges; CPU readback is checked independently. Deliberately using
+the live CPU bank fails the between-edge check. Complete FPGA timing and
+hardware validation of this palette change are pending.
