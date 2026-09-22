@@ -59,6 +59,7 @@ bash tests/run-egc-rop.sh
 bash tests/run-egc-registers.sh
 bash tests/run-egc-memory.sh
 bash tests/run-egc-shift.sh
+bash tests/run-egc-write.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
 bash tests/run-opna-timer.sh

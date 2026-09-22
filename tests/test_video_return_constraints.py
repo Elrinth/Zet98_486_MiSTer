@@ -7,22 +7,31 @@ ROOT = Path(__file__).resolve().parents[1] / 'Zet98/v17'
 
 
 class Guards(unittest.TestCase):
-    def run_sdc(self, name, bad=''):
+    def run_sdc(self, name, bad='', missing_bit=False, extra_bit=False):
         t = tkinter.Tcl()
         t.setvar('bad', bad)
+        names = ['hdmi_out_vs', 'hdmi_out_vs~Duplicate_1', 'hdmi_vs_meta', 'hdmi_vs_sync']
+        for signal in ['source_status', 'status_meta', 'status_sync']:
+            names += [f'emu|Zet98_top|retrace_status|{signal}[{bit}]' for bit in range(2)]
+        for port, width in [('cpu', 64), ('sub', 64), ('fde', 10), ('fec', 16)]:
+            for signal in [f'{port}_read_words' if port in ('cpu', 'sub') else f'{port}_read_data',
+                           f'{port.upper()}RDAT']:
+                count = width
+                if port == 'fde' and signal == 'fde_read_data':
+                    count += int(extra_bit) - int(missing_bit)
+                names += [f'emu|Zet98_top|ram|{signal}[{bit}]' for bit in range(count)]
+        t.setvar('inventory', tuple(names))
         t.eval('''
             set exceptions {}
             set bounds {}
             proc get_collection_size {x} {llength $x}
             proc get_registers {pattern} {
-                global bad
+                global bad inventory
                 if {$bad ne "" && [string first $bad $pattern]>=0} {return {}}
-                set count 1
-                if {[string first "hdmi_out_vs" $pattern]>=0} {set count 2}
-                if {[string first "retrace_status" $pattern]>=0} {set count 2}
-                if {[string first "|ram|" $pattern]>=0} {set count 16}
                 set result {}
-                for {set i 0} {$i<$count} {incr i} {lappend result "${pattern}:$i"}
+                foreach node $inventory {
+                    if {[string match $pattern $node]} {lappend result $node}
+                }
                 return $result
             }
             proc set_false_path {args} {global exceptions; lappend exceptions $args}
@@ -55,6 +64,14 @@ class Guards(unittest.TestCase):
         for bad in ['fde_read_data','fec_read_data','FDERDAT','FECRDAT']:
             with self.subTest(bad=bad), self.assertRaises(tkinter.TclError):
                 self.run_sdc('pc98-read-transfer.sdc', bad)
+
+    def test_missing_live_fde_bit_aborts(self):
+        with self.assertRaises(tkinter.TclError):
+            self.run_sdc('pc98-read-transfer.sdc', missing_bit=True)
+
+    def test_unexpected_fde_width_aborts(self):
+        with self.assertRaises(tkinter.TclError):
+            self.run_sdc('pc98-read-transfer.sdc', extra_bit=True)
 
 
 if __name__ == '__main__':

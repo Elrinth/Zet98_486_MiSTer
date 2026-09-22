@@ -148,3 +148,41 @@ direct programming and again through the register frontend, with 21,840
 idle/poison cycles in each run. All four mutations failed as intended.
 That combined job subsequently stopped at an unrelated HDMI test expectation;
 the corrected HDMI/memory tests passed in the separate `084726-ce7f8f` run.
+
+## Write operand selection
+
+`pc98_egc_write.sv` combines the programming fields, already-shifted source,
+retained pattern and expanded colors with the raster kernel. It handles CPU
+data, raster-operation and pattern-only write modes, plane/byte enables and
+the intersection of pixel and shift masks. It returns the same held affine
+coefficients consumed by the optional SDRAM merge. It remains outside the
+active core: bus sequencing, source advancement and pattern latch updates
+are still required.
+
+When pattern loading is configured on a destination write and a color is not
+selected, the pattern is the destination value immediately before the write.
+The selector substitutes `P=D` into the operation table before computing its
+coefficients. Therefore the memory controller's fresh RMW read supplies that
+operand without an additional CPU read transaction or a stale CPU-side copy.
+The caller must also retain the returned original destination in its pattern
+latch on completion, including writes that mask every plane. The
+`load_pattern_on_write` output identifies that obligation.
+
+The ROP/read-load selection currently follows NP2: shifted source supplies P,
+while pattern-only writes use the retained raw pattern. MAME uses raw pattern
+for both, so this specific difference still needs a physical diagnostic.
+Reserved write/load/color encodings report `configuration_valid=0` and return
+coefficients that preserve VRAM. This is not a claim about undocumented
+hardware behavior. The caller must handle invalid configurations explicitly.
+
+`tests/run-egc-write.sh` executes the pinned NP2 `egc_opew` and operation table,
+including its optimized operations, then checks the selector plus real raster
+kernel against those results and an independent sum-of-products model. It
+covers all 256 operations with every documented write mode, pattern load,
+color choice and CPU-source bit, then all plane/byte masks with additional
+shifted/clipped operands. For each case the destination is changed after
+coefficient capture and compared again, testing independence from stale data.
+The 17,280 cases and four mutations passed in
+`build/simulation-20260922-090917-cca1f6/tests.log` (exit zero, no OOM, container
+removed). Those results establish the selector's reference behavior, not
+complete EGC support or game performance.

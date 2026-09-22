@@ -23,14 +23,17 @@ foreach port {cpu sub} {
 
 # Floppy return words are likewise held until the following request. Data is
 # captured only when a busy request's completion has crossed both synchronizer
-# stages, on the same edge that drops WAIT. Bound only the sixteen held bits;
+# stages, on the same edge that drops WAIT. Bound only the held data bits;
 # do not exclude ACK/WAIT, inter-stage or downstream capture paths.
 # tests/run-floppy-read-bundle.sh verifies 5ns transport plus 5ns settling.
-foreach port {fde fec} {
+# FDemu consumes bits 7:0 (data), 8 (mark) and 9 (MFM); synthesis removes
+# FDE bits 15:10. The disk-copy FEC path consumes all sixteen bits. These
+# widths were checked in the post-map netlist as well as the consumers.
+foreach {port width} {fde 10 fec 16} {
     set read_source [get_registers "*|ram|${port}_read_data*"]
     set read_target [get_registers "*|ram|[string toupper $port]RDAT*"]
-    if {[get_collection_size $read_source] != 16 || [get_collection_size $read_target] != 16} {
-        error "Expected one held sixteen-bit $port read word and capture register"
+    if {[get_collection_size $read_source] != $width || [get_collection_size $read_target] != $width} {
+        error "Expected $width live $port read bits and capture registers (source [get_collection_size $read_source], target [get_collection_size $read_target])"
     }
     set_max_delay -from $read_source -to $read_target 5.000
 }

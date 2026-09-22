@@ -52,3 +52,13 @@ and the existing request/stale-completion/readback negative tests. The three
 Tcl guard tests also passed locally. A preceding test incorrectly expected
 disabling configuration to wait for VS; the test now preserves the original
 immediate-cancellation behavior. These checks do not establish FPGA timing.
+
+The first StatusReturn60 compile stopped at the new endpoint-count guard,
+before completing fitting. Its post-map TimeQuest inventory contains ten FDE
+source/capture bits (0–9) and sixteen FEC bits (0–15). This matches
+`diskemu_mister/FDemu.vhd`: only the data byte, mark flag and MFM flag are used;
+the six unused upper FDE bits are synthesized away. The guard now requires
+those exact live widths. Its 5 ns bound is unchanged. The revised Tcl tests
+match actual endpoint names against an inventory and reject both missing and
+unexpected FDE bits, rather than assuming every memory bus remains 16 bits.
+Evidence is retained in `build/quartus-20260922-085654-c05616/endpoints.log`.
