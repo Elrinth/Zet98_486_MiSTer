@@ -57,7 +57,10 @@ of alias, DMA and mapping invalidation causes the expected failure. The
 existing lower-RAM cached ALU/VRAM/stack regression remains at
 6,392/3,720/5,268 cycles and 17/162/145 transfers, including its DMA negative
 control. These are synthetic simulation measurements, not Rusty frame rates.
-FPGA timing and hardware validation of this option remain pending.
+The UpperCache50 FPGA build at source 0939a06 completes with zero reported
+timing violations (worst reported slack +0.070 ns), and the fitted SPI,
+HDMI I2C and UART guards pass. This establishes a 50 MHz candidate; it does
+not establish operation at a higher clock or complete constraint coverage.
 
 For a hardware comparison, assemble `tests/hardware/cpu_bench.asm` with
 `nasm -f bin -DUPPER_CODE=1`. This relocates the existing arithmetic kernel
@@ -75,5 +78,20 @@ hundredths; RAM copy completes 130 and stack 102 in their respective
 from the diagnostic D88 after unloading the core and confirming the image
 was closed. The returned D88 has SHA-256
 `5311efcc98877916b921c2d55bb1a789c0e5527143fa3931381f60107d81b01d`.
-Upper instruction caching is disabled in this baseline; a result from the
-cache-enabled core is still required before claiming a hardware improvement.
+Upper instruction caching is disabled in this baseline.
+
+The same pristine benchmark disk on UpperCache50, source 0939a06, produces
+247 ALU blocks, 130 RAM-copy blocks and 102 stack blocks, each in 1,000
+DOS-clock hundredths, with all checksums passing. This is 49.4 times the
+baseline throughput for the upper-RAM arithmetic kernel at the same 50 MHz.
+The copy and stack measurements are unchanged. The comparison isolates a
+large instruction-fetch bottleneck but does not measure Rusty's frame rate.
+The builds also differ in font-loader/global-descriptor changes; their
+arithmetic benchmark program, boot ROM, disk and clock settings are the same.
+
+The result was photographed by the MiSTer screenshot command and recovered
+as `Z98PERF.TXT` after unloading the core and checking that its disposable
+image was closed. The returned D88 SHA-256 is
+`ae82e43b78f65ba0e7081e8a7777a397f45d69964832d2f997815665ed6d85df`.
+The tested RBF SHA-256 is
+`977263589af68063a3596f1701d4789430cee1043157fe9decaf84ad304ac4fe`.

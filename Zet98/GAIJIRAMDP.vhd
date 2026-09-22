@@ -20,16 +20,19 @@ PORT
 end GAIJIRAMDP;
 
 architecture rtl of GAIJIRAMDP is
+-- FONT.ROM has 0x6800 bytes beyond its first two 128-KiB banks.
+-- Keep the custom-character window within that complete writable tail.
+constant RAM_BLOCKS : integer := 13; -- 13 x 2 KiB = 26 KiB
 signal	addramod	:std_logic_vector(16 downto 0);
 signal	addrbmod	:std_logic_vector(16 downto 0);
 subtype datbuf is std_logic_vector(7 downto 0); 
 type datbuf_array is array (natural range <>) of datbuf; 
-signal	qabuf	:datbuf_array(0 to 2);
-signal	qbbuf	:datbuf_array(0 to 2);
-signal	wea		:std_logic_vector(2 downto 0);
-signal	web		:std_logic_vector(2 downto 0);
-signal	cena	:std_logic_vector(2 downto 0);
-signal	cenb	:std_logic_vector(2 downto 0);
+signal	qabuf	:datbuf_array(0 to RAM_BLOCKS-1);
+signal	qbbuf	:datbuf_array(0 to RAM_BLOCKS-1);
+signal	wea		:std_logic_vector(RAM_BLOCKS-1 downto 0);
+signal	web		:std_logic_vector(RAM_BLOCKS-1 downto 0);
+signal	cena	:std_logic_vector(RAM_BLOCKS-1 downto 0);
+signal	cenb	:std_logic_vector(RAM_BLOCKS-1 downto 0);
 
 component DPSRAM11x8
 	PORT
@@ -47,25 +50,23 @@ component DPSRAM11x8
 	);
 END component;
 begin
-	addramod<=address_a - ('0' & x"1400");
-	addrbmod<=address_b - ('0' & x"1400");
-	
-	cena<=	"000" when address_a<('0' & x"1400") else
-			"001" when address_a<('0' & x"1c00") else
-			"010" when address_a<('0' & x"2400") else
-			"100" when address_a<('0' & x"2c00") else
-			(others=>'0');
-			
-	cenb<=	"000" when address_b<('0' & x"1400") else
-			"001" when address_b<('0' & x"1c00") else
-			"010" when address_b<('0' & x"2400") else
-			"100" when address_b<('0' & x"2c00") else
-			(others=>'0');
+	addramod<=address_a;
+	addrbmod<=address_b;
+	process(address_a,address_b)begin
+		cena<=(others=>'0');
+		cenb<=(others=>'0');
+		if(address_a<('0' & x"6800"))then
+			cena(conv_integer(address_a(16 downto 11)))<='1';
+		end if;
+		if(address_b<('0' & x"6800"))then
+			cenb(conv_integer(address_b(16 downto 11)))<='1';
+		end if;
+	end process;
 
 	wea<=cena when wren_a='1' else (others=>'0');
 	web<=cenb when wren_b='1' else (others=>'0');
 	
-	ramb	:for i in 0 to 2 generate
+	ramb	:for i in 0 to RAM_BLOCKS-1 generate
 		ram0	:DPSRAM11x8 port map(
 			address_a		=>addramod(10 downto 0),
 			address_b		=>addrbmod(10 downto 0),
@@ -84,7 +85,7 @@ begin
 	variable tmp	:std_logic_vector(7 downto 0);
 	begin
 		tmp:=(others=>'0');
-		for i in 0 to 2 loop
+		for i in 0 to RAM_BLOCKS-1 loop
 			if(cena(i)='1')then
 				tmp:=qabuf(i);
 			end if;
@@ -96,7 +97,7 @@ begin
 	variable tmp	:std_logic_vector(7 downto 0);
 	begin
 		tmp:=(others=>'0');
-		for i in 0 to 2 loop
+		for i in 0 to RAM_BLOCKS-1 loop
 			if(cenb(i)='1')then
 				tmp:=qbbuf(i);
 			end if;

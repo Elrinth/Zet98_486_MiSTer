@@ -221,9 +221,10 @@ accesses, delayed ACK release, reset and invalidation during hits/misses.
 Removing write invalidation must fail. `LOWMEM_CACHE=1` also enables the cache
 in `run-cpu.sh` and `run-extmem.sh`; see `rtl/cpu/LOWMEM_CACHE.md`.
 
-`run-cache-map.sh` combines the actual memory mapper with the marked production
-invalidation expression. It checks 3,328 bank/read/write/I/O cases plus DMA
-ownership. The DMA grant test separately checks requesting an already idle bus,
+`run-cache-map.sh` combines the actual memory mapper with the production cache
+policy. It checks 4,197,632 mapping cases for each upper-cache option, plus
+control and DMA ownership cases; see `rtl/cpu/UPPER_RAM_CACHE.md`.
+The DMA grant test separately checks requesting an already idle bus,
 waiting for an active CPU transfer, retaining ownership and release/reset.
 
 `hardware/cpu_bench.asm` assembles with NASM's `cpu 8086` restriction and runs
@@ -233,6 +234,17 @@ checks their results, and writes `Z98PERF.TXT`. Each block has 131,072 iteration
 Compare blocks per reported second using the same BIOS/settings. The clock may
 have coarse resolution despite expressing its result in hundredths; this is
 a synthetic throughput test, not a game frame-rate test.
+
+`hardware/glyph_expand_probe.asm` captures synthetic odd-address lookup and
+SHL/RCL pixel expansion at 70000h and 90000h. The independent checker is
+`scripts/verify_glyph_expand_probe.py`; `python tests/test_glyph_expand_probe.py`
+checks its golden capture and rejection of corrupt or malformed results.
+See `rtl/cpu/GLYPH_ARITHMETIC.md` for the disposable-disk and memory requirements.
+
+`run-font-tail.sh` connects the actual font loader and tail RAM. It checks
+26,624 loaded bytes on both CPU and pixel ports, out-of-range write isolation,
+and custom-character writes. A limited-storage negative control must fail.
+Only the existing 2 KiB dual-port primitive is modeled; see `rtl/FONT_ADDRESS.md`.
 
 `run-text-pixel-memory.sh` checks rendered Latin and two-cell Kanji pixels,
 colors, reverse and underline with synchronous pixel-clock text/font memories.

@@ -107,7 +107,8 @@ reduces mismatches from 395 to 29 of 736 sample pairs, with zero unstable
 reads. The remaining mismatches are the absent third-bank glyph `535c`;
 the tested ANK and row-09 letters now match the working ROM. Capture SHA-256:
 `52d0641706aa921a9c579b10adae27f05b176ce74e3e005034ec91e393431eb0`.
-The third-bank fix still needs a new FPGA build and hardware capture.
+The loader change alone still needs verification through the actual RAM path;
+see the later UpperCache50 result below.
 Rusty's title menu remains malformed on this build despite correct sampled
 font bytes. The mapper fixes are therefore necessary but not sufficient to
 establish correct game text rendering; the subsequent drawing path remains
@@ -121,3 +122,31 @@ the same capture as the DX-port probe (29 third-bank mismatches, no unstable
 reads). The tighter OUT/IN sequence alone therefore does not explain the
 remaining menu corruption. This does not cover the game's subsequent RAM
 lookups, font expansion or graphics writes.
+
+## Third-bank storage coverage
+
+UpperCache50 (source 0939a06, containing the widened loader) still produces
+the same 29 mismatches, all in glyph 535Ch, with zero unstable reads. Its
+hardware capture is byte-identical to FontMap50. Tracing the storage path
+finds that `GAIJIRAMDP` only stores offsets 1400h..2BFFh, the 6 KiB custom
+character window, and returns zero elsewhere. The controller test had checked
+the addresses and strobes but had not instantiated this storage module.
+
+`GAIJIRAMDP` now covers the complete 6800h-byte third-bank tail using thirteen
+existing 2 KiB dual-port primitives. This adds 20 KiB of storage. Addresses
+outside the tail remain disconnected instead of aliasing stored bytes. The
+original custom-character window remains within the writable tail.
+
+`bash tests/run-font-tail.sh` connects the production loader/mapper to the
+production tail RAM with a synchronous model of only the 2 KiB primitive.
+It loads all 26,624 bytes, reads them through the pixel port, attempts writes
+at all 104,448 out-of-range addresses and rechecks every stored byte, then
+reads all tail bytes through the CPU font ports. Both ends of the original
+custom-character window also pass CPU-write/pixel-read checks. Restoring the
+limited storage decode fails at offset zero. All these checks and the
+existing full font-address suite pass. Physical fitting and a new hardware
+font capture remain required; this is not yet a verified hardware fix.
+
+The separate glyph arithmetic probe also passes all 4,096 checked bytes on
+UpperCache50; see `cpu/GLYPH_ARITHMETIC.md`. Rusty's malformed title-menu text
+still needs investigation beyond these isolated checks.
