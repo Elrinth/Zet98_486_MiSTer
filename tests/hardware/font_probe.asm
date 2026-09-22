@@ -3,6 +3,9 @@
 ; Each record contains A1:A3 and 32 pairs of immediate/delayed A9 reads.
 ; Positions 0..15 select A5=20..2f; positions 16..31 select A5=00..0f.
 ; IMMEDIATE_IO uses adjacent immediate OUT/IN instructions as Rusty does.
+%ifdef WORD_READS
+    %define IMMEDIATE_IO 1
+%endif
 bits 16
 cpu 8086
 org 100h
@@ -12,6 +15,15 @@ start:
     push cs
     pop es
     cld
+%ifdef UPPER_CAPTURE
+    mov ax,cs
+    cmp ax,6000h
+    ja failed
+    cmp word [2],9000h+((probe_end-$$+100h+15)/16)
+    jb failed
+    mov ax,9000h
+    mov es,ax
+%endif
     mov dx,critical_error
     mov ax,2524h
     int 21h
@@ -47,6 +59,28 @@ start:
 %else
     out dx,al
 %endif
+%ifdef WORD_READS
+    mov bl,20h
+    mov cx,16
+.word_left:
+    mov al,bl
+    out 0a5h,al
+    in al,0a9h
+    xor ah,ah
+    stosw
+    inc bl
+    loop .word_left
+    xor bl,bl
+    mov cx,16
+.word_right:
+    mov al,bl
+    out 0a5h,al
+    in al,0a9h
+    xor ah,ah
+    stosw
+    inc bl
+    loop .word_right
+%else
     xor bx,bx
 .row:
     mov al,bl
@@ -75,6 +109,7 @@ start:
     inc bl
     cmp bl,32
     jb .row
+%endif
 %ifdef IMMEDIATE_IO
     mov al,0ah
     out 68h,al
@@ -82,6 +117,18 @@ start:
     popf
     dec bp
     jnz .glyph
+%ifdef UPPER_CAPTURE
+    push ds
+    mov ax,9000h
+    mov ds,ax
+    push cs
+    pop es
+    mov si,records
+    mov di,records
+    mov cx,CODE_COUNT*66
+    rep movsb
+    pop ds
+%endif
     mov bx,[handle]
     mov dx,capture
     mov cx,CAPTURE_SIZE
@@ -135,7 +182,12 @@ codes:
 codes_end:
 CODE_COUNT equ (codes_end-codes)/2
 capture:
+%ifdef WORD_READS
+    db 'Z98FONTW'
+%else
     db 'Z98FONT2'
+%endif
     dw CODE_COUNT
 records: times CODE_COUNT*66 db 0
 CAPTURE_SIZE equ $-capture
+probe_end:

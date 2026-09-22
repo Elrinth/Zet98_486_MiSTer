@@ -150,3 +150,28 @@ font capture remain required; this is not yet a verified hardware fix.
 The separate glyph arithmetic probe also passes all 4,096 checked bytes on
 UpperCache50; see `cpu/GLYPH_ARITHMETIC.md`. Rusty's malformed title-menu text
 still needs investigation beyond these isolated checks.
+
+## Zero-extended word stores
+
+The optional `-DWORD_READS=1` mode reads a row using adjacent immediate
+OUT/IN instructions, clears AH, and executes STOSW, matching the sequence
+used by the game's single-byte characters. Its `Z98FONTW` capture stores
+the font byte followed by the expected zero high byte. The verifier checks
+both independently and reports high-byte errors separately. This mode also
+implies `IMMEDIATE_IO`; the original probe format remains unchanged.
+
+`-DUPPER_CAPTURE=1` places the capture records in segment 9000h, then copies
+them back for the DOS file write. It checks that the program is below 60000h
+and its DOS allocation covers the upper buffer before accessing it. Use a
+disposable shell without memory managers and native banking, as for the
+conventional-RAM probe. This tests upper stores, not upper instruction fetches.
+
+The combined word/upper mode passes all 736 samples in NP2kai, capture hash
+`f070fbeef6c7c59f237e21cdbe4b19861589b154f0426994dd5a593f41f889c8`.
+UpperCache50 hardware produces the same known 29 font-tail mismatches and
+zero high-byte errors. Its capture hash is
+`74385785106343baa4b331ed3f0e45cd7a7eb3a531533e9149e35e13606b215f`;
+the retrieved D88 hash is
+`38f66d0f0dc25d1f656a254414e0901dd17a740171891d1087ca75379c4ab578`.
+Thus the tested IN-AL/XOR-AH/STOSW sequence introduces no additional errors.
+It does not explain the remaining malformed menu on that build.

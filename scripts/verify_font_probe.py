@@ -10,12 +10,13 @@ import struct
 def inspect(capture, boot_rom):
     if len(boot_rom) != 550912:
         raise ValueError('Expected a combined 550912-byte Zet98 boot.rom')
-    if len(capture) < 10 or capture[:8] != b'Z98FONT2':
+    if len(capture) < 10 or capture[:8] not in (b'Z98FONT2', b'Z98FONTW'):
         raise ValueError('Wrong font-probe header')
+    word_reads = capture[:8] == b'Z98FONTW'
     count, = struct.unpack_from('<H', capture, 8)
     if not count or len(capture) != 10 + count * 66:
         raise ValueError('Truncated or oversized font-probe records')
-    mismatches, unstable, samples = [], [], 0
+    mismatches, unstable, samples, high_byte_errors = [], [], 0, 0
     for record in range(count):
         at = 10 + record * 66
         code, = struct.unpack_from('<H', capture, at)
@@ -30,12 +31,16 @@ def inspect(capture, boot_rom):
             first, delayed = capture[at + 2 + position * 2:at + 4 + position * 2]
             sample = dict(code=f'{code:04x}', half=half, row=row,
                           first=first, delayed=delayed, expected=expected)
-            if first != delayed:
+            if word_reads and delayed != 0:
+                high_byte_errors += 1
+            if not word_reads and first != delayed:
                 unstable.append(sample)
-            if first != expected or delayed != expected:
+            if first != expected or delayed != (0 if word_reads else expected):
                 mismatches.append(sample)
             samples += 1
     return dict(records=count, samples=samples, mismatches=len(mismatches),
+                read_format='zero_extended_word' if word_reads else 'immediate_delayed',
+                high_byte_errors=high_byte_errors,
                 unstable_reads=len(unstable), first_mismatches=mismatches[:12],
                 first_unstable=unstable[:12],
                 boot_sha256=hashlib.sha256(boot_rom).hexdigest(),
