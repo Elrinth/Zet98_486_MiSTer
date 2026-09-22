@@ -35,8 +35,12 @@ if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requi
 # Avoid saturating an interactive workstation. This inventory does not use
 # Docker stats, whose dashboard polling previously accumulated hung clients.
 if (-not $PrepareOnly) {
-    $inventory = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'ps','--filter','name=zet98-quartus-','--format','{{.Names}}')
-    $activeBuilds = @($inventory -split '\r?\n' | Where-Object { $_ })
+    $inventory = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'ps','--format','{{.Names}}')
+    $activeJobs = @($inventory -split '\r?\n' | Where-Object { $_ })
+    if (@($activeJobs | Where-Object { $_ -match '^zet98-(simulation|timequest)-' }).Count) {
+        throw 'A test/timing job is already running; let it finish before starting Quartus.'
+    }
+    $activeBuilds = @($activeJobs | Where-Object { $_ -match '^zet98-quartus-' })
     if ($activeBuilds.Count -ge $MaxConcurrentBuilds) {
         throw "Already running $($activeBuilds.Count) Quartus build(s); limit is $MaxConcurrentBuilds. Let those finish before starting another."
     }

@@ -34,5 +34,16 @@ used successfully for generated GHDL proof inputs.
 Do not use `docker stats` or reopen Docker Desktop's dashboard for polling.
 That dashboard previously accumulated hung stats clients on this machine.
 Use bounded `inspect`, `logs` and, when necessary, `top` on a known container.
-The older `test.ps1` and `report-timing.ps1` workflows have not yet been moved
-to this runner; use the bounded primitives for those stages in the meantime.
+`test.ps1` and `report-timing.ps1` use this runner too. Tests default to one
+CPU/2 GiB and TimeQuest to one CPU/4 GiB, both without extra swap or Windows
+binds. The scripts refuse competing simulation/timing/FPGA workloads. Test
+images are installed once, then selected by immutable image ID for each run;
+tests no longer launch an image rebuild on every invocation. Per-run source,
+toolchain identity, commands, resource limits, logs and results stay under
+`build/simulation-*`. CPU tests obtain Intel models from a never-started
+Quartus container and save model hashes before removing that container.
+
+All three scripts accept `-StartOnly`; inspect the recorded container name
+and export its results before removing a detached job. `test.ps1 -PrepareOnly`
+copies the exact source inputs without invoking Docker. `-TestScript` accepts
+one or more existing `tests/run*.sh` files for focused regressions.

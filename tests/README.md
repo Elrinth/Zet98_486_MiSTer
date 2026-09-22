@@ -36,16 +36,37 @@ pending memory commands before granting I/O, including the second command of
 an unaligned ao486 write. A granted I/O transaction retains ownership through
 every halfword and the final acknowledgement release.
 
-From the repository root in PowerShell, `./scripts/test.ps1` runs all tests.
-It builds the simulation image, then obtains Intel RAM models from the locally
-installed Quartus image into ignored `build/intel-sim/`. No BIOS/game files are
-used. `-AdaptersOnly` skips the full CPU test and its Intel-model dependency.
-To run only the bus/peripheral tests manually:
+From the repository root in PowerShell 7, `./scripts/test.ps1` runs the
+adapter/peripheral suite, followed by real CPU, cached REP, extended-memory,
+cache-coherence and upper-RAM instruction-cache regressions. It uses the
+installed `zet98-mixed-sim:latest` image (GHDL 4, Icarus, NASM and Python).
+Install that toolchain once when setting up a new machine:
 
 ```powershell
-docker --context desktop-linux build -t zet98-sim -f tests/Dockerfile .
-docker --context desktop-linux run --rm --network none --mount "type=bind,source=$($PWD.Path),target=/project,readonly" zet98-sim bash tests/run.sh
+docker --context desktop-linux build -t zet98-mixed-sim:latest -f tests/Dockerfile.mixed tests
 ```
+
+Test runs copy a source snapshot into Linux container storage and default to
+one CPU, 2 GiB RAM, no extra swap and no network. They save the image ID,
+commands, source snapshot, logs and result under `build/simulation-*` and
+remove the container after collecting its logs. Docker commands have finite
+deadlines. An existing FPGA, simulation or timing job prevents another from
+starting; an observation timeout never triggers an automatic replacement.
+
+CPU tests obtain Intel models from the selected installed Quartus image using
+a never-started container; per-run model copies/hashes remain in ignored build
+output. BIOS/game files are not included. `-AdaptersOnly` skips the CPU stages
+and Intel-model dependency. To run focused adapter tests:
+
+```powershell
+./scripts/test.ps1 -AdaptersOnly -TestScript tests/run-video-config-snapshot.sh,tests/run-framebuffer-viewport.sh
+```
+
+`-PrepareOnly` creates the source snapshot without Docker. `-StartOnly` starts
+a detached job and records its container name/ID; inspect that same container,
+save its logs/results and remove it when finished. It must not be treated as
+a successful test until its final exit status and test log are checked.
+See [resource controls](../scripts/DOCKER_RESOURCE_LIMITS.md).
 
 `tests/run-video-counters.sh` checks the values sampled by pixel-clocked
 consumers over complete frames at six reset phases. It checks every raster
@@ -116,7 +137,7 @@ machine and Intel clock primitives are stubs; the bench does not exercise the
 VHDL floppy controller or real disks. Unrelated PS/2 and configuration-ROM
 logic is disabled in the bench. A temporary `hps_io` copy supplies parameter
 defaults required by Icarus; both values are overridden by the actual instances.
-This catches the previous scalar ACK connection, which discarded slots 1–3.
+This catches the previous scalar ACK connection, which discarded slots 1â€“3.
 
 `run-data-bus.sh` compiles the marked data-bus expressions directly from the
 machine top level. Its reference is the historical mux before DMA feedback
@@ -154,17 +175,17 @@ the registered count predicates against the actual register update logic
 and all outputs of the original string unit; see
 [the timing change and evidence](../rtl/cpu/STRING_COUNTS.md).
 
-`run-upper-cache.sh` tests optional instruction caching at 80000h–9FFFFh
+`run-upper-cache.sh` tests optional instruction caching at 80000hâ€“9FFFFh
 with actual ao486 execution and the synthesized VHDL cache policy. It covers
 native self-modification, bank aliases, DMA, remapping/restoration and ROM
 bypass, with negative controls for each external invalidation source and a
-cached/uncached loop measurement. Use `Dockerfile.mixed` for this test: the
-older default image's GHDL lacks Verilog export. `run-cache-map.sh` separately
+cached/uncached loop measurement. Use `Dockerfile.mixed` for this test, as the PowerShell runner now does by
+default; the older `Dockerfile` image lacks GHDL Verilog export. `run-cache-map.sh` separately
 compares the policy against the real PC-98 memory mapper with the option off
 and on. See [the cache design and hardware benchmark](../rtl/cpu/UPPER_RAM_CACHE.md).
 
 `run-extmem.sh` uses the actual CPU in protected mode with the optional 16 MB
-and 64 MB DDR maps. It checks boundaries, the reserved 15–16 MB aperture,
+and 64 MB DDR maps. It checks boundaries, the reserved 15â€“16 MB aperture,
 partial/unaligned writes, copies between conventional and extended RAM,
 instruction execution from DDR, and persistence through CPU-only reset.
 The standalone bridge test also checks all byte masks/64-bit word lanes,
