@@ -57,6 +57,7 @@ bash tests/run-grcg-compare.sh
 bash tests/run-grcg-sdram.sh
 bash tests/run-egc-rop.sh
 bash tests/run-egc-registers.sh
+bash tests/run-rmw-plane-alignment.sh
 bash tests/run-egc-memory.sh
 bash tests/run-egc-shift.sh
 bash tests/run-egc-write.sh

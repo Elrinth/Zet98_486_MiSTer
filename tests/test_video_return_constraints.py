@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[1] / 'Zet98/v17'
 
 
 class Guards(unittest.TestCase):
-    def run_sdc(self, name, bad='', missing_bit=False, extra_bit=False):
+    def run_sdc(self, name, bad='', missing_bit=False, extra_bit=False,
+                duplicates=False, missing_target=False):
         t = tkinter.Tcl()
         t.setvar('bad', bad)
         names = ['hdmi_out_vs', 'hdmi_out_vs~Duplicate_1', 'hdmi_vs_meta', 'hdmi_vs_sync']
@@ -20,11 +21,21 @@ class Guards(unittest.TestCase):
                 if port == 'fde' and signal == 'fde_read_data':
                     count += int(extra_bit) - int(missing_bit)
                 names += [f'emu|Zet98_top|ram|{signal}[{bit}]' for bit in range(count)]
+        if missing_target:
+            names.remove('emu|Zet98_top|ram|FDERDAT[6]')
+        if duplicates:
+            names += [f'emu|Zet98_top|ram|FDERDAT[{bit}]~DUPLICATE' for bit in (7, 8, 9)]
+            names += ['emu|Zet98_top|ram|fec_read_data[15]~Duplicate_1']
         t.setvar('inventory', tuple(names))
         t.eval('''
             set exceptions {}
             set bounds {}
             proc get_collection_size {x} {llength $x}
+            proc get_node_info {node args} {return $node}
+            proc foreach_in_collection {var nodes body} {
+                upvar 1 $var item
+                foreach item $nodes {uplevel 1 $body}
+            }
             proc get_registers {pattern} {
                 global bad inventory
                 if {$bad ne "" && [string first $bad $pattern]>=0} {return {}}
@@ -72,6 +83,17 @@ class Guards(unittest.TestCase):
     def test_unexpected_fde_width_aborts(self):
         with self.assertRaises(tkinter.TclError):
             self.run_sdc('pc98-read-transfer.sdc', extra_bit=True)
+
+    def test_routing_duplicates_are_all_bounded(self):
+        t = self.run_sdc('pc98-read-transfer.sdc', duplicates=True)
+        self.assertEqual(int(t.eval('llength $exceptions')), 0)
+        # Exact post-fit FDE inventory: ten logical bits, thirteen captures.
+        self.assertEqual(int(t.eval('llength [lindex [lindex $bounds 2] 3]')), 13)
+        t.eval('foreach bound $bounds {if {[lindex $bound end] != 5.0} {error bound}}')
+
+    def test_duplicate_cannot_conceal_missing_capture(self):
+        with self.assertRaises(tkinter.TclError):
+            self.run_sdc('pc98-read-transfer.sdc', duplicates=True, missing_target=True)
 
 
 if __name__ == '__main__':

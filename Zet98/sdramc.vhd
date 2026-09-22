@@ -1185,7 +1185,7 @@ begin
 						MEMBA1		<=cpu_bank(1);
 						MEMBA0		<=cpu_bank(0);
 						MEMADR(12 downto 11)	<=not (cpu_planes(0) and cpu_bytes(1)) & not (cpu_planes(0) and cpu_bytes(0));
-						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 0);
+						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 2) & "00"; -- CPU_RMW4_ALIGN
 						MEMDAT<=cpu_write_words(0);
 						MEMDATOE	<='1';
 					when 9 =>		--2nd word
@@ -1767,7 +1767,7 @@ begin
 						MEMBA1		<=sub_bank(1);
 						MEMBA0		<=sub_bank(0);
 						MEMADR(12 downto 11)	<=not (sub_planes(0) and sub_bytes(1)) & not (sub_planes(0) and sub_bytes(0));
-						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 0);
+						MEMADR(10 downto 0)	<='0' & sub_address(9 downto 2) & "00"; -- SUB_RMW4_ALIGN
 						MEMDAT		<=sub_write_words(0);
 						MEMDATOE	<='1';
 					when 12 =>		--2nd word

@@ -62,3 +62,26 @@ those exact live widths. Its 5 ns bound is unchanged. The revised Tcl tests
 match actual endpoint names against an inventory and reject both missing and
 unexpected FDE bits, rather than assuming every memory bus remains 16 bits.
 Evidence is retained in `build/quartus-20260922-085654-c05616/endpoints.log`.
+
+The next fit (`build/quartus-20260922-091323-ca114d`, source `5a5ea82`)
+completed routing and assembly, then exposed three Fitter-created FDERDAT
+copies in final timing. The guard now validates all logical bit indices on
+both ends and includes every copy in the unchanged 5 ns bound. It rejects
+missing bits even if other bits have duplicates. Seven Tcl tests pass,
+including the actual ten-source/thirteen-capture FDE inventory.
+
+Production TimeQuest was rerun on that existing routed database with only
+this guard correction overlaid. It completed successfully; all reported
+setup/hold/recovery/removal/pulse-width checks passed at every available
+corner. Minimum slack is 0.066 ns (HDMI scaler), and the slow/hot system
+domain setup margin is 0.380 ns. The pixel clock uses a global clock network
+and the host-snapshot endpoint guards resolve. Original failed reports remain
+in the source snapshot; successful reports are in `timing-copies/` and
+`copies.log`, with `copies-result.json` and `timing-check-copies.json`.
+
+SuperStation One then passed the 2,048-record GRCG diagnostic (see
+`graphics/GRCG.md`) and CPU benchmark v3 with correct ALU/RAM/stack checksums.
+In ten DOS seconds per kernel it completed 286/152/114 blocks, compared with
+247/130/102 on FullFont50. These are approximately 15.8%/16.9%/11.8% gains;
+they are not game frame-rate measurements. Private captures and screenshots
+are in `build/hardware/status-return60-validation/`.

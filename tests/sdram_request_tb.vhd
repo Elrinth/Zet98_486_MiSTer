@@ -96,7 +96,7 @@ begin
             if cs='0' and ras='1' and cas='0' then
                 assert active report "unsolicited SDRAM column command" severity failure;
                 column:=expected_address(9 downto 0);
-                if kind=1 or kind=3 or (kind=5 and we='1') then column(1 downto 0):="00"; end if;
+                if kind=1 or kind=3 or kind=5 then column(1 downto 0):="00"; end if;
                 assert ma(9 downto 0)=column and (ba1 & ba0)=expected_bank
                     report "SDRAM column/bank mismatch" severity failure;
                 if we='1' then
@@ -162,8 +162,8 @@ begin
                 if AFFINE_TEST and (mode/=5 or affine_case) then affine<='1'; else affine<='0'; end if;
                 wait until falling_edge(cpuclk);
                 rowcol:=to_unsigned((n*1031+mode*131071) mod 2**AW,AW);
-                -- Four-plane operations use plane-aligned addresses in Zet98.
-                if mode=1 or mode=3 or mode=5 then rowcol(1 downto 0):="00"; end if;
+                -- The addressed VRAM plane may be any of B,R,G,E. Every
+                -- four-plane burst must align both read and write internally.
                 expected_address<=std_logic_vector(rowcol); address<=std_logic_vector(rowcol);
                 expected_bank<=std_logic_vector(to_unsigned(n mod 4,2)); bank<=std_logic_vector(to_unsigned(n mod 4,2));
                 if affine_case then

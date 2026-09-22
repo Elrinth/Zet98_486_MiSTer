@@ -58,10 +58,36 @@ SHA-256 `ec02880d3cb93c8487e192334e132bc454bf72cb56156d464972b37c02e3322a`.
 All 2,048 records disagree with the correct comparison. All 2,048 agree exactly
 with the old one-plane implementation, including its address-selected tile
 and ignored plane-disable mask. This confirms the diagnostic reaches the
-faulty path; it does not verify the replacement FPGA implementation. Retesting
-the same probe on a timing-qualified build remains required.
+faulty path; it does not by itself verify the replacement FPGA implementation.
 
 The identical DOS binary and initial floppy also pass all 2,048 records in
 the NP2kai reference emulator: 12,288 compared bytes, zero mismatches, capture
 SHA-256 `9d90c547d87fc1809b05764a7afefd0be16dee1c36b09b4de2b7127e364cb80a`.
 This validates the capture/verifier pair against a separate implementation.
+
+On 2026-09-22, the StatusReturn60 build passed the same probe on SuperStation
+One: all 2,048 records and 12,288 bytes matched, with the same capture hash as
+NP2kai. Evidence is in `build/hardware/status-return60-validation/`. The RBF
+hash is `bbd75ac9ce8e1cfcbf4de13d15c04d650891d59f7bc4f1694ceab618f6b7e541`.
+Its routed source is `5a5ea82`. Final timing was rerun on that unchanged routed
+database after the return-data SDC guard was corrected to accept physical
+register duplicates while checking every logical bit. All reported timing
+checks passed, with minimum slack 0.066 ns. This verifies GRCG comparison
+reads; it does not establish a Rusty frame rate or qualify later RTL edits.
+
+## Four-plane write alignment
+
+The mapped SDRAM address's low two bits select B/R/G/E. A four-plane RMW must
+align both its read and write column to plane zero. The controller previously
+aligned the read only, so accesses through R/G/E aliases could start writing
+at a different column. Both CPU and drawing-port writes now align those bits;
+the per-plane and per-byte masks still determine which words are stored.
+
+`tests/run-rmw-plane-alignment.sh` exercises all addressed planes through the
+actual SDRAMC at 20/60/100 MHz on both ports. Restoring either old write column
+independently must fail. These six runs, the two negative controls, and existing
+affine/request/write-bundle/read-bundle regressions passed in
+`build/simulation-20260922-094803-c7949d/tests.log`. That combined job later
+failed an experimental EGC test adapter, so its overall exit status is one.
+The write-alignment change is newer than StatusReturn60 and still needs its
+own FPGA build and hardware test.

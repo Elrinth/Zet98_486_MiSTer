@@ -32,8 +32,22 @@ foreach port {cpu sub} {
 foreach {port width} {fde 10 fec 16} {
     set read_source [get_registers "*|ram|${port}_read_data*"]
     set read_target [get_registers "*|ram|[string toupper $port]RDAT*"]
-    if {[get_collection_size $read_source] != $width || [get_collection_size $read_target] != $width} {
-        error "Expected $width live $port read bits and capture registers (source [get_collection_size $read_source], target [get_collection_size $read_target])"
+    # Routing may duplicate capture registers (the 60 MHz fit duplicates FDE
+    # bits 7..9). Count logical bits, not physical copies, and constrain every
+    # copy. A duplicate must never conceal a missing or unexpected bus bit.
+    foreach bank [list $read_source $read_target] {
+        set present [dict create]
+        foreach_in_collection reg $bank {
+            set name [get_node_info $reg -name]
+            if {![regexp {\[([0-9]+)\](~[Dd][Uu][Pp][Ll][Ii][Cc][Aa][Tt][Ee](_[0-9]+)?)?$} $name unused bit]} {
+                error "Unexpected $port read register: $name"
+            }
+            if {$bit >= $width} {error "Unexpected $port read bit $bit (width $width)"}
+            dict set present $bit 1
+        }
+        for {set bit 0} {$bit < $width} {incr bit} {
+            if {![dict exists $present $bit]} {error "Missing live $port read bit $bit"}
+        }
     }
     set_max_delay -from $read_source -to $read_target 5.000
 }
