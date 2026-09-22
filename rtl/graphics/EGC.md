@@ -26,8 +26,8 @@ writes. These are arithmetic tests, not EGC register/bus tests.
 
 Still required:
 
-- Port 04A0h–04AFh byte/word writes, extended-video enable/protection and GRCG
-  enable interaction.
+- Integration of port 04A0h–04AFh writes, extended-video enable/protection and
+  GRCG enable interaction with the machine.
 - Source/pattern latches, shifts across successive byte and word accesses,
   direction, bit count, first/last clipping and read comparisons.
 - CPU and drawing-port arbitration, SDRAM transactions, clock-crossing and
@@ -92,3 +92,59 @@ negative controls were rejected. Existing CPU/drawing/floppy request-bundle,
 readback, control-crossing, GRCG and actual top-level data-bus regressions also
 passed. The log is `build/simulation-20260922-074716-2578fb/tests.log`.
 These simulated clock rates do not establish FPGA operating frequencies.
+
+## Word shifter
+
+`pc98_egc_shift.sv` advances on one accepted 16-bit source transfer, after the
+caller has selected either four VRAM words or replicated CPU write data. It
+stores residual pixels for all four planes, skips the initial source offset,
+inserts the destination offset and returns a native-order clipping mask.
+When a full destination word cannot yet be formed, it preserves the pixels
+and returns a zero write mask. The next source transfer supplies the missing
+pixels. Length is the low twelve register bits plus one, including 4096.
+Completing a row reinitializes input alignment but leaves its last result
+latched for the destination write. Explicit reload discards an unfinished row.
+
+Forward traversal is low-byte MSB to LSB, then high-byte MSB to LSB. Reverse
+traversal is high-byte LSB to MSB, then low-byte LSB to MSB. This is the native
+CPU representation, not MAME's internally bit-reversed VRAM representation.
+The module requires aligned word source transfers. The bus integration must
+explicitly handle byte/odd accesses; silently advancing an entire word for
+every byte completion would be incorrect. Register selection, pattern latches,
+read comparison and the memory handshake remain separate integration work.
+This module is not yet in the QSF or active core.
+
+`tests/run-egc-shift.sh` builds the extracted, unmodified NP2kai shift functions
+under `tests/reference`, validates their outputs using an independent Python
+pixel-list FIFO model, then feeds those same transactions to the RTL. It tests
+all 512 direction/source/destination settings, lengths 1–33 and boundaries
+63/64/65, 255/256/257 and 4095/4096, two rows without register reload, interrupted
+rows, ignored register bits, idle cycles with changing source data, and reset
+priority. It repeats the RTL corpus with programming performed through the
+actual EGC register module and its registered reload pulse. Mutations remove
+residual pixels, reverse the wrong bits, omit
+clipping and disable row restart. These are word-shifter tests, not proof of
+the complete EGC bus or physical PC-98 edge cases.
+
+Reference evidence:
+
+- The original [PC-9800 hardware databook](https://vtda.org/docs/computing/NEC/PC-9800TechnicalDataBookHARDWARE%2BOCR_1993.pdf),
+  printed pages 193–194 (PDF pages 204–205), describes four-plane operation,
+  source/destination read-modify-write, bit shifting and the protected extended
+  mode switch. It does not specify the detailed shift/count register behavior.
+- [ReC98's EGC copy research](https://rec98.nmlgc.net/blog/2023-03-05)
+  describes the required extra source read when source offset exceeds
+  destination offset and row-state restart. Its tests distinguish a real
+  hardware-compatible implementation from T98-Next's differing behavior.
+- The [register notes linked by ReC98](https://www.webtech.co.jp/company/doc/undocumented_mem/io_egc.txt)
+  specify word accesses and shift/count fields. Some compare/mask statements
+  conflict with both reference implementations and common driver setup; they
+  are not treated as sole authority for those disputed fields.
+
+The word-shifter regression passed on 2026-09-22 in
+`build/simulation-20260922-084425-5d99d3/tests.log`: 685,216 source-word transfers
+agreed between NP2 and the pixel-list model; 706,208 RTL records passed with
+direct programming and again through the register frontend, with 21,840
+idle/poison cycles in each run. All four mutations failed as intended.
+That combined job subsequently stopped at an unrelated HDMI test expectation;
+the corrected HDMI/memory tests passed in the separate `084726-ce7f8f` run.

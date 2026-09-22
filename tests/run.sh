@@ -14,6 +14,7 @@ bash tests/run-sdram-write-bundle.sh
 bash tests/run-sub-write-bundle.sh
 bash tests/run-sdram-read-bundle.sh
 bash tests/run-floppy-sdram.sh
+bash tests/run-floppy-read-bundle.sh
 bash tests/run-video-sdram.sh
 bash tests/run-video-settings.sh
 bash tests/run-graphics-address.sh
@@ -26,6 +27,7 @@ bash tests/run-video-scale.sh
 bash tests/run-video-calc.sh
 bash tests/run-framebuffer-viewport.sh
 bash tests/run-hdmi-tune-gate.sh
+bash tests/run-video-status.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \
     LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
@@ -56,6 +58,7 @@ bash tests/run-grcg-sdram.sh
 bash tests/run-egc-rop.sh
 bash tests/run-egc-registers.sh
 bash tests/run-egc-memory.sh
+bash tests/run-egc-shift.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
 bash tests/run-opna-timer.sh

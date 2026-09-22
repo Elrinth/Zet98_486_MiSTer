@@ -20,3 +20,17 @@ foreach port {cpu sub} {
     }
     set_max_delay -from $read_source -to $read_target 5.000
 }
+
+# Floppy return words are likewise held until the following request. Data is
+# captured only when a busy request's completion has crossed both synchronizer
+# stages, on the same edge that drops WAIT. Bound only the sixteen held bits;
+# do not exclude ACK/WAIT, inter-stage or downstream capture paths.
+# tests/run-floppy-read-bundle.sh verifies 5ns transport plus 5ns settling.
+foreach port {fde fec} {
+    set read_source [get_registers "*|ram|${port}_read_data*"]
+    set read_target [get_registers "*|ram|[string toupper $port]RDAT*"]
+    if {[get_collection_size $read_source] != 16 || [get_collection_size $read_target] != 16} {
+        error "Expected one held sixteen-bit $port read word and capture register"
+    }
+    set_max_delay -from $read_source -to $read_target 5.000
+}

@@ -5,7 +5,7 @@ use ieee.std_logic_1164.all;
 -- Register decoded raster status before crossing to the CPU/PIC/GDC domain.
 -- The two bits are independent long-lived levels, not an encoded bus.
 -- Video output timing itself is unchanged; software sees <= one source plus
--- two destination periods of latency. No timing paths are excluded here.
+-- two destination periods of latency. Only first-stage inputs are asynchronous.
 entity video_retrace_cdc is
     port (
         video_clk, video_rstn : in std_logic;

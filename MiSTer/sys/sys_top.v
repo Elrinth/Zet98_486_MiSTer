@@ -306,6 +306,15 @@ reg  [2:0] scaler_flt;
 reg        lowlat = 0;
 reg        cfg_dis = 0;
 
+// BEGIN HDMI STATUS CDC
+(* preserve, altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+reg hdmi_vs_meta = 0, hdmi_vs_sync = 0;
+always @(posedge clk_sys) begin
+    hdmi_vs_meta <= HDMI_TX_VS;
+    hdmi_vs_sync <= hdmi_vs_meta;
+end
+// END HDMI STATUS CDC
+
 reg        vs_wait = 0;
 reg [11:0] vs_line = 0;
 
@@ -462,8 +471,8 @@ always@(posedge clk_sys) begin
 		end
 	end
 
-	vs_d0 <= HDMI_TX_VS;
-	if(vs_d0 == HDMI_TX_VS) vs_d1 <= vs_d0;
+	vs_d0 <= hdmi_vs_sync;
+	if(vs_d0 == hdmi_vs_sync) vs_d1 <= vs_d0;
 
 	vs_d2 <= vs_d1;
 	if(~vs_d2 & vs_d1) vs_wait <= 0;
@@ -1026,7 +1035,7 @@ always @(posedge clk_sys) begin
 	reg vsd, vsd2;
 	if(~cfg_ready || ~cfg_set) cfg_got <= cfg_set;
 	else begin
-		vsd  <= HDMI_TX_VS;
+		vsd  <= hdmi_vs_sync;
 		vsd2 <= vsd;
 		if(~vsd2 & vsd) cfg_got <= cfg_set;
 	end
