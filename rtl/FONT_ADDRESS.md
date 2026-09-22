@@ -204,3 +204,8 @@ The 03:27:20 hardware screenshot still shows malformed Start/Continue/Options
 lettering. The font-tail repair therefore fixes the captured ROM defect but
 does not resolve this separate game-rendering problem. Animation frame rate
 and audible sound quality were not measured in this check.
+
+The subsequent [combined font pipeline capture](cpu/FONT_PIPELINE.md) passes
+all 53,312 payload bytes on FullFont50 and in NP2kai. It connects the font
+reads, upper-RAM expansion and GRCG writes in one program; actual game
+character selection remains outside its scope.
