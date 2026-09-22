@@ -91,3 +91,44 @@ affine/request/write-bundle/read-bundle regressions passed in
 failed an experimental EGC test adapter, so its overall exit status is one.
 The write-alignment change is newer than StatusReturn60 and still needs its
 own FPGA build and hardware test.
+
+`tests/hardware/grcg_alias_probe.asm` records RMW writes through each B/R/G/E
+address alias, on both pages and with all sixteen plane-disable masks. Its
+512 records include aligned words, both byte lanes and odd words, surrounded
+by unchanged guard bytes. `scripts/verify_grcg_alias_probe.py` checks all
+16,384 bytes using a per-pixel set/preserve model. The probe writes exclusively
+to a new `Z98GAL.BIN`; use a disposable DOS floppy with at least 64 KiB allocated
+to the COM program. It enables 16-color access, changes eight off-screen bytes
+per plane/page, restores the CPU page and leaves GRCG disabled. Run
+`bash tests/run-grcg-alias.sh` to assemble the normal and shell versions and
+check the capture verifier. Hardware execution is a separate step.
+
+The first SuperStation capture, on StatusReturn60, failed 360 of 512 records
+with 1,688 incorrect bytes. All 128 B-addressed records passed; each of R/G/E
+failed 120 records (its eight all-planes-disabled records were unaffected).
+All 512 records exactly match a model of the old burst column rotating each
+plane's result and write mask by the addressed alias. This establishes that
+the hardware probe reaches the faulty path. The capture SHA-256 is
+`4a9837a0b905567d4d0a5885c837cf195978c3de645fd368e9990b6d891cd6dc`;
+private evidence is in `build/hardware/grcg-alias-validation/`.
+
+The first PlaneAligned60 compile (`quartus-20260922-101028-235b48`, source
+`c3f36f3`) completed successfully but initially reported a -0.018 ns fast/cold
+hold check on the held GDC configuration snapshot. After validating that
+handshake's source hold interval, only its impossible nominal-edge hold check
+was excluded; its 20 ns setup bound remains. TimeQuest on the same routed
+database passed all four corners with minimum slack 0.061 ns. An additional
+check found all 111 bounded GDC payload setup paths at every corner. The
+unchanged RBF hash is
+`80f216b7ffe99ae2c3660217a0fe9a8e62e5f752d47a04d5ccf1c69f3ac7e65c`.
+Reports and the overlaid constraint are retained under `timing-gdc-hold/` and
+`gdc-hold-qualified.sdc` in that build directory.
+
+PlaneAligned60 then passed all 512 hardware records and 16,384 compared bytes,
+including both pages, every addressed alias, plane mask, byte lane and odd word.
+Its capture SHA-256 is
+`e98ceaf0dc69d57b69f9f7146cfbcfc96b9292ec7dae418660d16c7f275c6960`.
+The result was extracted only after unloading the core and confirming the
+floppy was closed. The corrected capture screenshot showed only `NEC` despite
+the complete result file: display behavior remains a separate open issue, so
+this memory diagnostic does not qualify the build's overall game behavior.

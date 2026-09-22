@@ -54,6 +54,7 @@ bash tests/run-disk-interface.sh
 bash tests/run-ide.sh
 bash tests/run-data-bus.sh
 bash tests/run-grcg-compare.sh
+bash tests/run-grcg-alias.sh
 bash tests/run-grcg-sdram.sh
 bash tests/run-egc-rop.sh
 bash tests/run-egc-registers.sh
