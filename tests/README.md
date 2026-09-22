@@ -311,3 +311,18 @@ reset phases, including stopped-clock recovery and settings changed during
 reset. It checks a 640-pixel rendered line after each release. Temporary
 copies rename the legacy VMODE identifier so VHDL-2008 can compile the
 original expression port mappings; no logic changes are made by the runner.
+
+`tests/run-decode-buffer-proof.sh` proves arbitrary-state output/next-state
+equivalence against the original ao486 buffer with Yosys, including three
+negative controls. Use the installed `zet98-formal-tests:latest` image through
+`scripts/test.ps1 -AdaptersOnly -SimulationImage zet98-formal-tests:latest
+-TestScript tests/run-decode-buffer-proof.sh`. The mixed simulator image runs
+`tests/run-decode-buffer-cpu.sh`: 262144 buffer-input combinations, sequential
+histories, and both cached and uncached real-CPU instruction/REP tests.
+
+`tests/run-sdram-control-cdc.sh` checks operation-type routing on all four
+CPU/drawing/floppy SDRAM clients with 15 ns delay and 5 ns required setup.
+Six source rates and four memory phases exercise 18432 CPU/drawing commands
+and 12288 continuous floppy requests. Four late-operation and two bypassed
+completion-synchronizer mutations must fail. See `rtl/cpu/SDRAM_CONTROL_CDC.md`
+for the two source-clock completion waits and required hardware comparison.

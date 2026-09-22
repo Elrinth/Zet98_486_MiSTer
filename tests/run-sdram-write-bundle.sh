@@ -6,10 +6,10 @@ trap 'rm -rf "$out"' EXIT
 # Model the exact constrained source-to-memory bundle, leaving request timing
 # unchanged. The admission edge must have at least 5 ns of stable write data.
 test "$(grep -c 'CPU_WRITE_BUNDLE_TRANSPORT' Zet98/sdramc.vhd)" = 1
-test "$(grep -c 'if lCPUREQ="011" then' Zet98/sdramc.vhd)" = 1
+test "$(grep -c 'CPU_WRITE_BUNDLE_ADMISSION' Zet98/sdramc.vhd)" = 1
 for delay in 15 80; do
     sed -e "s/cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT/cpu_write_crossing <= transport cpu_write_source after $delay ns;/" \
-        -e "/if lCPUREQ=\"011\" then/a\\                    assert cpu_write_crossing'stable(5 ns) report \"CPU write bundle arrived too late\" severity failure;" \
+        -e "/CPU_WRITE_BUNDLE_ADMISSION/a\\                    assert cpu_write_crossing'stable(5 ns) report \"CPU write bundle arrived too late\" severity failure;" \
         Zet98/sdramc.vhd > "$out/sdram-$delay.vhd"
 done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-15.vhd" tests/sdram_request_tb.vhd
@@ -32,7 +32,7 @@ echo 'PASS: late CPU write bundle rejected'
 # Moving read capture one CPU cycle later must be rejected: the bus master
 # consumes data with the existing ACK and must never see the previous read.
 test "$(grep -c 'CPU_READ_COMPLETION_CAPTURE' Zet98/sdramc.vhd)" = 1
-sed "s@if cpuend/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE@if CPUACKb='1' then -- deliberately late read@" \
+sed "s@if CPUdone_sync(1)/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE@if CPUACKb='1' then -- deliberately late read@" \
     Zet98/sdramc.vhd > "$out/sdram-late-read.vhd"
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-late-read.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb

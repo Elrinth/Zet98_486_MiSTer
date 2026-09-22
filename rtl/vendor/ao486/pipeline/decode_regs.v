@@ -51,7 +51,8 @@ function [103:0] buffer_step;
     input [3:0] decoder_count, consume_count, prefix_count, fetch_valid;
     input [63:0] fetch;
     input dec_reset;
-    reg [3:0] after_consume_count, acceptable_1, acceptable_2, dec_acceptable, accepted;
+    reg [3:0] after_consume_count, acceptable_1, acceptable_2, dec_acceptable;
+    reg [3:0] available, unsaturated_count;
     reg [4:0] total_count;
     reg [95:0] after_consume, decoder_next;
     reg [3:0] next_count;
@@ -71,7 +72,13 @@ function [103:0] buffer_step;
         dec_acceptable   = (dec_reset)?                      4'd0 :
                                   (acceptable_1 < acceptable_2)?    acceptable_1 : acceptable_2;
 
-        accepted         = (dec_acceptable > fetch_valid)? fetch_valid : dec_acceptable;
+        // Prefix/fetch limits do not depend on the late consume count.
+        // If buffer capacity wins, after_consume_count + acceptable_1 is
+        // exactly 12 modulo 16, including otherwise unreachable encodings.
+        // Select that constant after the capacity comparison instead of
+        // putting another adder after the accepted-byte mux.
+        available = (acceptable_2 < fetch_valid) ? acceptable_2 : fetch_valid;
+        unsaturated_count = after_consume_count + available;
 
         //------------------------------------------------------------------------------
 
@@ -105,7 +112,8 @@ function [103:0] buffer_step;
                                                                   after_consume;
 
 
-        next_count = dec_reset ? 4'd0 : after_consume_count + accepted;
+        next_count = dec_reset ? 4'd0 :
+                     (acceptable_1 < available) ? 4'd12 : unsaturated_count;
         buffer_step = {dec_acceptable, next_count, decoder_next};
     end
 endfunction

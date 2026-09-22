@@ -3,8 +3,9 @@
 # cpuend/subend is asserted at count 8. Four-word data finishes at current
 # count 10, with completion at 11. Thus the last data transition precedes
 # completion by >=10ns (one 100MHz memory cycle); the CPU samples afterward.
-# RMW operations complete later still. Consumer data and ACK are captured on
-# the SAME existing CPU edge. No extra wait state or ACK bypass is introduced.
+# RMW operations complete later still. Completion now crosses two source-clock
+# synchronizer stages before data and ACK are captured on the SAME edge.
+# The additional settling time is not used to loosen this 5 ns data bound.
 #
 # Bound just this held return-data route to 5ns, leaving >=5ns of settling
 # before capture. Keep ordinary hold checks and all control/ACK/RMW paths.

@@ -15,9 +15,9 @@ module floppy_overlay #(
     output reg out_ce, out_hs, out_vs, out_de,
     output reg [7:0] out_r, out_g, out_b
 );
-    (* altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    (* preserve, altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg [1:0] activity_meta, activity_sync;
-    (* altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    (* preserve, altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg enabled_meta, enabled_sync;
     reg prev_de,prev_vs,sized,drive;
     reg [11:0] x,y,max_width,width,height;

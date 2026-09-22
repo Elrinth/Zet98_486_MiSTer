@@ -25,13 +25,14 @@ module decode_regs_tb;
         for(cc=0;cc<16;cc=cc+1)
         for(pc=0;pc<16;pc=pc+1)
         for(fv=0;fv<16;fv=fv+1)
-        for(en=0;en<2;en=en+1) begin
+        for(en=0;en<2;en=en+1)
+        for(reset_case=0;reset_case<2;reset_case=reset_case+1) begin
             @(negedge clk);
             injected_count=dc;injected_data={$random,$random,$random};
             force dut.decoder_count=injected_count;force reference.decoder_count=injected_count;
             force dut.decoder=injected_data;force reference.decoder=injected_data;
             consume_count=cc;prefix_count=pc;fetch_valid=fv;consume_enabled=en;
-            fetch={$random,$random};dec_reset=(fv==15);
+            fetch={$random,$random};dec_reset=reset_case;
             #1;compare();
             release dut.decoder_count;release reference.decoder_count;
             release dut.decoder;release reference.decoder;
@@ -45,6 +46,6 @@ module decode_regs_tb;
             consume_enabled=$random;fetch={$random,$random};
             #1;compare();@(posedge clk);#1;compare();
         end
-        $display("PASS: decode buffer bit-exact against legacy, 131072 count/consume/prefix/fetch/stall combinations plus 10000 sequential cycles");$finish;
+        $display("PASS: decode buffer bit-exact against legacy, 262144 count/consume/prefix/fetch/stall/reset combinations plus 10000 sequential cycles");$finish;
     end
 endmodule

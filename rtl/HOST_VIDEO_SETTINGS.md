@@ -60,3 +60,19 @@ Validation:
 Logs are local build artifacts: `build/video-config-regression.log` and
 `build/ascal-address-prepare-final.log`. Hardware remains on the previously
 verified FullFont50 build until a new fit passes its timing checks.
+
+The b700d62 HostSettings60 fit contains all four snapshots (132/132 OSD
+bits for each OSD, 150 viewport bits and 27 scaling bits). Their payload
+setup bounds pass. Its remaining 75 MHz failure is instead floppy activity
+feeding the overlay's existing two-stage synchronizers. Both independent
+activity bits and the enable now have first-stage-only exceptions, with
+preserved synchronizer stages; pixel/animation logic remains timed.
+
+Reanalysis of that unchanged fitted database accepts the three named
+endpoints and reports +1.778 ns as the worst slow/hot incoming-video path.
+All 59 floppy animation frames, captions and 56,576 streamed pixel/sync
+comparisons still pass. The independent cold HDMI limit is a palette-RAM
+output through luminance arithmetic (-0.002 ns), not the earlier line-address
+subtraction. The database still has CPU/memory failures and is not deployed.
+See `build/host-settings60-domain-audit`; this constraint audit includes
+neither the newer decoder arithmetic nor SDRAM handshake RTL.

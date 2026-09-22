@@ -15,8 +15,9 @@ if {[get_collection_size $system_clock] != 1} {
 report_timing -setup -from_clock $system_clock -to_clock $system_clock -npaths 6 -nworst 1 -detail full_path -file output_files/system-setup-paths.txt
 # Overall worst paths can all end in the CPU. Also expose the worst incoming
 # paths for each peripheral clock so CPU improvements do not hide other limits.
-foreach {domain pattern} {incoming-system {*emu*general?1?*divclk} memory {*emu*general?0?*divclk} video {*emu*general?2?*divclk}} {
+foreach {domain pattern} {incoming-system {*emu*general?1?*divclk} memory {*emu*general?0?*divclk} video {*emu*general?2?*divclk} hdmi {*pll_hdmi*counter?0?*divclk}} {
     set domain_clock [get_clocks $pattern]
+    set domain_clocks($domain) $domain_clock
     if {[get_collection_size $domain_clock] != 1} {
         error "Expected exactly one $domain clock"
     }
@@ -37,7 +38,11 @@ foreach_in_collection condition [get_available_operating_conditions] {
     foreach check {setup hold recovery removal} {
         report_timing -$check -npaths 6 -nworst 1 -detail full_path -file output_files/corner-${corner}-${check}.txt
     }
-    report_timing -setup -to_clock $system_clock -npaths 6 -nworst 1 -detail full_path -file output_files/corner-${corner}-incoming-system.txt
+    # A cold HDMI failure may be hidden below six worse CPU/memory paths.
+    # Report every destination domain at every corner independently.
+    foreach domain {incoming-system memory video hdmi} {
+        report_timing -setup -to_clock $domain_clocks($domain) -npaths 6 -nworst 1 -detail full_path -file output_files/corner-${corner}-${domain}.txt
+    }
     incr corner
 }
 delete_timing_netlist

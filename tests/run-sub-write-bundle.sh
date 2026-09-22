@@ -9,7 +9,7 @@ test "$(grep -c 'SUB_WRITE_BUNDLE_TRANSPORT' Zet98/sdramc.vhd)" = 1
 test "$(grep -c 'SUB_WRITE_BUNDLE_ADMISSION' Zet98/sdramc.vhd)" = 1
 for delay in 15 80; do
     sed -e "s/sub_write_crossing <= sub_write_source; -- SUB_WRITE_BUNDLE_TRANSPORT/sub_write_crossing <= transport sub_write_source after $delay ns;/" \
-        -e "/if lSUBREQ=\"011\" then/a\\                    assert sub_write_crossing'stable(5 ns) report \"SUB write bundle arrived too late\" severity failure;" \
+        -e "/SUB_WRITE_BUNDLE_ADMISSION/a\\                    assert sub_write_crossing'stable(5 ns) report \"SUB write bundle arrived too late\" severity failure;" \
         Zet98/sdramc.vhd > "$out/sdram-$delay.vhd"
 done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-15.vhd" tests/sdram_request_tb.vhd
@@ -37,7 +37,7 @@ echo 'PASS: late SUB write bundle rejected'
 # Moving read capture one SUB cycle later must be rejected: the bus master
 # consumes data with the existing ACK and must never see the previous read.
 test "$(grep -c 'SUB_READ_COMPLETION_CAPTURE' Zet98/sdramc.vhd)" = 1
-sed "s@if subend/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE@if SUBACKb='1' then -- deliberately late read@" \
+sed "s@if SUBdone_sync(1)/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE@if SUBACKb='1' then -- deliberately late read@" \
     Zet98/sdramc.vhd > "$out/sdram-late-read.vhd"
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-late-read.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb

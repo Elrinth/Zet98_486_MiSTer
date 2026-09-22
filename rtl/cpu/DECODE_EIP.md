@@ -33,3 +33,10 @@ The change still requires a new FPGA fit and timing comparison. In particular,
 FullFont60's separate video-setting and HDMI scaler violations remain open;
 this optimization alone does not establish a working 60 MHz core or a game
 frame-rate increase.
+
+HostSettings60 at b700d62 is the first fitted snapshot including this change.
+Its slow/hot CPU-only minimum is +0.087 ns; the cold decoder-buffer count path
+still fails by 0.151 ns. Other memory/HDMI failures also remain, so the fit
+is not deployed. Physical placement changed and this result does not prove
+a standalone frequency improvement. The next buffer optimization is described
+in `DECODE_BUFFER.md`.

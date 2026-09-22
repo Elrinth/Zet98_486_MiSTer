@@ -152,10 +152,11 @@ signal	subend		:std_logic;
 signal	vidend		:std_logic;
 signal	fdeend		:std_logic;
 signal	fecend		:std_logic;
--- CPU/SUB clocks are related PLL outputs and all completion paths remain
--- timed. Held toggles remove the return ACK-to-memory clear path without
--- adding a bus cycle; each destination consumes one change exactly once.
+-- Request and completion toggles permit unrelated CPU/SUB and memory clocks.
+-- Two destination flops isolate completion before ACK/data capture. This adds
+-- two source-clock waits but removes the short adjacent-PLL-edge control path.
 signal CPUdone_seen, SUBdone_seen : std_logic;
+signal CPUdone_sync, SUBdone_sync : std_logic_vector(1 downto 0);
 signal	CPUACKb		:std_logic;
 signal	SUBACKb		:std_logic;
 signal	VIDACKb		:std_logic;
@@ -206,18 +207,21 @@ signal	SUBJOB,nSUBJOB	:job_t;
 signal	VIDJOB	:job_t;
 signal	FDEJOB,nFDEJOB,lFDEJOB	:job_t;
 signal	FECJOB,nFECJOB,lFECJOB	:job_t;
-signal	CPUREQ,CPUREC	:std_logic;
-signal	SUBREQ,SUBREC	:std_logic;
+signal	CPUREQ	:std_logic;
+signal	SUBREQ	:std_logic;
 -- One outstanding graphics transfer. Request and completion are toggles,
 -- so a pulse or the previous acknowledgement cannot be sampled as a new job.
 signal VIDREQ, VIDbusy : std_logic;
 signal VIDdone_sync : std_logic_vector(1 downto 0);
 attribute preserve : boolean;
+attribute preserve of lCPUREQ, lSUBREQ, CPUdone_sync, SUBdone_sync : signal is true;
 attribute preserve of cpu_write_source, cpu_write_memory : signal is true;
 attribute preserve of sub_write_source, sub_write_memory : signal is true;
 attribute preserve of fde_request_source, fde_request_memory, fec_request_source, fec_request_memory : signal is true;
 attribute preserve of lVIDREQ, VIDdone_sync : signal is true;
 attribute altera_attribute : string;
+attribute altera_attribute of lCPUREQ, lSUBREQ, CPUdone_sync, SUBdone_sync : signal is
+    "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 attribute altera_attribute of lVIDREQ, VIDdone_sync : signal is
     "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 -- A completion toggle identifies exactly one outstanding floppy transfer.
@@ -330,7 +334,7 @@ begin
         end process;
         process(memclk) begin
             if rising_edge(memclk) then
-                if lSUBREQ="011" then -- SUB_WRITE_BUNDLE_ADMISSION
+                if lSUBREQ(2)/=lSUBREQ(1) then -- SUB_WRITE_BUNDLE_ADMISSION
                     sub_write_memory <= sub_write_crossing;
                 end if;
             end if;
@@ -348,7 +352,7 @@ begin
                 SUBRDAT0 <= (others=>'0'); SUBRDAT1 <= (others=>'0');
                 SUBRDAT2 <= (others=>'0'); SUBRDAT3 <= (others=>'0');
             elsif rising_edge(SUBCLK) then
-                if subend/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE
+                if SUBdone_sync(1)/=SUBdone_seen then -- SUB_READ_COMPLETION_CAPTURE
                     SUBRDAT0 <= sub_read_crossing(0);
                     SUBRDAT1 <= sub_read_crossing(1);
                     SUBRDAT2 <= sub_read_crossing(2);
@@ -368,15 +372,15 @@ begin
     cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
     write_bundle : if CPU_WRITE_BUNDLE generate
         -- A change in the held completion toggle captures read data and
-        -- asserts CPUACKb together. The bridge consumes both on the following
-        -- CPU edge, with no added command/completion cycle. RMW uses fresh
+        -- asserts CPUACKb together after two synchronization stages. The bridge
+        -- consumes both on the following CPU edge. RMW uses fresh
         -- memory-domain words internally, not these CPU-visible registers.
         process(CPUCLK,rstn) begin
             if rstn='0' then
                 CPURDAT0 <= (others=>'0'); CPURDAT1 <= (others=>'0');
                 CPURDAT2 <= (others=>'0'); CPURDAT3 <= (others=>'0');
             elsif rising_edge(CPUCLK) then
-                if cpuend/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE
+                if CPUdone_sync(1)/=CPUdone_seen then -- CPU_READ_COMPLETION_CAPTURE
                     CPURDAT0 <= cpu_read_crossing(0);
                     CPURDAT1 <= cpu_read_crossing(1);
                     CPURDAT2 <= cpu_read_crossing(2);
@@ -396,8 +400,8 @@ begin
         process(memclk) begin
             if rising_edge(memclk) then
                 -- Same admission edge as CPUJOB. The source was captured
-                -- before the three-stage request synchronizer reached 011.
-                if lCPUREQ="011" then
+                -- before the synchronized request toggle reaches admission.
+                if lCPUREQ(2)/=lCPUREQ(1) then -- CPU_WRITE_BUNDLE_ADMISSION
                     cpu_write_memory <= cpu_write_crossing;
                 end if;
             end if;
@@ -459,8 +463,6 @@ begin
 			lVIDREQ<=(others=>'0');
 			lFDEREQ<=(others=>'0');
 			lFECREQ<=(others=>'0');
-			CPUREC<='0';
-			SUBREC<='0';
 			fdeend<='0';
 			fecend<='0';
 			mem_inidone<='0';
@@ -474,17 +476,11 @@ begin
 			if(clkcount=0 and REFCNT>0)then
 				REFCNT<=REFCNT-1;
 			end if;
-			if(lCPUREQ="011")then
+			if(lCPUREQ(2)/=lCPUREQ(1))then
 				CPUJOB<=nCPUJOB;
-				CPUREC<='1';
-			elsif(CPUREQ='0')then
-				CPUREC<='0';
 			end if;
-			if(lSUBREQ="011")then
+			if(lSUBREQ(2)/=lSUBREQ(1))then
 				SUBJOB<=nSUBJOB;
-				SUBREC<='1';
-			elsif(SUBREQ='0')then
-				SUBREC<='0';
 			end if;
 			if(lVIDREQ(2)/=lVIDREQ(1))then
 				VIDJOB<=JOB_RD;
@@ -2447,8 +2443,10 @@ begin
 			lcpustb<='0';
 			CPUACKb<='0';
             CPUdone_seen<='0';
+            CPUdone_sync<=(others=>'0');
 			CPUREQ<='0';
 		elsif(CPUCLK' event and CPUCLK='1')then
+            CPUdone_sync<=CPUdone_sync(0) & cpuend;
             -- Capture request metadata in its source clock domain before the
             -- existing request synchronizer admits the job to SDRAM. Avoid
             -- live CPU/DMA address-decode paths feeding the 100 MHz pins.
@@ -2464,52 +2462,49 @@ begin
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_WR;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			elsif(CPUWR4='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_WR4;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			elsif(CPURD1='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_RD;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			elsif(CPURD4='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_RD4;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			elsif(CPURMW1='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_RMW;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			elsif(CPURMW4='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
 					nCPUJOB<=JOB_RMW4;
-					CPUREQ<='1';
+					CPUREQ<=not CPUREQ;
 				end if;
 			else
 				lcpustb<='0';
 			end if;
-			if(CPUREC='1')then
-				nCPUJOB<=JOB_NOP;
-				CPUREQ<='0';
-			end if;
-            CPUACKb<=cpuend xor CPUdone_seen;
-            CPUdone_seen<=cpuend;
+
+            CPUACKb<=CPUdone_sync(1) xor CPUdone_seen;
+            CPUdone_seen<=CPUdone_sync(1);
 		end if;
 	end process;
 	
@@ -2521,54 +2516,53 @@ begin
 			lsubstb<='0';
 			SUBACKb<='0';
             SUBdone_seen<='0';
+            SUBdone_sync<=(others=>'0');
 			SUBREQ<='0';
 		elsif(SUBCLK' event and SUBCLK='1')then
+            SUBdone_sync<=SUBdone_sync(0) & subend;
 --			nSUBJOB<=JOB_NOP;
 			if(SUBWR1='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_WR;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			elsif(SUBWR4='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_WR4;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			elsif(SUBRD1='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_RD;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			elsif(SUBRD4='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_RD4;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			elsif(SUBRMW1='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_RMW;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			elsif(SUBRMW4='1')then
 				lsubstb<='1';
 				if(lsubstb='0')then
 					nSUBJOB<=JOB_RMW4;
-					SUBREQ<='1';
+					SUBREQ<=not SUBREQ;
 				end if;
 			else
 				lsubstb<='0';
 			end if;
-			if(SUBREC='1')then
-				nSUBJOB<=JOB_NOP;
-				SUBREQ<='0';
-			end if;
-            SUBdone_seen<=subend;
-            if subend/=SUBdone_seen then
+
+            SUBdone_seen<=SUBdone_sync(1);
+            if SUBdone_sync(1)/=SUBdone_seen then
 				SUBACKb<='1';
 			elsif(SUBREQS='0')then
 				SUBACKb<='0';
