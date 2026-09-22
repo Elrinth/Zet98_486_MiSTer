@@ -371,18 +371,19 @@ begin
             end loop;
         end loop;
         report "PASS: actual GRCG live CPU/DMA masks and delayed SDRAM data, 4096 plane results" severity note;
-        -- Read/compare operates on both bytes. The old source XORed an
-        -- eight-bit slice with a sixteen-bit tile, failing strict simulation.
+        -- Comparison combines all enabled planes, independently of the
+        -- addressed plane, while keeping high and low bytes distinct.
         DMAen<='0'; grcg_write<='0'; FDC_DOE<='0';
         grcg_ioaddr<='0'; cpuod<=x"0080"; grcg_iowr<='1';
         wait until falling_edge(clk); grcg_iowr<='0';
         wait until falling_edge(clk);
         for p in 0 to 3 loop
             grcg_ppsel<=std_logic_vector(to_unsigned(p, 2));
-            plane_read(0)<=tiles(p)(15 downto 8) & not tiles(p)(7 downto 0);
+            plane_read<=tiles;
+            plane_read(p)<=tiles(p)(15 downto 8) & not tiles(p)(7 downto 0);
             wait for 1 ns;
             assert grcg_rdata=x"ff00" report "GRCG compare lost high/low byte distinction" severity failure;
-            plane_read(0)<=not tiles(p)(15 downto 8) & tiles(p)(7 downto 0);
+            plane_read(p)<=not tiles(p)(15 downto 8) & tiles(p)(7 downto 0);
             wait for 1 ns;
             assert grcg_rdata=x"00ff" report "GRCG compare lost low/high byte distinction" severity failure;
         end loop;

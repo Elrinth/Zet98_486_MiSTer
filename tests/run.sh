@@ -6,13 +6,8 @@ trap 'rm -rf "$out"' EXIT
 iverilog -g2012 -Wall -s ao486_io_bridge_tb -o "$out/io.vvp" \
     rtl/cpu/ao486_io_bridge.sv tests/ao486_io_bridge_tb.sv
 vvp "$out/io.vvp"
-bash tests/run-memory-bridge.sh
+bash tests/run-memory-mask-contract.sh
 bash tests/run-decode-buffer.sh
-iverilog -g2012 -Wall -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
-    -o "$out/memory-integration.vvp" rtl/vendor/ao486/memory/avalon_mem.v \
-    rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_io_bridge.sv \
-    rtl/cpu/ao486_bus_bridge.sv tests/ao486_memory_integration_tb.sv
-vvp "$out/memory-integration.vvp"
 bash tests/run-extmem-bridge.sh
 bash tests/run-sdram.sh
 bash tests/run-sdram-write-bundle.sh
@@ -56,6 +51,9 @@ bash tests/run-crtc-compositor.sh
 bash tests/run-disk-interface.sh
 bash tests/run-ide.sh
 bash tests/run-data-bus.sh
+bash tests/run-grcg-compare.sh
+bash tests/run-grcg-sdram.sh
+bash tests/run-egc-rop.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
 bash tests/run-opna-timer.sh

@@ -50,6 +50,7 @@ signal	tile1	:std_logic_vector(7 downto 0);
 signal	tile2	:std_logic_vector(7 downto 0);
 signal	tile3	:std_logic_vector(7 downto 0);
 signal	tilenum	:integer range 0 to 3;
+signal compare0,compare1,compare2,compare3 :std_logic_vector(15 downto 0);
 begin
     -- Split mode sends a static set/preserve pair to the SDRAM controller.
     -- The controller merges its newly read plane data in the memory domain.
@@ -92,7 +93,11 @@ begin
 			end if;
 			lwr(1):=lwr(0);
 			lwr(0):=iocs and iowr and ioaddr;
-			if(lwr="10")then
+			-- A mode write starts a new B,R,G,E tile sequence, including
+			-- when software abandoned an earlier partial sequence.
+			if(iocs='1' and iowr='1' and ioaddr='0')then
+				tilenum<=0; -- GRCG_MODE_RESTART
+			elsif(lwr="10")then
 				if(tilenum<3)then
 					tilenum<=tilenum+1;
 				else
@@ -143,20 +148,19 @@ begin
 				((tile3 & tile3) and pwrdat) when SPLIT_RMW else
 				((tile3 & tile3) and pwrdat) or (memrdat3 and (not pwrdat));
 	
-	memrd1<=	'0'	when pmemcs='0' else
-				prd;
+	memrd1<=	prd when pmemcs='1' and (CGEN='0' or RMWMODE='1') else '0';
 				
-	memrd4<=	'0'	when pmemcs='0' else
-				'0';
-	
-	-- Each byte compares against the repeated tile; do not truncate the
-	-- sixteen-bit memory word before the XOR.
-	prddat<=	memrdat0	when CGEN='0' or RMWMODE='1' else
-				not (memrdat0 xor (tile0 & tile0)) when ppsel="00" else
-				not (memrdat0 xor (tile1 & tile1)) when ppsel="01" else
-				not (memrdat0 xor (tile2 & tile2)) when ppsel="10" else
-				not (memrdat0 xor (tile3 & tile3)) when ppsel="11" else
-				memrdat0;
+	memrd4<=	prd when pmemcs='1' and CGEN='1' and RMWMODE='0' else '0';
+
+	-- TDW reads compare every enabled plane at the same pixel address.
+	-- A result bit is one only when all participating color bits match.
+	-- Disabled planes are neutral; the CPU address plane is irrelevant.
+	compare0 <= not (memrdat0 xor (tile0 & tile0)) when PGEN(0)='1' else x"ffff";
+	compare1 <= not (memrdat1 xor (tile1 & tile1)) when PGEN(1)='1' else x"ffff";
+	compare2 <= not (memrdat2 xor (tile2 & tile2)) when PGEN(2)='1' else x"ffff";
+	compare3 <= not (memrdat3 xor (tile3 & tile3)) when PGEN(3)='1' else x"ffff";
+	prddat<=memrdat0 when CGEN='0' or RMWMODE='1' else
+		compare0 and compare1 and compare2 and compare3;
 	
 	poe<=	pmemcs and prd;
 	

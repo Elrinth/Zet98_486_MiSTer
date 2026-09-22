@@ -42,7 +42,7 @@ module ao486_memory_integration_tb;
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_bus_bridge bridge (.*);
+    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (.*);
 
     reg [7:0] memory [0:65535];
     reg [7:0] expected [0:65535];

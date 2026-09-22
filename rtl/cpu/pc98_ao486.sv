@@ -138,7 +138,8 @@ module pc98_ao486 #(
         .io_write_address(io_write_address), .io_write_length(io_write_length),
         .io_write_data(io_write_data), .io_write_done(io_write_done)
     );
-    ao486_bus_bridge bridge (
+    // Proven against the vendored Avalon generator by run-memory-mask-contract.sh.
+    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (
         .clk(clk), .reset(cpu_reset),
         .avm_address(avm_address), .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount), .avm_write(avm_write), .avm_read(avm_read),

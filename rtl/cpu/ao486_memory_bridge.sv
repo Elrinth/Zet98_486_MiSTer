@@ -21,7 +21,8 @@
 // Used by the opt-in ao486 build; the default CPU remains Zet.
 module ao486_memory_bridge #(
     parameter NARROW_READS = 1'b1,
-    parameter SKIP_EMPTY_HALVES = 1'b1
+    parameter SKIP_EMPTY_HALVES = 1'b1,
+    parameter READ_MASK_ALWAYS_NONZERO = 1'b0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -56,8 +57,15 @@ module ao486_memory_bridge #(
     wire [1:0] half_select = high_half ? byte_enable[3:2] : byte_enable[1:0];
     wire skip_half = half_select == 0;
     wire [3:0] request_enable = avm_write ||
-        (NARROW_READS && avm_burstcount == 1 && avm_byteenable != 0)
+        (NARROW_READS && avm_burstcount == 1 &&
+         (READ_MASK_ALWAYS_NONZERO || avm_byteenable != 0))
         ? avm_byteenable : 4'b1111;
+    // The actual ao486 Avalon generator never emits an empty read mask.
+    // Its length-dependent upper lanes need not reach the first-half decision.
+    // Keep the zero-mask fallback for other masters/default configurations.
+    wire first_high_half = SKIP_EMPTY_HALVES && avm_byteenable[1:0] == 0 &&
+        (avm_write || (NARROW_READS && avm_burstcount == 1 &&
+                      (READ_MASK_ALWAYS_NONZERO || avm_byteenable[3:2] != 0)));
     wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0);
 
     assign busy = state != IDLE;
@@ -92,7 +100,7 @@ module ao486_memory_bridge #(
                     // Byte/word operations need no transfer/release states
                     // for a halfword that has no selected bytes. ACK release
                     // is still required after every actual legacy transfer.
-                    high_half <= SKIP_EMPTY_HALVES && request_enable[1:0] == 0;
+                    high_half <= first_high_half;
                     read_low <= 16'hffff;
                     state <= TRANSFER;
                 end
@@ -125,6 +133,8 @@ module ao486_memory_bridge #(
         if (avm_read && avm_write) $fatal(1, "simultaneous memory read/write");
         if (avm_read && (avm_burstcount == 0 || avm_burstcount > 8))
             $fatal(1, "ao486 read burst must contain 1..8 DWORDs");
+        if (READ_MASK_ALWAYS_NONZERO && avm_read && avm_byteenable == 0)
+            $fatal(1, "ao486 nonzero read-mask contract violated");
     end
     // synthesis translate_on
 endmodule

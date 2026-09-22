@@ -6,7 +6,9 @@
 // I/O already in progress cannot be interrupted by a prefetch/memory request.
 // This is a same-clock bridge; external DMA arbitration, PC-98 address decoding
 // and interrupt acknowledgement are separate integration responsibilities.
-module ao486_bus_bridge (
+module ao486_bus_bridge #(
+    parameter READ_MASK_ALWAYS_NONZERO = 1'b0
+) (
     input  wire        clk,
     input  wire        reset,
     input  wire [29:0] avm_address,
@@ -72,7 +74,7 @@ module ao486_bus_bridge (
     assign bus_write = bus_io ? io_write : mem_write;
     assign bus_strobe = !reset && (bus_io ? io_strobe : owner == MEMORY && mem_strobe);
 
-    ao486_memory_bridge memory_bridge (
+    ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO)) memory_bridge (
         .clk(clk), .reset(reset), .avm_address(avm_address),
         .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount),
