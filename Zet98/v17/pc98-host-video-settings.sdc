@@ -26,10 +26,16 @@ foreach instance {
         acknowledge {acknowledge_sync[0]}
     } {
         set launch [get_registers "${instance}|${launch_name}"]
+        # Quartus can duplicate a launch register for routing. get_registers
+        # includes those physical copies by default, even for an exact name.
+        # Require one original, then constrain every copy to this first stage.
+        # The destination synchronizer must still be exactly one register.
+        set launch_original [get_registers -no_duplicates "${instance}|${launch_name}"]
         set first [get_registers "${instance}|${first_name}"]
-        if {[get_collection_size $launch] != 1 || [get_collection_size $first] != 1} {
+        if {[get_collection_size $launch_original] != 1 || [get_collection_size $launch] < 1 || [get_collection_size $first] != 1} {
             error "Missing host snapshot control synchronizer: $instance / $launch_name"
         }
+        post_message "Host snapshot control $instance / $launch_name: [get_collection_size $launch] launch copies, one first stage"
         set_false_path -from $launch -to $first
     }
 }
