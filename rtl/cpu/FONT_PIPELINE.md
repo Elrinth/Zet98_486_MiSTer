@@ -59,4 +59,7 @@ were rejected. Private captures and audit logs remain outside version control.
 These results verify this combined rendering sequence. They do not verify
 the game's character conversion, live input arguments, complete game state,
 frame rate or sound. Rusty's malformed title-menu text remained present on
-the same FullFont50 build; a live-game capture is the next diagnostic step.
+the same FullFont50 build. A subsequent comparison isolated an English font
+conversion issue in the game's older driver; see the
+[GDC compatibility correction](../../disk-templates/dos620/RUSTY_GDC_FONT.md)
+and its separate direct hardware test.

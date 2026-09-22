@@ -209,3 +209,9 @@ The subsequent [combined font pipeline capture](cpu/FONT_PIPELINE.md) passes
 all 53,312 payload bytes on FullFont50 and in NP2kai. It connects the font
 reads, upper-RAM expansion and GRCG writes in one program; actual game
 character selection remains outside its scope.
+
+The title lettering was subsequently corrected on the same FullFont50 core
+by fixing two conversion constants in the private English game's older GDC
+driver. See the [separate driver result](../disk-templates/dos620/RUSTY_GDC_FONT.md).
+This distinguishes that menu problem from the ROM-address and missing-tail
+defects repaired in the core itself.
