@@ -1,7 +1,8 @@
 # Bounded build clients
 
 Use PowerShell 7 for `build.ps1`. Its default FPGA job is one container with
-3 CPUs, 8 GiB RAM, no extra swap and no network. Sources and Quartus databases
+8 CPUs, 8 GiB RAM, no extra swap and no network. The user authorized eight
+cores on 2026-09-22 for their 16-core workstation. Sources and Quartus databases
 live in the container's Linux filesystem. Windows bind mounts are not used.
 
 `docker-command.ps1` runs short Docker commands with explicit argument arrays,

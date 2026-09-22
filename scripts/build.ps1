@@ -3,7 +3,7 @@ param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
     [string]$DockerContext = 'desktop-linux',
     [ValidateRange(1, 16)]
-    [int]$BuildCpus = 3,
+    [int]$BuildCpus = 8,
     [ValidateRange(4, 64)]
     [int]$BuildMemoryGB = 8,
     [ValidateRange(1, 3)]
