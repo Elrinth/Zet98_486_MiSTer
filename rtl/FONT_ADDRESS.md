@@ -175,3 +175,25 @@ the retrieved D88 hash is
 `38f66d0f0dc25d1f656a254414e0901dd17a740171891d1087ca75379c4ab578`.
 Thus the tested IN-AL/XOR-AH/STOSW sequence introduces no additional errors.
 It does not explain the remaining malformed menu on that build.
+
+## FullFont50 hardware result
+
+On 2026-09-22, the SuperStation One passes the same word/upper capture on
+FullFont50: all 736 samples match, with zero high-byte errors. The 29 missing
+535Ch bytes are now correct. The capture is byte-identical to the NP2kai
+reference (`f070fbeef6c7c59f237e21cdbe4b19861589b154f0426994dd5a593f41f889c8`).
+The retrieved disposable D88 hash is
+`b3e7132ac03905441bf1257e4fab5547e3f12c7a9e409e904ffde7111a64e04c`.
+
+The RBF uses RTL source e5aa389 at 50 MHz with 64 MiB extended RAM, the 8 KiB
+low-memory cache, upper-RAM instruction caching, PC-9801-86 sound, raw IDE
+and MIDI UART. Its SHA-256 is
+`41009f06741fbe4a28746725b85eb66b2fb889c3619693b76057a28ae9537f97`.
+The revised graphics-handshake constraint fff8cce passes all four operating
+corners on that unchanged fitted database, minimum +0.082 ns; see
+`GRAPHICS_TRANSFER.md`. The design uses 478/553 M10K blocks and 34,341/41,910
+ALMs. The ROM hash is the same `647b5fa9...42f21db7` used for prior captures.
+
+This confirms the representative hardware font reads including the previously
+missing tail glyph. The simulation additionally covers every tail byte.
+Neither result alone establishes complete Rusty rendering or game performance.
