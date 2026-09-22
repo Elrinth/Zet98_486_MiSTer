@@ -16,21 +16,29 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--context', default='desktop-linux')
+    parser.add_argument('--archive', type=Path, help='Tar already exported by the bounded PowerShell runner')
     parser.add_argument('container')
     parser.add_argument('source')
     parser.add_argument('destination', type=Path)
     args = parser.parse_args()
     destination = args.destination.resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    fd, archive_name = tempfile.mkstemp(prefix='quartus-export-', suffix='.tar', dir=str(destination.parent))
-    archive = Path(archive_name)
-    with os.fdopen(fd, 'wb') as stream:
-        result = subprocess.run(['docker', '--context', args.context, 'cp',
-                                 args.container + ':' + args.source.rstrip('/') + '/.', '-'],
-                                stdout=stream, stderr=subprocess.PIPE)
-    if result.returncode:
-        raise SystemExit('Docker export failed; archive retained at {}\n{}'.format(
-            archive, result.stderr.decode('utf-8', 'replace')))
+    archive = args.archive
+    if archive is None:
+        fd, archive_name = tempfile.mkstemp(prefix='quartus-export-', suffix='.tar', dir=str(destination.parent))
+        archive = Path(archive_name)
+        with os.fdopen(fd, 'wb') as stream:
+            # Legacy callers are bounded too. New Windows build/report callers
+            # use docker-command.ps1, including child-tree cleanup on timeout.
+            try:
+                result = subprocess.run(['docker', '--context', args.context, 'cp',
+                                         args.container + ':' + args.source.rstrip('/') + '/.', '-'],
+                                        stdout=stream, stderr=subprocess.PIPE, timeout=60)
+            except subprocess.TimeoutExpired:
+                raise SystemExit('Docker export timed out; partial archive retained at {}'.format(archive))
+        if result.returncode:
+            raise SystemExit('Docker export failed; archive retained at {}\n{}'.format(
+                archive, result.stderr.decode('utf-8', 'replace')))
     with tarfile.open(str(archive), 'r:') as tar:
         members = tar.getmembers()
         for member in members:

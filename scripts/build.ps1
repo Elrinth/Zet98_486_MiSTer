@@ -1,3 +1,4 @@
+#requires -Version 7.0
 param(
     [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
     [string]$DockerContext = 'desktop-linux',
@@ -21,10 +22,12 @@ param(
     [int]$LowMemoryCacheKB = 8,
     [switch]$RawIde,
     [switch]$MidiUart,
+    [switch]$StartOnly,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'docker-command.ps1')
 if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -ne 'ao486') { throw 'Upper conventional RAM instruction cache requires ao486.' }
@@ -32,8 +35,8 @@ if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requi
 # Avoid saturating an interactive workstation. This inventory does not use
 # Docker stats, whose dashboard polling previously accumulated hung clients.
 if (-not $PrepareOnly) {
-    $activeBuilds = @(& docker --context $DockerContext ps --filter 'name=zet98-quartus-' --format '{{.Names}}')
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot check active builds; no new build started.' }
+    $inventory = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'ps','--filter','name=zet98-quartus-','--format','{{.Names}}')
+    $activeBuilds = @($inventory -split '\r?\n' | Where-Object { $_ })
     if ($activeBuilds.Count -ge $MaxConcurrentBuilds) {
         throw "Already running $($activeBuilds.Count) Quartus build(s); limit is $MaxConcurrentBuilds. Let those finish before starting another."
     }
@@ -119,9 +122,8 @@ try {
         Write-Host "Prepared $SystemClockMHz MHz source snapshot: $sourceRoot"
         return
     }
-    & docker --context $DockerContext image inspect $Image --format '{{.Id}}' |
+    Invoke-DockerCommand -Arguments @('--context',$DockerContext,'image','inspect',$Image,'--format','{{.Id}}') |
         Set-Content -LiteralPath (Join-Path $buildRoot 'toolchain-image.txt')
-    if ($LASTEXITCODE -ne 0) { throw 'Quartus Docker image is not installed.' }
     Write-Host "Build directory: $buildRoot"
     # Quartus performs many small random database reads. Build on Docker's
     # Linux filesystem: Windows bind shares can stall these accesses in 9P.
@@ -130,24 +132,29 @@ try {
     $compileCommand = 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
     $requireUart = if ($MidiUart) { 1 } else { 0 }
     $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
-    $containerId = & docker --context $DockerContext create --name $containerName `
-        --cpus $BuildCpus --memory "${BuildMemoryGB}g" --memory-swap "${BuildMemoryGB}g" `
-        --network none --workdir /project/Zet98/v17 $Image bash -lc `
-        $compileCommand
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated Quartus container.' }
+    $containerId = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'create','--name',$containerName,
+        '--cpus',"$BuildCpus",'--memory',"${BuildMemoryGB}g",'--memory-swap',"${BuildMemoryGB}g",
+        '--network','none','--workdir','/project/Zet98/v17',$Image,'bash','-lc',$compileCommand)
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
-    & docker --context $DockerContext cp "$sourceRoot/." "${containerName}:/project/"
-    if ($LASTEXITCODE -ne 0) { throw "Cannot copy source into $containerName; container retained." }
-    & docker --context $DockerContext start -a $containerName 2>&1 |
-        Tee-Object -FilePath (Join-Path $buildRoot 'quartus.log')
-    $compileExit = & docker --context $DockerContext inspect $containerName --format '{{.State.ExitCode}}'
-    if ($LASTEXITCODE -ne 0) { throw "Cannot inspect $containerName; container retained." }
-    & python (Join-Path $PSScriptRoot 'docker-export.py') --context $DockerContext `
-        $containerName /project/Zet98/v17 (Join-Path $sourceRoot 'Zet98/v17')
-    if ($LASTEXITCODE -ne 0) { throw "Cannot export results from $containerName; container retained." }
-    & docker --context $DockerContext rm $containerName | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warning "Export succeeded; cleanup of $containerName failed." }
-    if ($compileExit -ne '0') { throw "Quartus failed. See $buildRoot/quartus.log" }
+    $containerName | Set-Content -LiteralPath (Join-Path $buildRoot 'container-name.txt')
+    Invoke-DockerCommand -Arguments @('--context',$DockerContext,'cp',"$sourceRoot/.","${containerName}:/project/") -TimeoutSeconds 60 | Out-Null
+    Invoke-DockerCommand -Arguments @('--context',$DockerContext,'start',$containerName) | Out-Null
+    Write-Host "Started detached container: $containerName"
+    if ($StartOnly) {
+        Write-Host 'Build is running; inspect this same container and export results before removing it.'
+        return
+    }
+    do {
+        $containerState = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'inspect',$containerName,'--format','{{json .State}}') | ConvertFrom-Json
+        if ($containerState.Paused) { throw "Build container $containerName is paused; inspect before resuming." }
+        if ($containerState.Running) { Start-Sleep -Seconds 10 }
+    } while ($containerState.Running)
+    if ($containerState.Status -notin @('exited','dead')) { throw "Unexpected container state: $($containerState.Status)" }
+    Invoke-DockerCommand -Arguments @('--context',$DockerContext,'logs',$containerName) -TimeoutSeconds 30 |
+        Set-Content -LiteralPath (Join-Path $buildRoot 'quartus.log')
+    Export-DockerDirectory -DockerContext $DockerContext -Container $containerName -Source /project/Zet98/v17 -Destination (Join-Path $sourceRoot 'Zet98/v17')
+    Invoke-DockerCommand -Arguments @('--context',$DockerContext,'rm',$containerName) | Out-Null
+    if ($containerState.ExitCode -ne 0 -or $containerState.OOMKilled) { throw "Quartus failed. See $buildRoot/quartus.log" }
     Write-Host "RBF and reports: $sourceRoot/Zet98/v17/output_files"
     $timing = & (Join-Path $PSScriptRoot 'read-timing.ps1') -SummaryPath `
         (Join-Path $sourceRoot 'Zet98/v17/output_files/release-Zet98MiSTer.sta.summary')
