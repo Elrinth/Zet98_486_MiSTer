@@ -4,7 +4,7 @@
 module pc98_egc_word_engine #(
     parameter integer ADDRESS_WIDTH = 22
 ) (
-    input wire clk, reset, egc_enable,
+    input wire clk, reset, soft_reset, egc_enable,
     input wire [15:1] io_address,
     input wire [1:0] io_select,
     input wire [15:0] io_writedata,
@@ -28,14 +28,18 @@ module pc98_egc_word_engine #(
     localparam [3:0] IDLE=0, READ_MEMORY=1, READ_RESULT=2,
         WRITE_SHIFT=3, WRITE_BUILD=4, WRITE_MEMORY=5, RELEASE=6, REJECT=7;
     reg [3:0] state;
+    reg reset_pending;
+    // Global reset is shared with SDRAMC. A CPU-only reset must drain an
+    // already accepted memory operation with its original held operands.
+    wire state_reset = reset || (reset_pending && state == IDLE);
     wire [15:0] access_control, color_select, operation, foreground, pixel_mask,
         background, shift_control, bit_length;
     wire [63:0] foreground_words, background_words;
     wire shift_reload;
     pc98_egc_registers registers (
-        .clk(clk), .reset(reset), .egc_enable(egc_enable),
+        .clk(clk), .reset(state_reset), .egc_enable(egc_enable),
         .io_address(io_address), .io_select(io_select), .io_writedata(io_writedata),
-        .io_strobe(io_strobe), .io_write(io_write), .port_selected(),
+        .io_strobe(io_strobe && !reset_pending && !soft_reset), .io_write(io_write), .port_selected(),
         .access_control(access_control), .color_select(color_select), .operation(operation),
         .foreground(foreground), .pixel_mask(pixel_mask), .background(background),
         .shift_control(shift_control), .bit_length(bit_length),
@@ -53,7 +57,7 @@ module pc98_egc_word_engine #(
     wire [63:0] shifted_words;
     wire [15:0] shifted_clip;
     pc98_egc_shift shifter (
-        .clk(clk), .reset(reset), .reload(shift_reload), .advance(shift_advance),
+        .clk(clk), .reset(state_reset), .reload(shift_reload), .advance(shift_advance),
         .shift_control(shift_control), .bit_length(bit_length), .source_words(shift_input),
         .shifted_words(shifted_words), .clip_mask(shifted_clip), .result_valid()
     );
@@ -72,11 +76,16 @@ module pc98_egc_word_engine #(
         .base_words(next_base), .xor_mask_words(next_mask),
         .load_pattern_on_write(load_on_write), .configuration_valid(valid_configuration)
     );
-    assign busy = state != IDLE;
+    assign busy = state != IDLE || reset_pending || soft_reset;
     assign memory_read4 = state == READ_MEMORY;
     assign memory_rmw4 = state == WRITE_MEMORY;
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset) reset_pending<=0;
+        else if (soft_reset) reset_pending<=1;
+        else if (state == IDLE) reset_pending<=0;
+    end
+    always @(posedge clk) begin
+        if (state_reset) begin
             state<=IDLE; acknowledge<=0; fault<=0; readdata<=0;
             memory_address<=0; memory_bank<=0; memory_bytes<=0; memory_planes<=0;
             memory_base<=0; memory_xor_mask<=64'hffffffffffffffff;
@@ -89,7 +98,7 @@ module pc98_egc_word_engine #(
             if (shift_reload) source_advanced<=0;
             else if (shift_advance) source_advanced<=1;
             case (state)
-                IDLE: if (request) begin
+                IDLE: if (request && !soft_reset && !reset_pending) begin
                     // The CPU request may remain asserted until ACK; no live
                     // request metadata is used after this acceptance edge.
                     memory_address<={request_address[ADDRESS_WIDTH-1:2],2'b00};
@@ -120,7 +129,7 @@ module pc98_egc_word_engine #(
                         readdata<=returned_words[16*transfer_color[9:8] +:16];
                     else readdata<=selected_source[16*transfer_color[9:8] +:16];
                     if (!transfer_operation[10]) retained_source<=shifted_words;
-                    acknowledge<=1; state<=RELEASE;
+                    acknowledge<=!reset_pending && !soft_reset; state<=RELEASE;
                 end
                 WRITE_SHIFT: state<=WRITE_BUILD;
                 WRITE_BUILD: begin
@@ -134,10 +143,14 @@ module pc98_egc_word_engine #(
                     // SDRAMC returns the old destination used for this RMW,
                     // including when every byte/plane was masked from writing.
                     if (load_on_write) pattern_latch<=memory_readdata;
-                    acknowledge<=1; state<=RELEASE;
+                    acknowledge<=!reset_pending && !soft_reset; state<=RELEASE;
                 end
-                RELEASE: if (!request) state<=IDLE;
-                REJECT: begin acknowledge<=1; fault<=1; readdata<=16'hffff; state<=RELEASE; end
+                RELEASE: if (!request || reset_pending) state<=IDLE;
+                REJECT: begin
+                    acknowledge<=!reset_pending && !soft_reset;
+                    fault<=!reset_pending && !soft_reset;
+                    readdata<=16'hffff; state<=RELEASE;
+                end
                 default: state<=IDLE;
             endcase
         end

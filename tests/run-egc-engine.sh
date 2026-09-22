@@ -27,12 +27,13 @@ for mhz in 20 60 100; do
         fi
     done
 done
-for mutation in retained_pattern replay read_shift early_ack; do
+for mutation in retained_pattern replay read_shift early_ack reset_early; do
     case "$mutation" in
         retained_pattern) sed 's/if (load_on_write) pattern_latch<=memory_readdata;/if (load_on_write) pattern_latch<=memory_base;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
-        replay) sed 's/RELEASE: if (!request) state<=IDLE;/RELEASE: state<=IDLE;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
+        replay) sed 's/RELEASE: if (!request || reset_pending) state<=IDLE;/RELEASE: state<=IDLE;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
         read_shift) sed 's/state == READ_MEMORY \&\& memory_acknowledge \&\& !transfer_operation\[10\]/state == READ_MEMORY \&\& !transfer_operation[10]/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
         early_ack) sed 's/WRITE_MEMORY: if (memory_acknowledge)/WRITE_MEMORY: if (1\x27b1)/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
+        reset_early) sed 's/reset || (reset_pending \&\& state == IDLE)/reset || reset_pending/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
     esac
     iverilog -g2012 -s egc_word_engine_tb -Pegc_word_engine_tb.FULL=0 -o "$out/bad" \
         "${sources[@]}" "$out/bad.sv" "$out/memory.v" tests/egc_word_engine_tb.sv

@@ -5,7 +5,7 @@ module egc_word_engine_tb;
         $dumpfile("egc-engine.vcd");
         $dumpvars(0,egc_word_engine_tb);
     end
-    reg clk=0,memclk=0,reset=1,egc_enable=1;
+    reg clk=0,memclk=0,reset=1,soft_reset=0,egc_enable=1;
     always #(500.0/CPU_MHZ) clk=~clk;
     initial begin #(MEM_PHASE_PS/1000.0); forever #5 memclk=~memclk; end
     reg [15:1] io_address=0;
@@ -185,7 +185,48 @@ module egc_word_engine_tb;
     function automatic [63:0] varying(input integer seed);
         varying={16'(seed*919+16'h93ed),16'(seed*237+16'ha732),16'(seed*41+16'h60c5),16'(seed*811+16'h715e)};
     endfunction
-    integer op,alignment,step,rows;
+    task abort_transaction(input bit wr,input bit late_reset);
+        integer old_reads,old_writes,old_beats,watch;
+        begin
+            // Non-default source, mask and pattern make clearing registers
+            // before the memory write completes observable on the real pins.
+            program_register(0,16'hfff2);program_register(1,0);
+            program_register(2,16'h0200);program_register(4,16'h5aa5);
+            program_register(6,0);program_register(7,15);
+            consume_source({4{16'h3ca9}});
+            expected_words=raster(16'h3ca9,varying(91));
+            wanted_address=22'h30600;wanted_bank=2;wanted_planes=4'b1101;
+            supplied_words=varying(91);want_write=wr;active=1;
+            old_reads=reads;old_writes=writes;old_beats=beats;
+            @(negedge clk);request=1;request_write=wr;request_address=wanted_address;
+            request_bank=2;request_bytes=3;request_writedata=16'h3ca9;
+            wait(memory_read4 || memory_rmw4);
+            if(late_reset) wait(reads>old_reads);
+            @(negedge clk);soft_reset=1;request=0;
+            repeat(3) begin
+                @(negedge clk);
+                if(acknowledge || fault) $fatal(1,"EGC aborted request acknowledged");
+            end
+            soft_reset=0;watch=0;
+            while(busy && watch<1000) begin
+                @(negedge clk);watch=watch+1;
+                if(acknowledge || fault) $fatal(1,"EGC aborted request acknowledged");
+            end
+            if(busy || reads!=old_reads+1 || writes!=old_writes+wr || beats!=old_beats+4*wr)
+                $fatal(1,"EGC reset failed to drain complete memory transaction");
+            if(dut.access_control!==16'hfff0 || dut.operation!==0 || dut.pattern_latch!==0 ||
+               dut.retained_source!==0 || dut.source_advanced!==0)
+                $fatal(1,"EGC soft reset did not clear programming and retained state");
+            active=0;
+            regs[0]=16'hfff0;regs[1]=16'h00ff;regs[2]=0;regs[3]=0;
+            regs[4]=16'hffff;regs[5]=0;regs[6]=0;regs[7]=15;
+            model_source=0;model_pattern=0;model_clip=16'hffff;restart_shift();
+            repeat(4) @(negedge clk);
+            // A new operation must not consume an old completion toggle.
+            transaction(1,22'h30610,1,16'h8d17,varying(113));
+        end
+    endtask
+    integer op,alignment,step,rows,copy_case;
     initial begin
         regs[0]=16'hfff0;regs[1]=16'h00ff;regs[2]=0;regs[3]=0;
         regs[4]=16'hffff;regs[5]=0;regs[6]=0;regs[7]=15;
@@ -223,6 +264,25 @@ module egc_word_engine_tb;
                 if(step>=5) $fatal(1,"EGC alignment row did not finish");
             end
         end
+        // Game-shaped copies: 640 pixels aligned and 624 pixels with eight
+        // source pixels skipped. Both consume forty word pairs per row; the
+        // shifted case primes once before writing its 39 useful words.
+        // Synthetic pixels only; no game code or assets are included.
+        for(copy_case=0;copy_case<2;copy_case=copy_case+1) begin
+            program_register(1,16'h00ff);program_register(2,16'h28f0);
+            program_register(6,copy_case ? 8 : 0);
+            program_register(7,copy_case ? 623 : 639);
+            for(rows=0;rows<(FULL ? 3 : 1);rows=rows+1) begin
+                for(step=0;step<40;step=step+1) begin
+                    transaction(0,22'h20400+4*step+160*rows,0,0,varying(rows*41+step));
+                    transaction(1,22'h30500+4*step+160*rows,1,16'hffff,varying(rows*53+step));
+                end
+                if(queued!=0 || src_skip!=regs[6][3:0] || left_pixels!=(copy_case ? 624 : 640))
+                    $fatal(1,"EGC game-shaped row did not complete at forty words");
+            end
+        end
+        abort_transaction(0,0);abort_transaction(0,1);
+        abort_transaction(1,0);abort_transaction(1,1);
         // Byte accesses are explicitly rejected while this engine is word-only.
         @(negedge clk);request=1;request_write=1;request_bytes=1;
         wait(acknowledge);#1;

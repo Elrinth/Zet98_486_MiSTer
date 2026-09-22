@@ -203,9 +203,13 @@ byte accesses and disabled/unsupported configurations with a fault response;
 the machine integration must define how to expose unsupported requests.
 Read selection follows NP2's native word path, while physical compare-mode
 behavior and readback during a priming transfer remain unqualified. It assumes
-shared global reset with SDRAMC. Soft reset with an outstanding memory request,
-GRCG/EGC enable arbitration and the machine's CPU/DMA/drawing routing must be
-resolved before enabling it for games.
+shared global reset with SDRAMC. A separate CPU-only `soft_reset` now blocks
+new requests, drains an accepted memory operation with its held operands, and
+suppresses its CPU acknowledgement. Programming and retained graphics state
+clear after the engine reaches idle. The machine must retain EGC ownership of
+the memory port throughout this drain, even if CPU reset changes its enable or
+arbitration signals. GRCG/EGC enable arbitration and the machine's CPU/DMA/drawing
+routing remain unresolved integration requirements.
 
 `tests/run-egc-engine.sh` synthesizes the actual VHDL SDRAMC with GHDL and
 connects it to the SystemVerilog engine. A wiring-only Verilog adapter keeps
@@ -226,3 +230,15 @@ All four negative controls failed: stale retained pattern, repeated held
 request, repeated source advancement, and early acknowledgement. Exit status
 was zero, no OOM occurred, and the test container was removed. These simulated
 clock rates do not qualify FPGA timing or establish an EGC game speedup.
+
+The reset extension passed in
+`build/simulation-20260922-103944-7a1309/tests.log`: 9,980 normal transactions
+and 24 interrupted transactions across the same clock/phase matrix. The
+interrupted cases cover reads and writes both before and after the physical
+SDRAM read command. They check the complete pin-level transaction, suppressed
+CPU completion, cleared programming/latches and a subsequent independent
+request. Clearing state before the memory operation drains is rejected as a
+fifth negative control. The regression also copies synthetic 640-pixel aligned
+and 624-pixel shifted rows, checking forty source/destination word pairs and
+automatic row restart. These are the transfer sizes observed in a local Rusty
+driver; no game code or assets are included in the test.
