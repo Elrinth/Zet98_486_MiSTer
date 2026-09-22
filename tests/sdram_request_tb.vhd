@@ -10,7 +10,8 @@ use std.env.all;
 entity sdram_request_tb is
     generic (CPU_MHZ : positive := 50; BUFFERED : boolean := false;
              MEM_PHASE_PS : natural := 0; USE_SUB : boolean := false;
-             HOLD_COMPLETION_CYCLES : natural := 0);
+             HOLD_COMPLETION_CYCLES : natural := 0;
+             AFFINE_TEST : boolean := false; AFFINE_CASES : positive := 16384);
 end entity;
 architecture test of sdram_request_tb is
     constant AW : positive := 22;
@@ -25,6 +26,8 @@ architecture test of sdram_request_tb is
     signal expected_wd : words_t;
     signal expected_rd : words_t;
     signal preserve_mask : std_logic_vector(15 downto 0) := x"0000";
+    signal affine : std_logic := '0';
+    signal xor_masks : std_logic_vector(63 downto 0) := (others=>'0');
     signal rd, cpu_rd, sub_rd : words_t;
     signal cpu_req, sub_req : std_logic_vector(5 downto 0);
     signal cpu_ack, sub_ack : std_logic;
@@ -49,7 +52,11 @@ begin
     sub_req <= requests when USE_SUB else (others=>'0');
     ack <= sub_ack when USE_SUB else cpu_ack;
     rd <= sub_rd when USE_SUB else cpu_rd;
-    dut : entity work.SDRAMC generic map(AW,100,64000/8192,BUFFERED and not USE_SUB,BUFFERED and USE_SUB) port map(
+    assert not AFFINE_TEST or (BUFFERED and not USE_SUB)
+        report "Affine test requires buffered CPU port" severity failure;
+    dut : entity work.SDRAMC generic map(ADRWIDTH=>AW, CLKMHZ=>100, REFCYC=>64000/8192,
+        CPU_WRITE_BUNDLE=>BUFFERED and not USE_SUB, SUB_WRITE_BUNDLE=>BUFFERED and USE_SUB,
+        CPU_AFFINE_RMW=>AFFINE_TEST) port map(
         PMEMCKE=>cke, PMEMCS_N=>cs, PMEMRAS_N=>ras, PMEMCAS_N=>cas,
         PMEMWE_N=>we, PMEMUDQ=>udq, PMEMLDQ=>ldq, PMEMBA1=>ba1,
         PMEMBA0=>ba0, PMEMADR=>ma, PMEMDAT=>dq,
@@ -69,7 +76,7 @@ begin
         VIDDAT2=>open, VIDDAT3=>open, VIDRD=>'0', VIDACK=>open, VIDCLK=>cpuclk,
         FDERDAT=>open, FDEWAIT=>open, FDECLK=>cpuclk,
         FECRDAT=>open, FECWAIT=>open, FECCLK=>cpuclk,
-        mem_inidone=>ready, memclk=>memclk, rstn=>rstn
+        mem_inidone=>ready, memclk=>memclk, rstn=>rstn, CPUAFFINE=>affine, CPUXORMASK=>xor_masks
     );
 
     process
@@ -132,24 +139,47 @@ begin
         variable a, r, w, beats, total : natural;
         variable rowcol : unsigned(AW-1 downto 0);
         variable mask, value, read_value : std_logic_vector(15 downto 0);
+        variable source_value, pattern_value, result_value, base_value : std_logic_vector(15 downto 0);
+        variable coefficients : std_logic_vector(63 downto 0);
+        variable operation : std_logic_vector(7 downto 0);
+        variable tests_in_mode, case_id, zero_index, actual_index : natural;
+        variable chosen_bytes : std_logic_vector(1 downto 0);
+        variable chosen_planes : std_logic_vector(3 downto 0);
+        variable affine_case : boolean;
     begin
         wait for 137 ns; rstn<='1';
         wait until ready='1';
         wait for 300 ns;
         total:=0;
         for mode in 0 to 5 loop
-            for n in 0 to 63 loop
+            tests_in_mode:=64;
+            if AFFINE_TEST and mode=5 then tests_in_mode:=AFFINE_CASES+64; end if;
+            for n in 0 to tests_in_mode-1 loop
+                affine_case:=AFFINE_TEST and mode=5 and n<AFFINE_CASES;
+                -- Odd multiplier permutes all operation/plane/byte tuples
+                -- and gives the shorter clock sweeps varied active masks.
+                case_id:=(n*4051) mod 16384;
+                if AFFINE_TEST and (mode/=5 or affine_case) then affine<='1'; else affine<='0'; end if;
                 wait until falling_edge(cpuclk);
                 rowcol:=to_unsigned((n*1031+mode*131071) mod 2**AW,AW);
                 -- Four-plane operations use plane-aligned addresses in Zet98.
                 if mode=1 or mode=3 or mode=5 then rowcol(1 downto 0):="00"; end if;
                 expected_address<=std_logic_vector(rowcol); address<=std_logic_vector(rowcol);
                 expected_bank<=std_logic_vector(to_unsigned(n mod 4,2)); bank<=std_logic_vector(to_unsigned(n mod 4,2));
-                expected_bytes<=std_logic_vector(to_unsigned((n/4) mod 4,2)); bytes<=std_logic_vector(to_unsigned((n/4) mod 4,2));
-                expected_planes<=std_logic_vector(to_unsigned(n mod 16,4)); planes<=std_logic_vector(to_unsigned(n mod 16,4));
+                if affine_case then
+                    chosen_bytes:=std_logic_vector(to_unsigned((case_id/4096) mod 4,2));
+                    chosen_planes:=std_logic_vector(to_unsigned((case_id/256) mod 16,4));
+                else
+                    chosen_bytes:=std_logic_vector(to_unsigned((n/4) mod 4,2));
+                    chosen_planes:=std_logic_vector(to_unsigned(n mod 16,4));
+                end if;
+                expected_bytes<=chosen_bytes; bytes<=chosen_bytes;
+                expected_planes<=chosen_planes; planes<=chosen_planes;
                 mask:=x"0000";
                 if BUFFERED and mode>=4 then mask:=std_logic_vector(to_unsigned((n*1031) mod 65536,16)); end if;
                 preserve_mask<=mask;
+                coefficients:=(others=>'1');
+                operation:=std_logic_vector(to_unsigned(case_id mod 256,8));
                 for p in 0 to 3 loop
                     value:=std_logic_vector(to_unsigned((n*8191+p*4369+mode*349) mod 65536,16));
                     read_value:=std_logic_vector(to_unsigned((n*977+p*12347+mode*3181) mod 65536,16));
@@ -158,10 +188,38 @@ begin
                     -- A one-word RMW only refreshes plane zero; other write
                     -- outputs are unused. Four-plane RMW refreshes all four.
                     expected_wd(p)<=value or (read_value and mask);
+                    if affine_case then
+                        source_value:=std_logic_vector(to_unsigned((n*193+p*8191+13469) mod 65536,16));
+                        pattern_value:=std_logic_vector(to_unsigned((n*977+p*2731+4951) mod 65536,16));
+                        base_value:=(others=>'0'); result_value:=read_value;
+                        for bit_no in 0 to 15 loop
+                            if chosen_planes(p)='1' and chosen_bytes(bit_no/8)='1' and mask(bit_no)='1' then
+                                zero_index:=0;
+                                if source_value(bit_no)='1' then zero_index:=zero_index+4; end if;
+                                if pattern_value(bit_no)='1' then zero_index:=zero_index+1; end if;
+                                base_value(bit_no):=operation(zero_index);
+                                coefficients(p*16+bit_no):=operation(zero_index) xor operation(zero_index+2);
+                                actual_index:=zero_index;
+                                if read_value(bit_no)='1' then actual_index:=actual_index+2; end if;
+                                -- Independent full truth-table oracle.
+                                result_value(bit_no):=operation(actual_index);
+                            end if;
+                        end loop;
+                        wd(p)<=base_value; expected_wd(p)<=result_value;
+                    end if;
                 end loop;
+                xor_masks<=coefficients;
                 kind<=mode; active<=true;
                 a:=activations; r:=reads; w:=writes; beats:=write_beats;
                 requests(mode)<='1';
+                if AFFINE_TEST then
+                    wait until rising_edge(cpuclk); wait for 1 ns;
+                    -- Coefficients and mode must come from the held
+                    -- request, not live pins after acceptance.
+                    xor_masks<=not xor_masks; affine<=not affine;
+                    preserve_mask<=not preserve_mask;
+                    wd<=(x"c1a5",x"39f0",x"95ac",x"7e13");
+                end if;
                 if USE_SUB and BUFFERED then
                     wait until rising_edge(cpuclk); wait for 1 ns;
                     -- Poison all live metadata after request acceptance.
@@ -224,9 +282,14 @@ begin
                 total:=total+1;
             end loop;
         end loop;
+        if AFFINE_TEST then
+            assert total=AFFINE_CASES+384 report "Affine case count changed" severity failure;
+            report "PASS: affine SDRAM " & natural'image(AFFINE_CASES) &
+                " raster operations plus 384 compatibility requests, live coefficients poisoned";
+        end if;
         report "PASS: SDRAM request metadata at " & integer'image(CPU_MHZ) &
             " MHz, SUB=" & boolean'image(USE_SUB) & ": " & integer'image(total) & " single/four-plane read/write/RMW commands, masks, live RMW data";
         finish;
     end process;
-    process begin wait for 3 ms; assert false report "SDRAM request watchdog" severity failure; end process;
+    process begin wait for 100 ms; assert false report "SDRAM request watchdog" severity failure; end process;
 end architecture;

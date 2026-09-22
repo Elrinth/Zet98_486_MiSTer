@@ -9,7 +9,8 @@ ENTITY SDRAMC IS
 		REFCYC			:integer	:=64000/8192;	--usec
         CPU_WRITE_BUNDLE : boolean := false;
         SUB_WRITE_BUNDLE : boolean := false;
-        FLOPPY_REQUEST_BUNDLE : boolean := false
+        FLOPPY_REQUEST_BUNDLE : boolean := false;
+        CPU_AFFINE_RMW : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -98,7 +99,11 @@ ENTITY SDRAMC IS
 		mem_inidone		:out std_logic;
 		
 		memclk			:in std_logic;
-		rstn			:in std_logic
+		rstn			:in std_logic;
+        -- Optional EGC coefficients, sampled with the CPU request.
+        -- They apply only to CPU four-plane RMW transactions.
+        CPUAFFINE :in std_logic := '0';
+        CPUXORMASK :in std_logic_vector(63 downto 0) := (others=>'0')
 	);
 end SDRAMC;
 
@@ -173,7 +178,7 @@ signal	lCPUPSEL :std_logic_vector(3 downto 0);
 type cpu_words_t is array(0 to 3) of std_logic_vector(15 downto 0);
 signal cpu_read_words, cpu_write_words : cpu_words_t;
 signal cpu_read_crossing, sub_read_crossing : cpu_words_t;
-signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(ADRWIDTH+87 downto 0);
+signal cpu_write_source, cpu_write_crossing, cpu_write_memory : std_logic_vector(ADRWIDTH+152 downto 0);
 signal cpu_address : std_logic_vector(ADRWIDTH-1 downto 0);
 signal cpu_bank, cpu_bytes : std_logic_vector(1 downto 0);
 signal cpu_planes : std_logic_vector(3 downto 0);
@@ -369,6 +374,8 @@ begin
         SUBRDAT2 <= sub_read_words(2); SUBRDAT3 <= sub_read_words(3);
     end generate;
 
+    assert not CPU_AFFINE_RMW or CPU_WRITE_BUNDLE
+        report "Affine RMW requires the held CPU request bundle" severity failure;
     cpu_write_crossing <= cpu_write_source; -- CPU_WRITE_BUNDLE_TRANSPORT
     write_bundle : if CPU_WRITE_BUNDLE generate
         -- A change in the held completion toggle captures read data and
@@ -392,8 +399,14 @@ begin
             if rising_edge(CPUCLK) then
                 if (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
                    and (lcpustb='0' or lCPUADR/=CPUADR) then
-                    cpu_write_source <= CPUADR & CPUBNK & CPUBSEL & CPUPSEL &
+                    cpu_write_source(ADRWIDTH+87 downto 0) <= CPUADR & CPUBNK & CPUBSEL & CPUPSEL &
                         CPUPRESERVE & CPUWDAT3 & CPUWDAT2 & CPUWDAT1 & CPUWDAT0;
+                    if CPU_AFFINE_RMW then
+                        cpu_write_source(ADRWIDTH+152) <= CPUAFFINE and CPURMW4;
+                        cpu_write_source(ADRWIDTH+151 downto ADRWIDTH+88) <= CPUXORMASK;
+                    else
+                        cpu_write_source(ADRWIDTH+152 downto ADRWIDTH+88) <= (others=>'0');
+                    end if;
                 end if;
             end if;
         end process;
@@ -411,7 +424,13 @@ begin
         cpu_bytes <= cpu_write_memory(85 downto 84);
         cpu_planes <= cpu_write_memory(83 downto 80);
         planes : for i in 0 to 3 generate
-            cpu_write_words(i) <= cpu_write_memory(i*16+15 downto i*16) or
+            -- Merge fresh memory-domain destination data; no extra
+            -- memory command, CPU round trip or handshake is needed.
+            cpu_write_words(i) <=
+                cpu_write_memory(i*16+15 downto i*16) xor
+                (cpu_read_words(i) and cpu_write_memory(ADRWIDTH+103+i*16 downto ADRWIDTH+88+i*16))
+                when CPU_AFFINE_RMW and cpu_write_memory(ADRWIDTH+152)='1' else
+                cpu_write_memory(i*16+15 downto i*16) or
                 (cpu_read_words(i) and cpu_write_memory(79 downto 64));
         end generate;
     end generate;

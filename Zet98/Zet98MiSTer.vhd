@@ -288,7 +288,8 @@ component SDRAMC
 		REFCYC			:integer	:=64000/8192;	--usec
         CPU_WRITE_BUNDLE : boolean := false;
         SUB_WRITE_BUNDLE : boolean := false;
-        FLOPPY_REQUEST_BUNDLE : boolean := false
+        FLOPPY_REQUEST_BUNDLE : boolean := false;
+        CPU_AFFINE_RMW : boolean := false
 	);
 	port(
 		-- SDRAM PORTS
@@ -377,7 +378,9 @@ component SDRAMC
 		mem_inidone		:out std_logic;
 		
 		memclk			:in std_logic;
-		rstn			:in std_logic
+		rstn			:in std_logic;
+        CPUAFFINE :in std_logic := '0';
+        CPUXORMASK :in std_logic_vector(63 downto 0) := (others=>'0')
 	);
 end component;
 

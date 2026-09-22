@@ -42,3 +42,53 @@ accounting for that representation would reverse alignment/clipping.
 
 The current Rusty test image uses the GDC driver, not a working EGC driver.
 
+`pc98_egc_registers.sv` implements the eight write-only programming registers
+at 04A0h–04AFh on the existing 16-bit, byte-selected bus. It stores both lanes
+independently, decodes the complete port address and commits once per held bus
+cycle. Foreground/background expansion uses the low four color bits. Pixel
+mask writes are ignored while color-select bits 14:13 are nonzero, matching
+both reference implementations. Reset values follow NP2kai's `io/egc.c`.
+
+Its `egc_enable` input follows NP2kai's register-write gating. Integration must
+feed the existing TXTGDC protected EGC-enable latch; GRCG's enable controls VRAM
+operation separately. MAME currently does not gate these register writes, so
+disabled-write behavior still needs a physical PC-98 comparison. Likewise,
+operation writes have a separate event output: a future datapath can resolve
+the operation-write alignment-reset discrepancy without changing byte-lane
+handling. Shift and length writes produce one reload pulse after updating the
+registers, even when the I/O acknowledgement takes several cycles.
+
+`tests/run-egc-registers.sh` connects the actual ao486 I/O bridge to this block.
+It covers every port address for decoding, byte/word/DWORD writes including
+odd addresses and both register-range boundaries, reads, held cycles, disabled
+writes, mask protection, color expansion and reset. Negative controls target
+upper-byte routing, strobe replay, enable/mask gating and address aliasing.
+This block also remains outside the QSF and is not connected to the core.
+
+The optional `CPU_AFFINE_RMW` generic in SDRAMC adds the memory-side operation
+needed by the kernel. Its default is false. When enabled, a CPU four-plane RMW
+can carry a 64-bit XOR coefficient mask and a mode bit alongside its existing
+four base words. All 65 additional bits travel in the same held request bundle,
+with the same source capture and memory admission as the address and byte/plane
+enables. The merge is `base XOR (fresh_destination AND xor_mask)` per plane.
+It uses the existing read/write burst and completion states. Other commands,
+the drawing port and the ordinary GRCG OR merge retain their prior behavior.
+
+`tests/run-egc-memory.sh` extends the actual SDRAM command-pin test with all
+256 operations, sixteen plane masks and four byte masks, plus compatibility
+requests while the generic is enabled. It changes live coefficients and mode
+after source acceptance, injects the existing 15 ns payload transport bound,
+checks fresh readback at ACK, and rejects OR merging, live-input bypasses and
+an 80 ns late bundle. A command-level SDRAM source is used; physical timing
+and end-to-end EGC graphics are still separate requirements. The normal core
+does not enable this generic or connect the new programming registers yet.
+
+The register, kernel and SDRAM tests passed on 2026-09-22. Register coverage
+was 32,768 decoded addresses and 2,173 CPU I/O requests; all five negative
+controls failed as intended. The memory test completed 30,848 requests across
+20/50/60/90/100 MHz simulated CPU clocks and two clock phases, including the
+full 16,384 operation/plane/byte combinations at 60 MHz. All four memory
+negative controls were rejected. Existing CPU/drawing/floppy request-bundle,
+readback, control-crossing, GRCG and actual top-level data-bus regressions also
+passed. The log is `build/simulation-20260922-074716-2578fb/tests.log`.
+These simulated clock rates do not establish FPGA operating frequencies.

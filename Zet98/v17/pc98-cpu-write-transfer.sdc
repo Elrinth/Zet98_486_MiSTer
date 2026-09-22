@@ -1,5 +1,8 @@
 # CPU/GRCG address, bank, masks and set/preserve data are captured with
 # CPUREQ in CPUCLK (110 bits at the current 22-bit address width).
+# Optional CPU_AFFINE_RMW adds 65 held coefficient/mode bits to the same
+# source/admission vectors. The wildcard covers those bits when enabled;
+# the ordinary core leaves that generic disabled and they can optimize away.
 # lCPUREQ admits CPUJOB and the payload on the third memory edge, at least
 # 20 ns after launch. The source remains held until the CPU's next request,
 # which cannot precede completion of this job. A 15 ns maximum gives at least

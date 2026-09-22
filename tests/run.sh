@@ -54,6 +54,8 @@ bash tests/run-data-bus.sh
 bash tests/run-grcg-compare.sh
 bash tests/run-grcg-sdram.sh
 bash tests/run-egc-rop.sh
+bash tests/run-egc-registers.sh
+bash tests/run-egc-memory.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
 bash tests/run-opna-timer.sh
