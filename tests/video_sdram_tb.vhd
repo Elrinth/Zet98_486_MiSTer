@@ -82,7 +82,8 @@ use work.video_capture.all;
 use work.VIDEO_TIMING_pkg.all;
 
 entity video_sdram_tb is
-    generic(PHASE_PS : natural := 0; DATA_DELAY_NS : natural := 20; ADDRESS_DELAY_NS : natural := 20; CPU_MHZ : positive := 50);
+    generic(PHASE_PS : natural := 0; DATA_DELAY_NS : natural := 20; ADDRESS_DELAY_NS : natural := 20;
+            CPU_MHZ : positive := 50; HOLD_GLITCH : boolean := false);
 end entity;
 architecture test of video_sdram_tb is
     signal memclk, pixelclk, cpuclk, rstn, ready : std_logic := '0';
@@ -100,7 +101,9 @@ architecture test of video_sdram_tb is
     signal front_reads, back_reads : natural := 0;
     signal rd, ack : std_logic;
     type words_t is array(0 to 3) of std_logic_vector(15 downto 0);
-    signal data, delayed_data : words_t;
+    signal data, routed_data, delayed_data : words_t;
+    signal hold_poison : std_logic := '0';
+    signal hold_checks : natural := 0;
     signal uc : natural range 0 to 7 := 0;
     signal hc : natural range 0 to 99 := 0;
     signal vc : natural range 0 to 524 := VIV;
@@ -123,8 +126,25 @@ begin
         loop pixelclk<='1'; wait for 20 ns; pixelclk<='0'; wait for 20 ns; end loop;
     end process;
     delays : for lane in 0 to 3 generate
-        delayed_data(lane)<=transport data(lane) after DATA_DELAY_NS * 1 ns;
+        routed_data(lane)<=transport data(lane) after DATA_DELAY_NS * 1 ns;
+        delayed_data(lane)<=routed_data(lane) xor x"0001" when HOLD_GLITCH and hold_poison='1'
+                            else routed_data(lane);
     end generate;
+    -- RD and ACK are high at exactly the enabled BS_READ -> WDAT capture.
+    -- Check the next 20 ns as well as the pre-capture check in the runner.
+    -- Inspect producer and routed data, including a zero-delay route. The
+    -- protocol cannot reuse VIDDAT until a fresh request crosses back to
+    -- SDRAMC and a new SDRAM read completes.
+    process begin
+        wait until rising_edge(pixelclk);
+        if rstn='1' and rd='1' and ack='1' then
+            hold_poison<='1' after 1 ns, '0' after 5 ns;
+            wait for 20 ns;
+            assert data'stable(20 ns) and delayed_data'stable(20 ns)
+                report "Graphics data changed after enabled WDAT capture" severity failure;
+            hold_checks<=hold_checks+1;
+        end if;
+    end process;
     delayed_ga <= transport ga after ADDRESS_DELAY_NS * 1 ns;
     display_address : entity work.display_page_address
         port map(memory_clk=>memclk, async_rstn=>rstn, cpu_page=>cpu_page,
@@ -224,9 +244,10 @@ begin
         wait until rising_edge(pixelclk);
         assert cpu_commands>100 report "CPU contention was not exercised" severity failure;
         assert commands=640 report "Incorrect graphics burst count" severity failure;
+        assert hold_checks=640 report "Incomplete post-capture hold checks" severity failure;
         assert front_reads>100 and back_reads>100 report "Both display pages not exercised" severity failure;
         report "PASS: 16 four-plane graphics lines, phase=" & integer'image(PHASE_PS) &
-            " ps, data route=" & integer'image(DATA_DELAY_NS) & " ns, >=20 ns capture margin";
+            " ps, data route=" & integer'image(DATA_DELAY_NS) & " ns, >=20 ns setup/hold capture margins";
         finish;
     end process;
     process begin wait for 2 ms; assert false report "Graphics SDRAM watchdog" severity failure; end process;

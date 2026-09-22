@@ -12,12 +12,17 @@
 # releases GRAMRD and starts another request. The enabled WDAT capture follows
 # synchronized completion, not the nearest arbitrary 100/25 MHz clock edges.
 #
-# Limit only these buses to 20 ns; retain normal hold checks and every control
-# path. tests/run-video-sdram.sh exercises the real producer/consumer with
-# 20 ns transport delays, per-plane/order/count checks and >=20 ns of stability
-# at both WDAT capture and RAM write. A late-data negative control must fail.
-# This is not a global CDC
-# false path and does not relax CPU-written graphics configuration registers.
+# Limit only these buses to 20 ns. The data bundle's hold requirement is
+# supplied by the handshake: WDAT capture releases GRAMRD; the next pixel
+# edge clears lVIDstb, and only the following edge can toggle a new VIDREQ.
+# VIDDAT cannot change until that request crosses to SDRAMC and completes.
+# Thus arbitrary adjacent memory/pixel edges are not enabled hold captures.
+# Exclude hold only for this completed-data bundle; keep its setup bound,
+# ordinary address hold checks, WDAT-to-line-RAM timing and all control paths.
+# tests/run-video-sdram.sh checks >=20 ns before AND after each actual capture
+# with 0/20/40 ns transport routes, six clock phases and six CPU rates. Both
+# late arrival and a post-capture glitch must fail. See rtl/GRAPHICS_TRANSFER.md.
+# CPU-written graphics configuration registers receive no exception here.
 set graphics_address [get_registers {*|VID|GRP|GRAMADRb*}]
 set sdram_address [get_registers {*|ram|MEMADR*}]
 set graphics_data [get_registers {*|ram|VIDDAT*}]
@@ -33,6 +38,7 @@ if {[get_collection_size $graphics_address] < 14 ||
 }
 set_max_delay -from $graphics_address -to $sdram_address 20.000
 set_max_delay -from $graphics_data -to $graphics_capture 20.000
+set_false_path -hold -from $graphics_data -to $graphics_capture
 
 # Only the input of each control synchronizer is asynchronous. The remaining
 # stages, edge detection, completion comparison and ACK/BUFWE logic are timed.

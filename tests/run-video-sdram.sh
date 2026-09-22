@@ -14,7 +14,9 @@ ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd LIB/dela
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_sdram_tb
 for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
     for phase in ${VIDEO_PHASES:-0 1 3333 5000 6667 9999}; do
-        ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb -gCPU_MHZ="$mhz" -gPHASE_PS="$phase" --assert-level=error
+      for delay in ${VIDEO_DATA_DELAYS:-0 20 40}; do
+        ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb -gCPU_MHZ="$mhz" -gPHASE_PS="$phase" -gDATA_DELAY_NS="$delay" --assert-level=error
+      done
     done
 done
 # Deliberately violate the bundled-data contract: the checker must reject it.
@@ -24,6 +26,14 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb -gDATA_DELAY_NS=2
 fi
 grep -Eq 'Graphics data changed|Missing, duplicate|Unknown graphics|Graphics plane from wrong display page' "$out/negative.log" || { cat "$out/negative.log"; exit 1; }
 echo 'PASS: late graphics-data negative control rejected'
+
+# Corrupt data only AFTER the enabled capture. Earlier setup/data-order
+# assertions cannot detect this fault; the post-capture monitor must do so.
+if ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb -gHOLD_GLITCH=true --assert-level=error > "$out/hold-negative.log" 2>&1; then
+    echo 'FAIL: graphics capture accepted a post-capture hold violation' >&2; exit 1
+fi
+grep -q 'Graphics data changed after enabled WDAT capture' "$out/hold-negative.log" || { cat "$out/hold-negative.log"; exit 1; }
+echo 'PASS: post-capture graphics-data glitch rejected'
 
 # A live CPU page bypass must be caught by the memory-row check.
 sed "s/when page_sync(1)='0'/when cpu_page='0'/" rtl/display_page_address.vhd > "$out/bad-page.vhd"
