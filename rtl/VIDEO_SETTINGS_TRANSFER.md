@@ -20,15 +20,19 @@ coherently. CPU register access is unchanged.
 
 `pc98-video-settings.sdc` bounds only the held payload paths to 20 ns. Capture
 is at least two complete 75 MHz video periods after launch (26.66 ns), leaving
-6.66 ns of settling margin. Only the first request/acknowledgment synchronizer
-inputs and the four local reset synchronizer CLRN pins have false paths.
-All later stages and CRTC consumers retain normal timing checks. Register and
+6.66 ns of settling margin. The payload has a hold-only exception: a new launch
+cannot occur on the capture edge because its acknowledgement must first return
+through two CPU synchronizer stages. This guarantees at least two CPU periods
+of additional source stability (20 ns at the tested 100 MHz maximum). The
+first request/acknowledgment synchronizer inputs and the four local reset
+synchronizer CLRN pins also have false paths. Payload setup checks, all later
+stages and CRTC consumers retain their timing checks. Register and
 pin collection guards reject a missing or incomplete transfer in Quartus.
 The logical map is 121 bits. `GRAPHSCR98` declares but does not consume its
 ten-bit `LINENUM1` input, so synthesis removes bits 95..104 in both banks.
 The guard requires every one of the other 111 bits individually, allowing
 register replication without masking a missing field. No live field is
-exempted from timing.
+exempted from the payload's maximum-delay constraint.
 
 The regression checks coherent sequence patterns, hot writes, reset, stable
 outputs between video edges, and final delivery within one microsecond. A
@@ -38,6 +42,26 @@ controls fail. The separate top-level mapping test compares 10,122 vectors
 across all 19 fields, including one-hot bits, and rejects swapped graphics
 and text pitch. These tests do not establish full-core operation at those
 clock rates. Full-core fitting and hardware game validation remain pending.
+
+The hold-only exception was added after PlaneAligned60's routed report found
+a -0.018 ns nominal-edge hold check on `held_data[62] -> received_data[62]`
+at the fast/cold corner. That launch/capture pairing cannot occur with the
+handshake. The regression now also measures source stability after receiver
+capture and rejects a deliberately shortened acknowledgement path. All 18
+delayed-payload clock/phase runs and four negative controls passed in
+`build/simulation-20260922-105129-22ad19/tests.log`. The Tcl scope tests in
+`tests/test_gdc_snapshot_constraints.py` retain the exact 20 ns setup bound,
+allow physical register copies, reject missing bits, and forbid a full payload
+false path. This uses the timing analyzer's
+[`set_false_path -hold`](https://docs.altera.com/r/docs/683432/26.1/quartus-prime-pro-edition-user-guide/set_false_path-quartus-sdc?contentId=FwYDyjdoAMAtneXvulJElQ)
+option, not a clock-wide exception.
+
+The unchanged routed PlaneAligned60 design was then checked with Quartus 17.0
+using this constraint. All reported timing checks passed at all four corners,
+with minimum slack 0.061 ns. A separate query explicitly retained 111 bounded
+GDC payload setup paths at every corner and confirmed that only their hold
+checks were excluded. Evidence is in
+`build/quartus-20260922-101028-235b48/timing-gdc-hold/` and `gdc-hold.log`.
 
 The MiSTer wrapper also uses this transfer with WIDTH=2 for the scaler's
 low-latency and filter-mode bits. It samples the original host framebuffer/

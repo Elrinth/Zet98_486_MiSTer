@@ -23,6 +23,12 @@ foreach bank [list $settings_payload $settings_capture] {
     }
 }
 set_max_delay -from $settings_payload -to $settings_capture 20.000
+# Capture is enabled only after the synchronized request. The receiving edge
+# sends ACK; two CPU synchronizer stages must return it before held_data can
+# change (at least two CPU periods, 20 ns at the tested 100 MHz maximum).
+# An unrelated near-coincident CPU/video edge is therefore not a hold launch.
+# Keep the 20 ns setup bound; exclude only that impossible payload hold check.
+set_false_path -hold -from $settings_payload -to $settings_capture
 foreach {source first_stage} {
     {*|gdc_settings|request_toggle} {*|gdc_settings|request_sync[0]}
     {*|gdc_settings|ack_toggle} {*|gdc_settings|ack_sync[0]}
