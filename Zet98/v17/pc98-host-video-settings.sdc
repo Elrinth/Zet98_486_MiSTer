@@ -1,13 +1,16 @@
 # Coherent host snapshots. A request traverses two destination flops before
 # capture (at least two destination periods); its acknowledgement traverses
 # two source flops before held_data can change again. Target clocks are 75 MHz
-# input video and 148.5 MHz HDMI. A 5 ns payload limit leaves >8 ns settling
+# input video, 148.5 MHz HDMI, and up to 100 MHz system measurement consumers.
+# A 5 ns payload limit leaves >8 ns settling
 # margin at HDMI. No payload setup check or downstream arithmetic is waived.
 foreach instance {
     vga_osd|host_osd_settings
     hdmi_osd|host_osd_settings
     host_viewport_settings
     emu|hdmi_scale|host_scale_settings
+    emu|hps_io|video_calc|video_measurements
+    emu|hps_io|video_calc|time_measurements
 } {
     set payload [get_registers "${instance}|held_data*"]
     set capture [get_registers "${instance}|video_data*"]

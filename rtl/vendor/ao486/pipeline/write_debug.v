@@ -198,24 +198,44 @@ wire        wr_debug_b3_code_trigger;
 wire        wr_debug_code_active;
 wire [3:0]  wr_debug_code;
 
-wire [31:0] wr_code_linear;
-
-assign wr_code_linear = cs_base + wr_eip;
+// Compare an address sum without propagating a 32-bit carry through the
+// breakpoint/exception/read-ready feedback path. Low three bits still use
+// the original debug-length mask. The upper bits are always compared.
+// BEGIN PC98 DEBUG SUM MATCH
+function code_address_matches;
+    input [31:0] base, offset, breakpoint;
+    input [2:0] low_mask;
+    reg [3:0] low_sum;
+    reg [31:3] expected_carry;
+    reg [30:3] generated_carry;
+    begin
+        low_sum = {1'b0,base[2:0]} + {1'b0,offset[2:0]};
+        // If sum == breakpoint, its bits determine every incoming carry.
+        // Verify those carries with independent full-adder equations.
+        expected_carry = base[31:3] ^ offset[31:3] ^ breakpoint[31:3];
+        generated_carry = (base[30:3] & offset[30:3]) |
+                          ((base[30:3] | offset[30:3]) & expected_carry[30:3]);
+        code_address_matches = (low_sum[2:0] & low_mask) == (breakpoint[2:0] & low_mask) &&
+                               expected_carry[3] == low_sum[3] &&
+                               expected_carry[31:4] == generated_carry;
+    end
+endfunction
+// END PC98 DEBUG SUM MATCH
 
 assign wr_debug_code_trigger =
     wr_finished && wr_eip <= cs_limit && rflag_to_reg == 1'b0 && ~(wr_debug_breakpoints_disabled) && ~(wr_string_in_progress);
     
 assign wr_debug_b0_code_trigger =
-    wr_debug_code_trigger && dr7[17:16] == 2'b00 && { dr0[31:3], dr0[2:0] & debug_len0 } == { wr_code_linear[31:3], wr_code_linear[2:0] & debug_len0 };
+    wr_debug_code_trigger && dr7[17:16] == 2'b00 && code_address_matches(cs_base, wr_eip, dr0, debug_len0);
     
 assign wr_debug_b1_code_trigger =
-    wr_debug_code_trigger && dr7[21:20] == 2'b00 && { dr1[31:3], dr1[2:0] & debug_len1 } == { wr_code_linear[31:3], wr_code_linear[2:0] & debug_len1 };
+    wr_debug_code_trigger && dr7[21:20] == 2'b00 && code_address_matches(cs_base, wr_eip, dr1, debug_len1);
       
 assign wr_debug_b2_code_trigger =
-    wr_debug_code_trigger && dr7[25:24] == 2'b00 && { dr2[31:3], dr2[2:0] & debug_len2 } == { wr_code_linear[31:3], wr_code_linear[2:0] & debug_len2 };
+    wr_debug_code_trigger && dr7[25:24] == 2'b00 && code_address_matches(cs_base, wr_eip, dr2, debug_len2);
 
 assign wr_debug_b3_code_trigger =
-    wr_debug_code_trigger && dr7[29:28] == 2'b00 && { dr3[31:3], dr3[2:0] & debug_len3 } == { wr_code_linear[31:3], wr_code_linear[2:0] & debug_len3 };
+    wr_debug_code_trigger && dr7[29:28] == 2'b00 && code_address_matches(cs_base, wr_eip, dr3, debug_len3);
     
 assign wr_debug_code_active =
     (wr_debug_b3_code_trigger && dr7[7:6] != 2'b00) || (wr_debug_b2_code_trigger && dr7[5:4] != 2'b00) ||

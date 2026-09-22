@@ -37,3 +37,8 @@ path ending at `memory_bridge|high_half`. This change targets that dependency;
 it does not establish a frequency increase until a fresh fit passes every
 timing corner and the hardware diagnostics pass. It introduces no new timing
 exception.
+
+The cdf93b9 MaskGrcg60 fit no longer reports this bridge dependency among its
+worst paths. It still fails timing elsewhere: video-measurement sampling at
+-0.088 ns and a CPU breakpoint-address feedback path at -0.070 ns. The latter
+is addressed in `DEBUG_ADDRESS.md`; this fit remains undeployed.

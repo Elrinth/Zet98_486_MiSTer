@@ -76,3 +76,34 @@ output through luminance arithmetic (-0.002 ns), not the earlier line-address
 subtraction. The database still has CPU/memory failures and is not deployed.
 See `build/host-settings60-domain-audit`; this constraint audit includes
 neither the newer decoder arithmetic nor SDRAM handshake RTL.
+
+The cdf93b9 MaskGrcg60 fit exposes a separate measurement path in `video_calc`:
+direct sampling of the width/height registers from 75 MHz video into the
+60 MHz system clock misses timing by 0.088 ns. Direct sampling also has no
+protocol to ensure that changing multibit measurements remain coherent.
+
+`video_calc` now uses two instances of the same snapshot module. One carries
+the 74-bit resolution/interlace/change-count tuple from video; the other
+carries four 32-bit timing measurements from the 100 MHz measurement clock.
+Both deliver to `clk_sys`, before the existing parameter mux. The mux's
+parameter numbers and response cycle are unchanged. Measurements can arrive
+a few handshake cycles later, and intermediate updates can coalesce; this
+interface reports the latest measurements rather than every scanline event.
+Separate source-clock snapshots do not imply that a whole sequence of HPS
+parameter reads is atomic.
+
+The same 5 ns held-payload bound and first-stage-only control exceptions cover
+these two named instances. Missing endpoints still fail the constraint guard.
+The generic handshake's stopped-clock and skew tests apply; the actual
+`video_calc` measurements and disk-interface compilation also need regression
+checks before fitting. Physical timing and hardware output remain unverified
+for this change.
+
+The new measurement connections passed the actual `video_calc` test at
+20/50/60/90 MHz system clocks, including both tested widths, height, line/
+frame/pixel times, HDMI frame time and the mode-change counter. All 144
+generic snapshot skew/phase/stopped-clock cases and their negative controls
+passed again, as did the disk/IDE/MIDI wrapper regression. The constraint
+guard tests pass with six snapshot instances and still reject missing or
+ambiguous handshake endpoints. This is functional/constraint-scope evidence;
+the new routed design must still satisfy the physical payload bounds.

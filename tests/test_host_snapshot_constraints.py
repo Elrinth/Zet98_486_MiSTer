@@ -48,7 +48,7 @@ class ConstraintGuards(unittest.TestCase):
 
     def test_single_launch(self):
         t=self.run_sdc('normal')
-        self.assertEqual(int(t.eval('llength $exceptions')),17)  # four holds, eight controls, five one-bit hints
+        self.assertEqual(int(t.eval('llength $exceptions')),23)  # six holds, twelve controls, five one-bit hints
 
     def test_all_physical_launch_copies_get_only_first_stage_exception(self):
         t=self.run_sdc('duplicate_launch')

@@ -852,26 +852,23 @@ module video_calc
 	output reg [15:0] dout
 );
 
-// Capture measurements before the parameter mux. This keeps the mux
-// entirely in clk_sys; all incoming register paths retain timing checks.
-reg [1:0] vid_int_sys = 0;
-reg [7:0] vid_nres_sys = 0;
-reg [31:0] vid_hcnt_sys = 0;
-reg [31:0] vid_vcnt_sys = 0;
-reg [31:0] vid_htime_sys = 0;
-reg [31:0] vid_vtime_sys = 0;
-reg [31:0] vid_pix_sys = 0;
-reg [31:0] vid_vtime_hdmi_sys = 0;
+// Transfer each source domain as a held snapshot. Measuring counters can
+// change many bits together; direct sampling cannot ensure a coherent value.
+// The slow HPS parameter interface only needs the latest completed snapshot.
+wire [1:0] vid_int_sys;
+wire [7:0] vid_nres_sys;
+wire [31:0] vid_hcnt_sys, vid_vcnt_sys;
+wire [31:0] vid_htime_sys, vid_vtime_sys, vid_pix_sys, vid_vtime_hdmi_sys;
+video_config_snapshot #(74) video_measurements (
+    .source_clk(clk_vid), .video_clk(clk_sys),
+    .source_data({vid_int,vid_nres,vid_hcnt,vid_vcnt}),
+    .video_data({vid_int_sys,vid_nres_sys,vid_hcnt_sys,vid_vcnt_sys}));
+video_config_snapshot #(128) time_measurements (
+    .source_clk(clk_100), .video_clk(clk_sys),
+    .source_data({vid_htime,vid_vtime,vid_pix,vid_vtime_hdmi}),
+    .video_data({vid_htime_sys,vid_vtime_sys,vid_pix_sys,vid_vtime_hdmi_sys}));
 
 always @(posedge clk_sys) begin
-    vid_int_sys <= vid_int;
-    vid_nres_sys <= vid_nres;
-    vid_hcnt_sys <= vid_hcnt;
-    vid_vcnt_sys <= vid_vcnt;
-    vid_htime_sys <= vid_htime;
-    vid_vtime_sys <= vid_vtime;
-    vid_pix_sys <= vid_pix;
-    vid_vtime_hdmi_sys <= vid_vtime_hdmi;
 
 	case(par_num)
 		1: dout <= {|vid_int_sys, vid_nres_sys};
@@ -971,7 +968,7 @@ always @(posedge clk_100) begin
 	if(old_de2 & ~old_de) calch <= 0;
 end
 
-reg [31:0] vid_vtime_hdmi;
+reg [31:0] vid_vtime_hdmi = 0;
 always @(posedge clk_100) begin
 	integer vtime;
 	reg old_vs, old_vs2;
