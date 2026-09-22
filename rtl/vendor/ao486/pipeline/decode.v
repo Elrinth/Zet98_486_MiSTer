@@ -341,7 +341,12 @@ end
 
 //------------------------------------------------------------------------------ eip
 
-assign dec_eip = eip + { 28'd0, dec_consumed };
+// Decode supplies at most fifteen bytes. Keep its late instruction-length
+// carry out of the upper 28-bit increment, without adding a pipeline cycle.
+wire [4:0] dec_eip_low = { 1'b0, eip[3:0] } + { 1'b0, dec_consumed };
+(* keep = "true" *) wire [27:0] eip_upper_increment = eip[31:4] + 28'd1;
+assign dec_eip = { dec_eip_low[4] ? eip_upper_increment : eip[31:4],
+                   dec_eip_low[3:0] };
 
 always @(posedge clk) begin
     if(rst_n == 1'b0)                           eip <= `STARTUP_EIP;

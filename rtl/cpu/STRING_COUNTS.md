@@ -32,7 +32,25 @@ counts remain 6,392/3,720/5,268 cycles. Protected-mode tests and the DOS RAM
 probe's return to real mode pass with both 16 MB and 64 MB, including the
 oversized-memory negative control.
 
-Physical fitting is pending; this change is a timing candidate, not a
-demonstrated clock-speed increase.
 The independently running UpperCache50 fit uses source 0939a06 and does not
 contain this count-predecode change.
+
+## FullFont60 fitting result, 2026-09-22
+
+Source 4790ba7 includes these predicates and fits at 60 MHz with 64 MiB RAM,
+8 KiB low-memory cache, upper instruction caching, PC-9801-86 sound, raw IDE
+and MIDI UART. It uses 35,265/41,910 ALMs and 477/553 M10Ks. The fitted SPI,
+HDMI I2C and UART checks pass.
+
+The slow/hot system-clock-to-system-clock paths now pass by +0.253 ns.
+Their worst path runs from operand-size decoding through instruction-length
+calculation and the EIP update, rather than the former ECX completion path.
+This is a whole-fit observation; placement changes also affect the result.
+
+The complete core still fails three timing-summary checks and has not been
+deployed at 60 MHz. Slow/hot video setup reaches -0.150 ns on a host-setting
+input to a first synchronizer stage. Slow/cold video setup is -0.029 ns, and
+the HDMI scaler's horizontal counter-to-line-address path is -0.014 ns.
+Other paths cross clock domains with very small positive margins. These
+need individual protocol/logic review; the positive CPU result does not
+justify ignoring them or claiming a verified higher clock rate.
