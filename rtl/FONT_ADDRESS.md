@@ -197,3 +197,10 @@ ALMs. The ROM hash is the same `647b5fa9...42f21db7` used for prior captures.
 This confirms the representative hardware font reads including the previously
 missing tail glyph. The simulation additionally covers every tail byte.
 Neither result alone establishes complete Rusty rendering or game performance.
+
+The same FullFont50 run subsequently booted the private DOS 6.20 VHD, showed
+Rusty's intro scenes and reached its title screen after an intro-skip input.
+The 03:27:20 hardware screenshot still shows malformed Start/Continue/Options
+lettering. The font-tail repair therefore fixes the captured ROM defect but
+does not resolve this separate game-rendering problem. Animation frame rate
+and audible sound quality were not measured in this check.
