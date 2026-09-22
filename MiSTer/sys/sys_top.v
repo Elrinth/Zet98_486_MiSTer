@@ -792,18 +792,23 @@ reg fb_vbl;
 always @(posedge clk_vid) fb_vbl <= hdmi_vbl;
 `endif
 
-// Framebuffer viewport writes arrive on clk_sys. Stage the complete rectangle
-// with its enable before the clk_vid calculation; retain normal timing checks.
-reg [48:0] lfb_viewport_meta = 0, lfb_viewport_video = 0;
-always @(posedge clk_vid) begin
-	lfb_viewport_meta <= {LFB_EN,LFB_HMIN,LFB_HMAX,LFB_VMIN,LFB_VMAX};
-	lfb_viewport_video <= lfb_viewport_meta;
-end
-wire lfb_viewport_enabled = lfb_viewport_video[48];
-wire [11:0] lfb_viewport_hmin = lfb_viewport_video[47:36];
-wire [11:0] lfb_viewport_hmax = lfb_viewport_video[35:24];
-wire [11:0] lfb_viewport_vmin = lfb_viewport_video[23:12];
-wire [11:0] lfb_viewport_vmax = lfb_viewport_video[11:0];
+// Host configuration is held until clk_vid acknowledges the whole snapshot.
+// Include the output dimensions/custom aspects used by this calculation.
+wire [149:0] viewport_config_video;
+video_config_snapshot #(150) host_viewport_settings (
+    .source_clk(clk_sys), .video_clk(clk_vid),
+    .source_data({LFB_EN,LFB_HMIN,LFB_HMAX,LFB_VMIN,LFB_VMAX,
+                  FREESCALE,HSET,VSET,WIDTH,HEIGHT,arc1x,arc1y,arc2x,arc2y}),
+    .video_data(viewport_config_video)
+);
+wire lfb_viewport_enabled, video_freescale;
+wire [11:0] lfb_viewport_hmin,lfb_viewport_hmax,lfb_viewport_vmin,lfb_viewport_vmax;
+wire [11:0] video_hset,video_vset,video_width,video_height;
+wire [12:0] video_arc1x,video_arc1y,video_arc2x,video_arc2y;
+assign {lfb_viewport_enabled,lfb_viewport_hmin,lfb_viewport_hmax,
+        lfb_viewport_vmin,lfb_viewport_vmax,video_freescale,
+        video_hset,video_vset,video_width,video_height,
+        video_arc1x,video_arc1y,video_arc2x,video_arc2y} = viewport_config_video;
 
 reg  ar_md_start;
 wire ar_md_busy;
@@ -836,19 +841,19 @@ always @(posedge clk_vid) begin
 	reg  [2:0] state;
 	reg        xy;
 
-	hdmi_height <= (VSET && (VSET < HEIGHT)) ? VSET : HEIGHT;
-	hdmi_width  <= (HSET && (HSET < WIDTH))  ? HSET : WIDTH;
+	hdmi_height <= (video_vset && (video_vset < video_height)) ? video_vset : video_height;
+	hdmi_width  <= (video_hset && (video_hset < video_width))  ? video_hset : video_width;
 
 	if(!ARY) begin
 		if(ARX == 1) begin
-			arx <= arc1x[11:0];
-			ary <= arc1y[11:0];
-			xy  <= arc1x[12] | arc1y[12];
+			arx <= video_arc1x[11:0];
+			ary <= video_arc1y[11:0];
+			xy  <= video_arc1x[12] | video_arc1y[12];
 		end
 		else if(ARX == 2) begin
-			arx <= arc2x[11:0];
-			ary <= arc2y[11:0];
-			xy  <= arc2x[12] | arc2y[12];
+			arx <= video_arc2x[11:0];
+			ary <= video_arc2y[11:0];
+			xy  <= video_arc2x[12] | video_arc2y[12];
 		end
 		else begin
 			arx <= 0;
@@ -872,7 +877,7 @@ always @(posedge clk_vid) begin
 				vmaxi <= lfb_viewport_vmax;
 				state <= 0;
 			end
-			else if(FREESCALE || !arx || !ary) begin
+			else if(video_freescale || !arx || !ary) begin
 				wcalc <= hdmi_width;
 				hcalc <= hdmi_height;
 				state <= 6;
@@ -911,10 +916,10 @@ always @(posedge clk_vid) begin
 			end
 
 		7: begin
-				hmini <= ((WIDTH  - videow)>>1);
-				hmaxi <= ((WIDTH  - videow)>>1) + videow - 1'd1;
-				vmini <= ((HEIGHT - videoh)>>1);
-				vmaxi <= ((HEIGHT - videoh)>>1) + videoh - 1'd1;
+				hmini <= ((video_width  - videow)>>1);
+				hmaxi <= ((video_width  - videow)>>1) + videow - 1'd1;
+				vmini <= ((video_height - videoh)>>1);
+				vmaxi <= ((video_height - videoh)>>1) + videoh - 1'd1;
 			end
 	endcase
 	

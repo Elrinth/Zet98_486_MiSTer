@@ -6,6 +6,7 @@ module hdmi_tune_gate (
     input wire [15:0] raw_tune,
     output wire [15:0] gated_tune
 );
+    (* preserve, altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg [1:0] enable_video = 2'b00;
     always @(posedge raw_tune[6]) enable_video <= {enable_video[0], enable};
     // Bits 6 and 7 are clocks. Gating them with a configuration bit can

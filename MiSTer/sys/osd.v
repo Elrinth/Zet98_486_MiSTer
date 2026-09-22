@@ -99,15 +99,15 @@ always@(posedge clk_sys) begin
 	end
 end
 
-// Keep menu settings in the pixel domain before coordinate arithmetic.
-// These slow configuration updates retain normal setup/hold constraints;
-// this pipeline is not an asynchronous multi-bit handshake or a false path.
-reg [131:0] osd_config_meta = 0;
-reg [131:0] osd_config_video = 0;
-always @(posedge clk_video) begin
-    osd_config_meta <= {osd_enable, info, infoh, infow, infox, infoy, osd_h, osd_t, osd_w, rot};
-    osd_config_video <= osd_config_meta;
-end
+// Transfer one held snapshot before pixel-domain coordinate arithmetic.
+// The request/acknowledge handshake keeps every payload bit stable through
+// capture, including when clk_sys and the HDMI/video clock change phase.
+wire [131:0] osd_config_video;
+video_config_snapshot #(132) host_osd_settings (
+    .source_clk(clk_sys), .video_clk(clk_video),
+    .source_data({osd_enable,info,infoh,infow,infox,infoy,osd_h,osd_t,osd_w,rot}),
+    .video_data(osd_config_video)
+);
 wire osd_enable_video, info_video;
 wire [8:0] infoh_video, infow_video;
 wire [21:0] infox_video, infoy_video, osd_h_video, osd_t_video, osd_w_video;

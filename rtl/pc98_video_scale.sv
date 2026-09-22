@@ -2,27 +2,31 @@
 // Native pixel aspect and optional exact-integer viewports. The crop controls
 // are consumed only by the HDMI capture path, never by native analogue RGB.
 module pc98_video_scale (
-    input wire clk, reset, ce, vs, de,
+    input wire clk, source_clk, reset, ce, vs, de,
     input wire [11:0] hdmi_width, hdmi_height,
     input wire [2:0] mode,
     input wire [11:0] custom_x, custom_y,
     output reg [12:0] arx, ary,
     output reg [11:0] crop_left, crop_top, crop_width, crop_height
 );
-    // HPS settings originate in clk_sys. Register them before any video
-    // arithmetic; the crop rectangle is still committed only during VS.
-    (* altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg [50:0] settings_meta, settings_video;
-    wire [11:0] video_width=settings_video[50:39];
-    wire [11:0] video_height=settings_video[38:27];
+    // Mode/custom aspect arrive on clk_sys; dimensions already use clk_vid.
+    // Keep the local two-cycle dimension latency and handshake only host data.
+    wire [26:0] settings_video;
+    video_config_snapshot #(27) host_scale_settings (
+        .source_clk(source_clk), .video_clk(clk),
+        .source_data({mode,custom_x,custom_y}), .video_data(settings_video)
+    );
+    reg [23:0] dimensions_meta, dimensions_video;
+    wire [11:0] video_width=dimensions_video[23:12];
+    wire [11:0] video_height=dimensions_video[11:0];
     wire [2:0] video_mode=settings_video[26:24];
     wire [11:0] video_custom_x=settings_video[23:12];
     wire [11:0] video_custom_y=settings_video[11:0];
     always @(posedge clk) begin
-        if (reset) begin settings_meta<=0; settings_video<=0; end
+        if (reset) begin dimensions_meta<=0; dimensions_video<=0; end
         else begin
-            settings_meta<={hdmi_width,hdmi_height,mode,custom_x,custom_y};
-            settings_video<=settings_meta;
+            dimensions_meta<={hdmi_width,hdmi_height};
+            dimensions_video<=dimensions_meta;
         end
     end
     reg old_de, old_vs;

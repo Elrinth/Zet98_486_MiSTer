@@ -1,13 +1,14 @@
 `timescale 1ns/1ps
 module pc98_video_scale_tb;
     reg clk=0; always #5 clk=!clk;
+    reg source_clk=0; always #8.333 source_clk=!source_clk;
     reg reset=1, ce=0, vs=0, de=0;
     reg [11:0] width=1920, height=1080, custom_x=16, custom_y=9;
     reg [2:0] mode=0;
     wire [12:0] arx, ary;
     wire [11:0] left, top, crop_w, crop_h;
     wire captured;
-    pc98_video_scale dut(clk,reset,ce,vs,de,width,height,mode,custom_x,custom_y,
+    pc98_video_scale dut(clk,source_clk,reset,ce,vs,de,width,height,mode,custom_x,custom_y,
                         arx,ary,left,top,crop_w,crop_h);
     pc98_hdmi_crop crop(clk,reset,ce,vs,de,left,top,crop_w,crop_h,captured);
     integer source_w=640, source_h=400;

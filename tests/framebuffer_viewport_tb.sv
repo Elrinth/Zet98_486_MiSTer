@@ -10,14 +10,14 @@ module framebuffer_viewport_tb;
     reg FREESCALE=0;
     reg [12:0] ARX=0,ARY=0,arc1x=0,arc1y=0,arc2x=0,arc2y=0;
     viewport dut(.*);
-    reg [48:0] previous_inputs=0,expected;
+    reg [149:0] expected_settings=0;
     integer cases=0,stages=0;
     always @(posedge clk_vid) begin
-        expected=previous_inputs;
-        previous_inputs={LFB_EN,LFB_HMIN,LFB_HMAX,LFB_VMIN,LFB_VMAX};
+        if(dut.host_viewport_settings.request_sync[1] != dut.host_viewport_settings.acknowledge)
+            expected_settings=dut.host_viewport_settings.held_data;
         #1;
-        if(dut.lfb_viewport_video !== expected)
-            $fatal(1,"framebuffer settings pipeline mismatch");
+        if(dut.viewport_config_video !== expected_settings)
+            $fatal(1,"framebuffer settings snapshot mismatch");
         stages=stages+1;
     end
     task rectangle(input integer x0,x1,y0,y1);

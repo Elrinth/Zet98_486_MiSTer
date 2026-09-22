@@ -10,14 +10,14 @@ printf '`define BUILD_DATE "test"\n' > "$out/build_id.v"
 sed -e 's/parameter CONF_STR, STRLEN)/parameter CONF_STR = "", STRLEN = 1)/' \
     -e 's/parameter CONF_STR,/parameter CONF_STR = "",/' MiSTer/sys/hps_io.sv > "$out/hps_io.sv"
 iverilog -g2012 -Wall -I "$out" -s mister_disk_interface_tb -o "$out/disk.vvp" \
-    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv "$wrapper" tests/mister_disk_interface_tb.sv
+    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/video_config_snapshot.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv "$wrapper" tests/mister_disk_interface_tb.sv
 vvp "$out/disk.vvp"
 iverilog -g2012 -Wall -DZET98_RAW_IDE -I "$out" -s mister_ide_interface_tb -o "$out/ide.vvp" \
-    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv rtl/storage/pc98_ide.sv \
+    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/video_config_snapshot.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv rtl/storage/pc98_ide.sv \
     "$wrapper" tests/mister_disk_interface_tb.sv tests/mister_ide_interface_tb.sv
 vvp "$out/ide.vvp"
 iverilog -g2012 -Wall -DZET98_RAW_IDE -DZET98_MPU_UART -I "$out" -s mister_mpu_interface_tb -o "$out/mpu.vvp" \
-    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv \
+    "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/video_config_snapshot.sv rtl/pc98_video_scale.sv rtl/floppy_overlay.sv \
     rtl/storage/pc98_ide.sv rtl/midi/pc98_mpu_uart.sv \
     "$wrapper" tests/mister_disk_interface_tb.sv tests/mister_mpu_interface_tb.sv
 vvp "$out/mpu.vvp"

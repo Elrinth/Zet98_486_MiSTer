@@ -1,0 +1,62 @@
+# Host settings across video clocks
+
+The FullFont60 fit at 4790ba7 failed timing on slow host-setting paths into
+75 MHz video: scaler mode, VGA OSD coordinates and the framebuffer enable.
+Its two-register multibit pipelines did not provide a held-data protocol.
+They could not safely be declared asynchronous merely to remove a violation.
+
+`video_config_snapshot.sv` now holds an entire source-clock snapshot, toggles
+a request, and leaves that snapshot unchanged until a returned acknowledgement
+has crossed two source-clock registers. Two destination registers precede
+the enabled payload capture; acknowledgement changes at that capture.
+Changes while busy coalesce to the latest source value. This is appropriate
+for settings, not FIFO data or events that must all be delivered.
+
+The snapshot serves both OSD instances, the framework viewport (including
+dimensions, free scaling and custom aspects), and PC-98 scaling mode/custom
+aspect. HDMI width/height already originate in the video domain and retain
+their local pipeline. The OSD/framebuffer command interfaces, pixel datapaths,
+scaling arithmetic and crop-at-VS behavior remain unchanged. A snapshot is
+coherent at one source edge; a sequence of separate HPS writes is not turned
+into a single atomic command transaction.
+
+Both handshake domains initialize at FPGA configuration. Neither handshake
+side is independently reset by a guest CPU reset. Stopping either clock
+preserves pending data and resumes the same transaction when it restarts.
+
+`pc98-host-video-settings.sdc` constrains every realized held-to-captured
+payload bit to 5 ns. The tested target clocks are 75 MHz input video and
+148.5 MHz HDMI; capture follows at least two destination periods. A delayed
+first synchronizer sample increases settling time. Only the first request/
+acknowledgement synchronizer stages have asynchronous control exceptions.
+Payload hold uses the acknowledgement contract instead of the unrelated
+nominal clock-edge relationship. Payload setup and downstream consumers are
+still checked. Missing named instances or control endpoints stop timing
+analysis; optimized constant/unused payload bits need not remain as flops.
+
+The separate one-bit test-pattern and HDMI-tune enables already use two-stage
+synchronizers. Their first-stage exceptions do not relax the next stage,
+pixel consumers, or the measurement clocks. An FPGA fit and inspection of
+the actual surviving endpoints are still required; RTL simulation does not
+prove analogue metastability resolution or physical routing delays.
+
+Validation:
+
+- 144 snapshot cases: 20/40/50/60/90/100 MHz source clocks; 75/148.5/200 MHz
+  video clocks; four relative phases; 0/5 ns skew on half the payload.
+  Rapid updates, stopped clocks, acknowledgement stability and delivery of
+  the final value pass. Overwriting busy data, bypassing held data, capturing
+  a request too early, and 100 ns late payloads are all rejected.
+- The actual framework viewport passes 73 rectangles at each of 50/60/90 MHz
+  source clocks, including live framebuffer coordinates and normal/native/
+  integer/custom/free-scale modes. A raw-input bypass is rejected.
+- Both OSD clock-ratio cases match the legacy OSD over 3,411,200 pixel/sync
+  comparisons, with all four rotations, info/menu/disabled modes and
+  640x400/320x200 inputs. A raw-settings bypass is rejected.
+- Existing native scaling/crop, HDMI tune-gating, diagnostic raster and
+  disk/IDE/MIDI wrapper regressions pass. The native analogue pixel path is
+  not cropped by these changes.
+
+Logs are local build artifacts: `build/video-config-regression.log` and
+`build/ascal-address-prepare-final.log`. Hardware remains on the previously
+verified FullFont50 build until a new fit passes its timing checks.

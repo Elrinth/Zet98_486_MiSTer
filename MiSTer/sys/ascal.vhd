@@ -2679,11 +2679,19 @@ BEGIN
   END PROCESS OSWEEP;
   
   -----------------------------------------------------------------------------
+  -- Address registers keep the original VSCAL cycle/CE relationship.
+  LINE_ADDRESS : entity work.ascal_line_address
+    generic map (OHRES => OHRES)
+    port map (clk => o_clk, ce => o_ce, fraction_high => o_vfrac(o_vfrac'left),
+              bank => o_vacptl, x => o_hcpt, origin => o_hmin,
+              delayed_origin => o_v_hmin_adj,
+              address0 => o_radl0, address1 => o_radl1,
+              address2 => o_radl2, address3 => o_radl3);
+
   -- Vertical Scaler
   VSCAL:PROCESS(o_clk) IS
     VARIABLE pixq_v : arr_pix(0 TO 3);
     VARIABLE vlumpix_v : type_pix;
-    VARIABLE r1_v, r2_v : natural RANGE 0 TO OHRES-1;
     VARIABLE fracnn_v : std_logic;
   BEGIN
     IF rising_edge(o_clk) THEN
@@ -2691,32 +2699,6 @@ BEGIN
         o_v_hmin_adj<=o_hmin + 4;
 
         fracnn_v := o_vfrac(o_vfrac'left);
-        r1_v := (o_hcpt - o_v_hmin_adj + OHRES) MOD OHRES;
-        r2_v := (o_hcpt - o_hmin + OHRES) MOD OHRES;
-
-        -- CYCLE 1 -----------------------------------------
-        -- Read mem
-        o_radl0<=r1_v;
-        o_radl1<=r1_v;
-        o_radl2<=r1_v;
-        o_radl3<=r1_v;
-
-        IF fracnn_v = '0' THEN
-          CASE o_vacptl IS
-            WHEN "10"   => o_radl1<=r2_v;
-            WHEN "11"   => o_radl2<=r2_v;
-            WHEN "00"   => o_radl3<=r2_v;
-            WHEN OTHERS => o_radl0<=r2_v;
-          END CASE;
-        ELSE
-          CASE o_vacptl IS
-            WHEN "10"   => o_radl2<=r2_v;
-            WHEN "11"   => o_radl3<=r2_v;
-            WHEN "00"   => o_radl0<=r2_v;
-            WHEN OTHERS => o_radl1<=r2_v;
-          END CASE;
-        END IF;
-
         -- CYCLE 2 -----------------------------------------
         -- Lines reordering
         CASE o_vacptl IS

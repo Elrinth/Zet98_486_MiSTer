@@ -465,7 +465,7 @@ floppy_overlay floppy_icon (
 
 // Report native pixel aspect by default. Optional crop is HDMI-only.
 pc98_video_scale hdmi_scale (
-    .clk(clk_vid), .reset(!pll_locked), .ce(CE_PIXEL), .vs(VGA_VS), .de(VGA_DE),
+    .source_clk(clk_sys), .clk(clk_vid), .reset(!pll_locked), .ce(CE_PIXEL), .vs(VGA_VS), .de(VGA_DE),
     .hdmi_width(HDMI_WIDTH), .hdmi_height(HDMI_HEIGHT), .mode(status[25:23]),
     .custom_x(aspect_x), .custom_y(aspect_y), .arx(VIDEO_ARX), .ary(VIDEO_ARY),
     .crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),

@@ -16,15 +16,14 @@ osd dut(clk_sys,io_osd,io_strobe,io_din,clk_video,din,de_in,vs_in,hs_in,
 osd_legacy reference_osd(clk_sys,io_osd,io_strobe,io_din,clk_video,din,de_in,vs_in,hs_in,
         expected,de_r,vs_r,hs_r,status_r);
 
-reg [131:0] sampled=0, delayed=0;
+reg [131:0] expected_settings=0;
 integer setting_checks=0, pixel_checks=0, drawn=0;
 reg compare=0;
 always @(posedge clk_video) begin
-    delayed=sampled;
-    sampled={dut.osd_enable,dut.info,dut.infoh,dut.infow,dut.infox,dut.infoy,
-             dut.osd_h,dut.osd_t,dut.osd_w,dut.rot};
+    if(dut.host_osd_settings.request_sync[1] != dut.host_osd_settings.acknowledge)
+        expected_settings=dut.host_osd_settings.held_data;
     #1;
-    if(dut.osd_config_video !== delayed) $fatal(1,"menu settings pipeline mismatch");
+    if(dut.osd_config_video !== expected_settings) $fatal(1,"menu settings snapshot mismatch");
     setting_checks=setting_checks+1;
     if(compare) begin
         if({actual,de_a,vs_a,hs_a} !== {expected,de_r,vs_r,hs_r})

@@ -544,6 +544,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
 # General routing adds skew and excessive hold-delay compensation.
 set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to "emu:emu|Zet98MiSTer:Zet98_top|CRTC98:VID|VTIMING:TIM|clk3sft[2]"
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pc98_video_scale.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/video_config_snapshot.sv
+set_global_assignment -name VHDL_FILE ../../rtl/ascal_line_address.vhd
 
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/hdmi_tune_gate.sv
 
