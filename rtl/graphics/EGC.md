@@ -186,3 +186,43 @@ The 17,280 cases and four mutations passed in
 `build/simulation-20260922-090917-cca1f6/tests.log` (exit zero, no OOM, container
 removed). Those results establish the selector's reference behavior, not
 complete EGC support or game performance.
+
+## Experimental word transaction engine
+
+`pc98_egc_word_engine.sv` connects the register frontend, shifter and write
+selector to the production SDRAMC's four-plane read and affine RMW ports.
+It snapshots CPU metadata and operands once, holds memory requests through
+completion, advances the source once per accepted source transfer, and waits
+for the CPU strobe to be released before accepting another operation. Pattern
+loading on a write retains the original destination returned by SDRAMC,
+including when every destination plane is masked. CPU completion follows the
+actual memory acknowledgement, not a guessed fixed latency.
+
+This module is still outside the QSF and machine. It deliberately rejects
+byte accesses and disabled/unsupported configurations with a fault response;
+the machine integration must define how to expose unsupported requests.
+Read selection follows NP2's native word path, while physical compare-mode
+behavior and readback during a priming transfer remain unqualified. It assumes
+shared global reset with SDRAMC. Soft reset with an outstanding memory request,
+GRCG/EGC enable arbitration and the machine's CPU/DMA/drawing routing must be
+resolved before enabling it for games.
+
+`tests/run-egc-engine.sh` synthesizes the actual VHDL SDRAMC with GHDL and
+connects it to the SystemVerilog engine. A wiring-only Verilog adapter keeps
+the bidirectional memory pins resolved correctly; GHDL 4.1 lost the external
+input through a nested VHDL inout adapter. The command-level memory source
+supplies distinct plane words and the checker inspects actual row/column,
+bank, data and byte/plane-mask pins. This is not an SDRAM electrical model.
+An independent pixel queue and Boolean raster model checks all 256 operations
+and all 512 direction/source/destination alignments, two automatically
+restarted rows, priming reads, masks and changing destinations. Live CPU
+metadata is poisoned after acceptance and completed strobes are held to expose
+replays. Existing pinned-NP2 shifter and operand tests remain separate oracles.
+
+The final run `build/simulation-20260922-100453-fbe87e/tests.log` passed 8,676
+transactions across 20/60/100 MHz and two memory phases. The full 6,976-case
+matrix runs at 60 MHz; the other five combinations run 340 transactions each.
+All four negative controls failed: stale retained pattern, repeated held
+request, repeated source advancement, and early acknowledgement. Exit status
+was zero, no OOM occurred, and the test container was removed. These simulated
+clock rates do not qualify FPGA timing or establish an EGC game speedup.

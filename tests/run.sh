@@ -61,6 +61,7 @@ bash tests/run-rmw-plane-alignment.sh
 bash tests/run-egc-memory.sh
 bash tests/run-egc-shift.sh
 bash tests/run-egc-write.sh
+bash tests/run-egc-engine.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
 bash tests/run-opna-timer.sh
