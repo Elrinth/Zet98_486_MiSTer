@@ -8,7 +8,7 @@ param(
     [int]$BuildMemoryGB = 8,
     [ValidateRange(1, 3)]
     [int]$MaxConcurrentBuilds = 1,
-    [ValidateSet(20, 40, 50, 60)]
+    [ValidateSet(20, 40, 50, 60, 75, 90, 100)]
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486')]
     [string]$Cpu = 'Zet',
@@ -16,6 +16,8 @@ param(
     [int]$ExtendedRamMB = 0,
     [ValidateSet('OPNA', 'PC9801_86')]
     [string]$SoundBoard = 'OPNA',
+    [ValidateSet('Legacy','JT08')]
+    [string]$OpnaBackend = 'Legacy',
     [switch]$LowMemoryCache,
     [switch]$UpperRamICache,
     [ValidateSet(8, 32, 64)]
@@ -72,6 +74,7 @@ try {
     $Cpu | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu.txt')
     $ExtendedRamMB | Set-Content -LiteralPath (Join-Path $buildRoot 'extended-ram-mb.txt')
     $SoundBoard | Set-Content -LiteralPath (Join-Path $buildRoot 'sound-board.txt')
+    $OpnaBackend | Set-Content -LiteralPath (Join-Path $buildRoot 'opna-backend.txt')
     [bool]$LowMemoryCache | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache.txt')
     [bool]$UpperRamICache | Set-Content -LiteralPath (Join-Path $buildRoot 'upper-ram-icache.txt')
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
@@ -99,6 +102,10 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_LOWMEM_CACHE_KB=$LowMemoryCacheKB"
     }
+    if ($OpnaBackend -eq 'JT08') {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_JT08=1"
+    }
     if ($SoundBoard -eq 'PC9801_86') {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_PCM86=1"
@@ -115,12 +122,27 @@ try {
         $assignments | Set-Content -LiteralPath $projectSettings
         Add-Content -LiteralPath $projectSettings -Value @(
             'set_global_assignment -name VERILOG_MACRO ZET98_AO486=1',
+            'set_global_assignment -name VERILOG_MACRO ZET98_CYCLONEV_READY_MUX=1',
             'set_global_assignment -name QIP_FILE ../../rtl/cpu/ao486_pc98.qip'
         )
     }
     if ($SystemClockMHz -ne 20) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO$SystemClockMHz=1"
+    }
+    if ($Cpu -eq 'ao486' -and $SystemClockMHz -ge 75) {
+        # Upstream ao486 explicitly enables these physical optimization knobs.
+        # Keep all-corner timing analysis and our CDC bounds intact.
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value @(
+            'set_global_assignment -name FITTER_EFFORT "STANDARD FIT"',
+            'set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON',
+            'set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT EXTRA',
+            'set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON',
+            'set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED',
+            'set_global_assignment -name OPTIMIZE_POWER_DURING_SYNTHESIS OFF',
+            'set_global_assignment -name ROUTER_REGISTER_DUPLICATION ON',
+            'set_global_assignment -name FITTER_AGGRESSIVE_ROUTABILITY_OPTIMIZATION ALWAYS'
+        )
     }
     if ($PrepareOnly) {
         Write-Host "Prepared $SystemClockMHz MHz source snapshot: $sourceRoot"

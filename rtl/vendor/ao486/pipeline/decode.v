@@ -49,6 +49,7 @@ module decode(
     input               fetch_page_fault,
     
     output      [3:0]   dec_acceptable,
+    output              dec_fetch_fits,
     
     //exceptions
     output reg          dec_gp_fault,
@@ -215,6 +216,7 @@ decode_regs decode_regs_inst(
     .consume_enabled    (instr_prefix || (!dec_reset && !micro_busy)),    //input [3:0]
     
     .dec_acceptable     (dec_acceptable),   //output [3:0]
+    .dec_fetch_fits     (dec_fetch_fits),
     
     .decoder            (decoder),          //output [95:0]
     .decoder_count      (decoder_count)     //output [3:0]
@@ -341,12 +343,19 @@ end
 
 //------------------------------------------------------------------------------ eip
 
-// Decode supplies at most fifteen bytes. Keep its late instruction-length
-// carry out of the upper 28-bit increment, without adding a pipeline cycle.
-wire [4:0] dec_eip_low = { 1'b0, eip[3:0] } + { 1'b0, dec_consumed };
+// Instruction length and ready arrive late. Compute the sixteen possible
+// low sums before selecting the decoded length; apply ready only at the end.
+// Preserve the original four-bit wrap of (length + prefix_count).
+(* keep = "true" *) wire [4:0] dec_eip_choices [0:15];
+genvar eip_choice;
+generate for(eip_choice=0; eip_choice<16; eip_choice=eip_choice+1) begin : eip_lengths
+    wire [3:0] step = prefix_count + eip_choice;
+    assign dec_eip_choices[eip_choice] = {1'b0, eip[3:0]} + {1'b0, step};
+end endgenerate
+wire [4:0] dec_eip_low = dec_eip_choices[consume_count_local];
 (* keep = "true" *) wire [27:0] eip_upper_increment = eip[31:4] + 28'd1;
-assign dec_eip = { dec_eip_low[4] ? eip_upper_increment : eip[31:4],
-                   dec_eip_low[3:0] };
+assign dec_eip = dec_ready ?
+    { dec_eip_low[4] ? eip_upper_increment : eip[31:4], dec_eip_low[3:0] } : eip;
 
 always @(posedge clk) begin
     if(rst_n == 1'b0)                           eip <= `STARTUP_EIP;

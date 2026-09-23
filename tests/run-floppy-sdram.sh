@@ -13,7 +13,7 @@ done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-15.vhd" tests/floppy_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb
 for port in false true; do
-    for mhz in 20 40 50 60 90 100; do
+    for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
         for phase in 0 1300 4700 9100; do
             ghdl -r --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb \
                 -gUSE_FEC="$port" -gCPU_MHZ="$mhz" -gMEM_PHASE_PS="$phase" --assert-level=error

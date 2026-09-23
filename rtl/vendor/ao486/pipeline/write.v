@@ -625,6 +625,243 @@ always @(posedge clk) begin if(rst_n == 1'b0) wr_mult_overflow        <= 1'd0;  
 
 always @(posedge clk) begin if(rst_n == 1'b0) wr_stack_offset         <= 32'd0;     else if(w_load) wr_stack_offset         <= exe_stack_offset;         end
 
+// Decode stack-width and resume-flag opcodes beside wr_cmd. Live payload
+// and operand-size inputs remain in write_commands; no pipeline cycle is added.
+function [9:0] write_control_decode;
+    input [6:0] command;
+    input [3:0] command_step;
+    begin
+        // RF clear
+        write_control_decode[0] =
+            (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) ||
+            (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) ||
+            (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6);
+        // RF param3, operand32
+        write_control_decode[1] =
+            (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) ||
+            (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1);
+        // RF param3, any operand
+        write_control_decode[2] =
+            (command == `CMD_IRET && command_step == `CMDEX_IRET_protected_to_v86_STEP_5);
+        // RF param5, operand32
+        write_control_decode[3] =
+            (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_4);
+        // RF POPF result2, operand32
+        write_control_decode[4] =
+            (command == `CMD_POPF && command_step == `CMDEX_POPF_STEP_0);
+        // RF task flags
+        write_control_decode[5] =
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_1);
+        // Push gate width from param3 bit19
+        write_control_decode[6] =
+            (command == `CMD_CALL_2 && (command_step == `CMDEX_CALL_2_call_gate_more_STEP_2 || command_step == `CMDEX_CALL_2_call_gate_more_STEP_3)) ||
+            (command == `CMD_CALL_3 && ( command_step == `CMDEX_CALL_3_call_gate_more_STEP_4 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_5 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_6 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_7)) ||
+            (command == `CMD_int_2 && ( command_step == `CMDEX_int_2_int_trap_gate_more_STEP_4 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_5 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_6 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_7 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_8 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_9)) ||
+            (command == `CMD_int_3 && ( command_step == `CMDEX_int_3_int_trap_gate_more_STEP_0 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_1 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_2 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_3));
+        // Push fixed word
+        write_control_decode[7] =
+            (command == `CMD_PUSH_MOV_SEG && { command_step[3], 3'b0 } == `CMDEX_PUSH_MOV_SEG_implicit) ||
+            (command == `CMD_int && (command_step == `CMDEX_int_real_STEP_0 || command_step == `CMDEX_int_real_STEP_1 || command_step == `CMDEX_int_real_STEP_2));
+        // Push gate width from param1 bit19
+        write_control_decode[8] =
+            ((command == `CMD_CALL_2 && (command_step == `CMDEX_CALL_2_call_gate_same_STEP_0 || command_step == `CMDEX_CALL_2_call_gate_same_STEP_1)) || (command == `CMD_int_2 && (command_step == `CMDEX_int_2_int_trap_gate_same_STEP_0 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_1 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_2 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_3)));
+        // Push task width from param3 bit17
+        write_control_decode[9] =
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_9);
+    end
+endfunction
+
+(* preserve *) reg [9:0] wr_control_select;
+always @(posedge clk) begin
+    if(!rst_n)          wr_control_select <= 10'd0;
+    else if(wr_reset)   wr_control_select <= 10'd0;
+    else if(w_load)     wr_control_select <= write_control_decode(exe_cmd, exe_cmdex);
+    else if(wr_ready)   wr_control_select <= 10'd0;
+end
+
+// Decode completion opcodes alongside the command register, without an added cycle.
+function [20:0] write_finish_decode;
+    input [6:0] command;
+    input [3:0] command_step;
+    begin
+        write_finish_decode[0] =
+            (command == `CMD_XADD && command_step == `CMDEX_XADD_FIRST) ||
+            (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ep_STEP_0 || command_step == `CMDEX_CALL_Ap_STEP_0)) ||
+            (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ep_STEP_1 || command_step == `CMDEX_CALL_Ap_STEP_1)) ||
+            (command == `CMD_CALL && (command_step == `CMDEX_CALL_real_v8086_STEP_0 || command_step == `CMDEX_CALL_real_v8086_STEP_1)) ||
+            (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_STEP_0 || command_step == `CMDEX_CALL_Jv_STEP_0)) ||
+            (command == `CMD_CALL && command_step == `CMDEX_CALL_real_v8086_STEP_2) ||
+            (command == `CMD_CALL && (command_step == `CMDEX_CALL_protected_seg_STEP_0 || command_step == `CMDEX_CALL_protected_seg_STEP_1)) ||
+            (command == `CMD_CALL && command_step == `CMDEX_CALL_protected_seg_STEP_2) ||
+            (command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_task_switch_STEP_0) ||
+            (command == `CMD_CALL_2 && (command_step == `CMDEX_CALL_2_call_gate_more_STEP_2 || command_step == `CMDEX_CALL_2_call_gate_more_STEP_3)) ||
+            (command == `CMD_CALL_3 && ( command_step == `CMDEX_CALL_3_call_gate_more_STEP_4 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_5 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_6 || command_step == `CMDEX_CALL_3_call_gate_more_STEP_7)) ||
+            (command == `CMD_INVD && command_step == `CMDEX_INVD_STEP_0) ||
+            (command == `CMD_INVLPG && command_step == `CMDEX_INVLPG_STEP_0) ||
+            (command == `CMD_io_allow && (command_step == `CMDEX_io_allow_1 || command_step == `CMDEX_io_allow_2)) ||
+            (command == `CMD_HLT && command_step == `CMDEX_HLT_STEP_0) ||
+            (command == `CMD_LxS && command_step != `CMDEX_LxS_STEP_LAST) ||
+            ((command == `CMD_MOV_to_seg || command == `CMD_LLDT || command == `CMD_LTR) && command_step == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_1) ||
+            (command == `CMD_int_2  && command_step == `CMDEX_int_2_int_trap_gate_more_STEP_2) ||
+            (command == `CMD_int_2  && command_step == `CMDEX_int_2_int_trap_gate_more_STEP_3) ||
+            (command == `CMD_int_2 && ( command_step == `CMDEX_int_2_int_trap_gate_more_STEP_4 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_5 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_6 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_7 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_8 || command_step == `CMDEX_int_2_int_trap_gate_more_STEP_9)) ||
+            (command == `CMD_int_3 && ( command_step == `CMDEX_int_3_int_trap_gate_more_STEP_0 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_1 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_2 || command_step == `CMDEX_int_3_int_trap_gate_more_STEP_3)) ||
+            (command == `CMD_int && command_step == `CMDEX_int_STEP_0) ||
+            (command == `CMD_int && command_step == `CMDEX_int_STEP_1) ||
+            (command == `CMD_int && (command_step == `CMDEX_int_real_STEP_3 || command_step == `CMDEX_int_real_STEP_4)) ||
+            (command == `CMD_int && (command_step == `CMDEX_int_protected_STEP_0 || command_step == `CMDEX_int_protected_STEP_1 || command_step == `CMDEX_int_protected_STEP_2)) ||
+            (command == `CMD_int && (command_step == `CMDEX_int_real_STEP_0 || command_step == `CMDEX_int_real_STEP_1 || command_step == `CMDEX_int_real_STEP_2)) ||
+            (command == `CMD_load_seg && command_step == `CMDEX_load_seg_STEP_1) ||
+            (command == `CMD_load_seg && command_step == `CMDEX_load_seg_STEP_2) ||
+            (command == `CMD_POP_seg && command_step == `CMDEX_POP_seg_STEP_1) ||
+            (command == `CMD_IRET && command_step <= `CMDEX_IRET_real_v86_STEP_2) ||
+            (command == `CMD_IRET && (command_step == `CMDEX_IRET_protected_STEP_0 || command_step == `CMDEX_IRET_task_switch_STEP_0 || command_step == `CMDEX_IRET_task_switch_STEP_1)) ||
+            (command == `CMD_IRET && command_step >= `CMDEX_IRET_protected_STEP_1 && command_step <= `CMDEX_IRET_protected_STEP_3) ||
+            (command == `CMD_IRET && command_step >= `CMDEX_IRET_protected_to_v86_STEP_0 && command_step <= `CMDEX_IRET_protected_to_v86_STEP_4) ||
+            (command == `CMD_IRET && command_step == `CMDEX_IRET_protected_to_v86_STEP_5) ||
+            (command == `CMD_IRET_2 && command_step >= `CMDEX_IRET_2_protected_outer_STEP_0 && command_step <= `CMDEX_IRET_2_protected_outer_STEP_2) ||
+            (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_4) ||
+            (command == `CMD_POP && command_step == `CMDEX_POP_modregrm_STEP_0) ||
+            (command == `CMD_CMPS && command_step == `CMDEX_CMPS_FIRST) ||
+            (command == `CMD_ENTER && command_step == `CMDEX_ENTER_FIRST) ||
+            (command == `CMD_ENTER && (command_step == `CMDEX_ENTER_PUSH || command_step == `CMDEX_ENTER_LOOP)) ||
+            (command == `CMD_WBINVD && command_step == `CMDEX_WBINVD_STEP_0) ||
+            (command == `CMD_RET_far && command_step == `CMDEX_RET_far_STEP_1) ||
+            (command == `CMD_RET_far && command_step == `CMDEX_RET_far_STEP_2) ||
+            (command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_3) ||
+            (command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_4) ||
+            (command == `CMD_XCHG && command_step == `CMDEX_XCHG_modregrm) ||
+            (command == `CMD_INT_INTO && command_step == `CMDEX_INT_INTO_INT_STEP_0) ||
+            (command == `CMD_INT_INTO && command_step == `CMDEX_INT_INTO_INT3_STEP_0) ||
+            (command == `CMD_INT_INTO && command_step == `CMDEX_INT_INTO_INT1_STEP_0) ||
+            ((command == `CMD_LAR || command == `CMD_LSL || command == `CMD_VERR || command == `CMD_VERW) && (command_step == `CMDEX_LAR_LSL_VERR_VERW_STEP_1 || command_step == `CMDEX_LAR_LSL_VERR_VERW_STEP_2)) ||
+            ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_3) || (command == `CMD_IRET_2  && command_step == `CMDEX_IRET_2_protected_same_STEP_0) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_3) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_2) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_0) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_2) || (command == `CMD_int_2   && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_4)) ||
+            ((command == `CMD_CALL_3 && command_step == `CMDEX_CALL_3_call_gate_more_STEP_9) || (command == `CMD_int_3  && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_4)) ||
+            ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_5) || (command == `CMD_IRET_2  && command_step == `CMDEX_IRET_2_protected_outer_STEP_3)) ||
+            ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_6) || (command == `CMD_IRET_2  && command_step == `CMDEX_IRET_2_protected_outer_STEP_5) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_8) || (command == `CMD_int_3   && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_5)) ||
+            ((command == `CMD_CALL && (command_step == `CMDEX_CALL_protected_STEP_0 || command_step == `CMDEX_CALL_protected_STEP_1)) || (command == `CMD_JMP  && (command_step == `CMDEX_JMP_protected_STEP_0  || command_step == `CMDEX_JMP_protected_STEP_1))) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_task_gate_STEP_0) || (command == `CMD_JMP    && command_step == `CMDEX_JMP_task_gate_STEP_0) || (command == `CMD_int    && command_step == `CMDEX_int_task_gate_STEP_0)) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_task_gate_STEP_1) || (command == `CMD_JMP    && command_step == `CMDEX_JMP_task_gate_STEP_1) || (command == `CMD_int    && command_step == `CMDEX_int_task_gate_STEP_1)) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_call_gate_STEP_0) || (command == `CMD_int    && command_step == `CMDEX_int_int_trap_gate_STEP_0)) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_call_gate_STEP_1) || (command == `CMD_int    && command_step == `CMDEX_int_int_trap_gate_STEP_1)) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_call_gate_STEP_2) || (command == `CMD_int    && command_step == `CMDEX_int_int_trap_gate_STEP_2)) ||
+            ((command == `CMD_CALL_2 && (command_step == `CMDEX_CALL_2_call_gate_same_STEP_0 || command_step == `CMDEX_CALL_2_call_gate_same_STEP_1)) || (command == `CMD_int_2 && (command_step == `CMDEX_int_2_int_trap_gate_same_STEP_0 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_1 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_2 || command_step == `CMDEX_int_2_int_trap_gate_same_STEP_3))) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_call_gate_more_STEP_0) || (command == `CMD_int_2  && command_step == `CMDEX_int_2_int_trap_gate_more_STEP_0)) ||
+            ((command == `CMD_CALL_2 && command_step == `CMDEX_CALL_2_call_gate_more_STEP_1) || (command == `CMD_int_2  && command_step == `CMDEX_int_2_int_trap_gate_more_STEP_1)) ||
+            (command == `CMD_JMP && (command_step == `CMDEX_JMP_Jv_STEP_0 || command_step == `CMDEX_JMP_Ev_STEP_0)) ||
+            (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ep_STEP_0 || command_step == `CMDEX_JMP_Ap_STEP_0 ||  +  command_step == `CMDEX_JMP_Ep_STEP_1 || command_step == `CMDEX_JMP_Ap_STEP_1)) ||
+            (command == `CMD_JMP && command_step == `CMDEX_JMP_real_v8086_STEP_0) ||
+            (command == `CMD_JMP && command_step == `CMDEX_JMP_task_switch_STEP_0) ||
+            (command == `CMD_JMP_2 && command_step == `CMDEX_JMP_2_call_gate_STEP_0) ||
+            (command == `CMD_JMP_2 && command_step == `CMDEX_JMP_2_call_gate_STEP_1) ||
+            (command == `CMD_BOUND && command_step == `CMDEX_BOUND_STEP_FIRST) ||
+            (command == `CMD_task_switch && command_step == `CMDEX_task_switch_STEP_1) ||
+            (command == `CMD_task_switch && (command_step == `CMDEX_task_switch_STEP_2 || command_step == `CMDEX_task_switch_STEP_3 || command_step == `CMDEX_task_switch_STEP_4 || command_step == `CMDEX_task_switch_STEP_5)) ||
+            (command == `CMD_task_switch && command_step == `CMDEX_task_switch_STEP_6) ||
+            (command == `CMD_task_switch && (command_step == `CMDEX_task_switch_STEP_7 || command_step == `CMDEX_task_switch_STEP_8)) ||
+            (command == `CMD_task_switch && command_step == `CMDEX_task_switch_STEP_9) ||
+            (command == `CMD_task_switch && command_step == `CMDEX_task_switch_STEP_10) ||
+            (command == `CMD_task_switch_2 && command_step <= `CMDEX_task_switch_2_STEP_13) ||
+            (command == `CMD_task_switch && command_step == `CMDEX_task_switch_STEP_11) ||
+            (command == `CMD_task_switch && command_step >= `CMDEX_task_switch_STEP_12 && command_step <= `CMDEX_task_switch_STEP_14) ||
+            (command == `CMD_task_switch_3) ||
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_0) ||
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_1) ||
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_2) ||
+            (command == `CMD_task_switch_4 && command_step >= `CMDEX_task_switch_4_STEP_3 && command_step <= `CMDEX_task_switch_4_STEP_8) ||
+            (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_9) ||
+            (command == `CMD_debug_reg && command_step == `CMDEX_debug_reg_MOV_load_STEP_0);
+        write_finish_decode[1] = command == `CMD_SCAS; // cond_32
+        write_finish_decode[2] = command == `CMD_CMPS && command_step == `CMDEX_CMPS_LAST; // cond_107
+        write_finish_decode[3] = (command == `CMD_LGDT || command == `CMD_LIDT); // cond_119
+        write_finish_decode[4] = command_step == `CMDEX_LGDT_LIDT_STEP_1; // cond_120
+        write_finish_decode[5] = command_step == `CMDEX_LGDT_LIDT_STEP_2; // cond_123
+        write_finish_decode[6] = command == `CMD_PUSHA; // cond_124
+        write_finish_decode[7] = command_step[2:0] < 3'd7; // cond_126
+        write_finish_decode[8] = command == `CMD_LODS; // cond_152
+        write_finish_decode[9] = command == `CMD_INT_INTO && command_step == `CMDEX_INT_INTO_INTO_STEP_0; // cond_162
+        write_finish_decode[10] = command == `CMD_IN; // cond_167
+        write_finish_decode[11] = command == `CMD_STOS; // cond_192
+        write_finish_decode[12] = command == `CMD_INS; // cond_196
+        write_finish_decode[13] = command_step == `CMDEX_INS_real_1 || command_step == `CMDEX_INS_protected_1; // cond_197
+        write_finish_decode[14] = command == `CMD_OUTS; // cond_199
+        write_finish_decode[15] = command == `CMD_OUT; // cond_210
+        write_finish_decode[16] = (command == `CMD_SGDT || command == `CMD_SIDT); // cond_258
+        write_finish_decode[17] = command_step == `CMDEX_SGDT_SIDT_STEP_1; // cond_259
+        write_finish_decode[18] = command == `CMD_MOVS; // cond_261
+        write_finish_decode[19] = command == `CMD_POPA; // cond_263
+        write_finish_decode[20] = command_step[2:0] == 3'd7; // cond_264
+        // Command flushes retain cmdex. Substep-only selectors are immaterial
+        // for CMD_NULL; normalize them to match the cleared selector register.
+        if(command == `CMD_NULL) write_finish_decode = 21'd0;
+    end
+endfunction
+reg [20:0] wr_finish_select;
+always @(posedge clk) begin
+    if(!rst_n) wr_finish_select <= 21'd0;
+    else if(wr_reset) wr_finish_select <= 21'd0;
+    else if(w_load) wr_finish_select <= write_finish_decode(exe_cmd, exe_cmdex);
+    else if(wr_ready) wr_finish_select <= 21'd0;
+end
+
+function [43:0] write_reset_decode;
+    input [6:0] command;
+    input [3:0] command_step;
+    begin
+        write_reset_decode[0] = command == `CMD_JCXZ; // cond_4
+        write_reset_decode[1] = command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3); // cond_12
+        write_reset_decode[2] = command == `CMD_Jcc; // cond_25
+        write_reset_decode[3] = command == `CMD_INVD && command_step == `CMDEX_INVD_STEP_1; // cond_27
+        write_reset_decode[4] = command == `CMD_INVLPG && command_step == `CMDEX_INVLPG_STEP_1; // cond_29
+        write_reset_decode[5] = command == `CMD_SCAS; // cond_32
+        write_reset_decode[6] = command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST; // cond_38
+        write_reset_decode[7] = command == `CMD_LxS && command_step == `CMDEX_LxS_STEP_LAST; // cond_42
+        write_reset_decode[8] = (command == `CMD_MOV_to_seg || command == `CMD_LLDT || command == `CMD_LTR) && command_step == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_LAST; // cond_44
+        write_reset_decode[9] = command == `CMD_int && command_step == `CMDEX_int_real_STEP_5; // cond_60
+        write_reset_decode[10] = command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5; // cond_62
+        write_reset_decode[11] = command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6; // cond_63
+        write_reset_decode[12] = command == `CMD_POP_seg && command_step == `CMDEX_POP_seg_STEP_LAST; // cond_76
+        write_reset_decode[13] = command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3; // cond_82
+        write_reset_decode[14] = command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6; // cond_88
+        write_reset_decode[15] = command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1; // cond_89
+        write_reset_decode[16] = command == `CMD_CMPS && command_step == `CMDEX_CMPS_LAST; // cond_107
+        write_reset_decode[17] = command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0; // cond_110
+        write_reset_decode[18] = command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0; // cond_113
+        write_reset_decode[19] = (command == `CMD_LGDT || command == `CMD_LIDT); // cond_119
+        write_reset_decode[20] = command == `CMD_WBINVD && command_step == `CMDEX_WBINVD_STEP_1; // cond_138
+        write_reset_decode[21] = command == `CMD_LOOP; // cond_143
+        write_reset_decode[22] = command == `CMD_CLTS; // cond_146
+        write_reset_decode[23] = command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3; // cond_149
+        write_reset_decode[24] = command == `CMD_LODS; // cond_152
+        write_reset_decode[25] = command == `CMD_INT_INTO && command_step == `CMDEX_INT_INTO_INTO_STEP_0; // cond_162
+        write_reset_decode[26] = command == `CMD_CPUID; // cond_164
+        write_reset_decode[27] = command == `CMD_IN; // cond_167
+        write_reset_decode[28] = (command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3); // cond_178
+        write_reset_decode[29] = (command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6); // cond_182
+        write_reset_decode[30] = command == `CMD_STOS; // cond_192
+        write_reset_decode[31] = command == `CMD_INS; // cond_196
+        write_reset_decode[32] = command == `CMD_OUTS; // cond_199
+        write_reset_decode[33] = command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1); // cond_204
+        write_reset_decode[34] = command == `CMD_OUT; // cond_210
+        write_reset_decode[35] = command == `CMD_POPF && command_step == `CMDEX_POPF_STEP_0; // cond_216
+        write_reset_decode[36] = command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10; // cond_255
+        write_reset_decode[37] = command == `CMD_MOVS; // cond_261
+        write_reset_decode[38] = command == `CMD_debug_reg && command_step == `CMDEX_debug_reg_MOV_load_STEP_1; // cond_270
+        write_reset_decode[39] = (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3)) || (command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST) || (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) || (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) || (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6) || (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0) || (command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3)) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6)) || (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1)) || (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10); // cond_12 || cond_38 || cond_60 || cond_62 || cond_63 || cond_82 || cond_88 || cond_89 || cond_110 || cond_113 || cond_149 || cond_178 || cond_182 || cond_204 || cond_255
+        write_reset_decode[40] = (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3)) || (command == `CMD_INVD && command_step == `CMDEX_INVD_STEP_1) || (command == `CMD_INVLPG && command_step == `CMDEX_INVLPG_STEP_1) || (command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST) || (command == `CMD_LxS && command_step == `CMDEX_LxS_STEP_LAST) || ((command == `CMD_MOV_to_seg || command == `CMD_LLDT || command == `CMD_LTR) && command_step == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_LAST) || (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) || (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) || (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6) || (command == `CMD_POP_seg && command_step == `CMDEX_POP_seg_STEP_LAST) || (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0) || (command == `CMD_WBINVD && command_step == `CMDEX_WBINVD_STEP_1) || (command == `CMD_CLTS) || (command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3) || (command == `CMD_CPUID) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3)) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6)) || (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1)) || (command == `CMD_POPF && command_step == `CMDEX_POPF_STEP_0) || (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10) || (command == `CMD_debug_reg && command_step == `CMDEX_debug_reg_MOV_load_STEP_1); // cond_12 || cond_27 || cond_29 || cond_38 || cond_42 || cond_44 || cond_60 || cond_62 || cond_63 || cond_76 || cond_82 || cond_88 || cond_89 || cond_110 || cond_113 || cond_138 || cond_146 || cond_149 || cond_164 || cond_178 || cond_182 || cond_204 || cond_216 || cond_255 || cond_270
+        write_reset_decode[41] = (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3)) || (command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST) || (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) || (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) || (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6) || (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0) || (command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3)) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6)) || (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1)) || (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10); // cond_12 || cond_38 || cond_60 || cond_62 || cond_63 || cond_82 || cond_88 || cond_89 || cond_110 || cond_113 || cond_149 || cond_178 || cond_182 || cond_204 || cond_255
+        write_reset_decode[42] = (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3)) || (command == `CMD_INVD && command_step == `CMDEX_INVD_STEP_1) || (command == `CMD_INVLPG && command_step == `CMDEX_INVLPG_STEP_1) || (command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST) || (command == `CMD_LxS && command_step == `CMDEX_LxS_STEP_LAST) || ((command == `CMD_MOV_to_seg || command == `CMD_LLDT || command == `CMD_LTR) && command_step == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_LAST) || (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) || (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) || (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6) || (command == `CMD_POP_seg && command_step == `CMDEX_POP_seg_STEP_LAST) || (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0) || (command == `CMD_WBINVD && command_step == `CMDEX_WBINVD_STEP_1) || (command == `CMD_CLTS) || (command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3) || (command == `CMD_CPUID) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3)) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6)) || (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1)) || (command == `CMD_POPF && command_step == `CMDEX_POPF_STEP_0) || (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10) || (command == `CMD_debug_reg && command_step == `CMDEX_debug_reg_MOV_load_STEP_1); // cond_12 || cond_27 || cond_29 || cond_38 || cond_42 || cond_44 || cond_60 || cond_62 || cond_63 || cond_76 || cond_82 || cond_88 || cond_89 || cond_110 || cond_113 || cond_138 || cond_146 || cond_149 || cond_164 || cond_178 || cond_182 || cond_204 || cond_216 || cond_255 || cond_270
+        write_reset_decode[43] = (command == `CMD_CALL && (command_step == `CMDEX_CALL_Ev_Jv_STEP_1 || command_step == `CMDEX_CALL_real_v8086_STEP_3)) || (command == `CMD_INVD && command_step == `CMDEX_INVD_STEP_1) || (command == `CMD_INVLPG && command_step == `CMDEX_INVLPG_STEP_1) || (command == `CMD_RET_near && command_step != `CMDEX_RET_near_LAST) || (command == `CMD_LxS && command_step == `CMDEX_LxS_STEP_LAST) || ((command == `CMD_MOV_to_seg || command == `CMD_LLDT || command == `CMD_LTR) && command_step == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_LAST) || (command == `CMD_int && command_step == `CMDEX_int_real_STEP_5) || (command == `CMD_int_2 && command_step == `CMDEX_int_2_int_trap_gate_same_STEP_5) || (command == `CMD_int_3 && command_step == `CMDEX_int_3_int_trap_gate_more_STEP_6) || (command == `CMD_POP_seg && command_step == `CMDEX_POP_seg_STEP_LAST) || (command == `CMD_IRET && command_step == `CMDEX_IRET_real_v86_STEP_3) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_to_v86_STEP_6) || (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_same_STEP_1) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_LMSW_STEP_0) || (command == `CMD_control_reg && command_step == `CMDEX_control_reg_MOV_load_STEP_0) || (command == `CMD_WBINVD && command_step == `CMDEX_WBINVD_STEP_1) || (command == `CMD_CLTS) || (command == `CMD_RET_far && command_step == `CMDEX_RET_far_real_STEP_3) || (command == `CMD_CPUID) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_same_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_protected_seg_STEP_4) || (command == `CMD_CALL_2  && command_step == `CMDEX_CALL_2_call_gate_same_STEP_3) || (command == `CMD_CALL_3  && command_step == `CMDEX_CALL_3_call_gate_more_STEP_10) || (command == `CMD_JMP     && command_step == `CMDEX_JMP_protected_seg_STEP_1) || (command == `CMD_JMP_2   && command_step == `CMDEX_JMP_2_call_gate_STEP_3)) || ((command == `CMD_RET_far && command_step == `CMDEX_RET_far_outer_STEP_7) ||  + (command == `CMD_IRET_2 && command_step == `CMDEX_IRET_2_protected_outer_STEP_6)) || (command == `CMD_JMP && (command_step == `CMDEX_JMP_Ev_Jv_STEP_1 || command_step == `CMDEX_JMP_real_v8086_STEP_1)) || (command == `CMD_POPF && command_step == `CMDEX_POPF_STEP_0) || (command == `CMD_task_switch_4 && command_step == `CMDEX_task_switch_4_STEP_10) || (command == `CMD_debug_reg && command_step == `CMDEX_debug_reg_MOV_load_STEP_1); // cond_12 || cond_27 || cond_29 || cond_38 || cond_42 || cond_44 || cond_60 || cond_62 || cond_63 || cond_76 || cond_82 || cond_88 || cond_89 || cond_110 || cond_113 || cond_138 || cond_146 || cond_149 || cond_164 || cond_178 || cond_182 || cond_204 || cond_216 || cond_255 || cond_270
+    end
+endfunction
+reg [43:0] wr_reset_select;
+always @(posedge clk) begin
+    if(!rst_n)           wr_reset_select <= 44'd0;
+    else if(wr_reset)    wr_reset_select <= 44'd0;
+    else if(w_load)      wr_reset_select <= write_reset_decode(exe_cmd, exe_cmdex);
+    else if(wr_ready)    wr_reset_select <= 44'd0;
+end
+
 always @(posedge clk) begin
     if(rst_n == 1'b0)   wr_cmd <= `CMD_NULL;
     else if(wr_reset)   wr_cmd <= `CMD_NULL;
@@ -686,8 +923,13 @@ assign write_lock = wr_prefix_group_1_lock;
 
 assign write_rmw = write_rmw_virtual || write_rmw_system_dword;
 
+// Address/data choice depends on the instruction, not its late ES fault
+// result. write_do retains the original fault/REP-zero permission checks;
+// bus payload while no write is requested is intentionally unspecified.
+wire wr_string_write_select = wr_cmd == `CMD_STOS || wr_cmd == `CMD_INS || wr_cmd == `CMD_MOVS;
+
 assign write_address =
-    (write_string_es_virtual)?                  wr_string_es_linear :
+    (wr_string_write_select)?                  wr_string_es_linear :
     (write_stack_virtual)?                      wr_push_linear :
     (write_new_stack_virtual)?                  wr_new_push_linear :
     (write_system_touch)?                       wr_descriptor_touch_offset :
@@ -696,7 +938,7 @@ assign write_address =
                                                 wr_linear; //used by write_rmw_system_dword
 
 assign write_data =
-    (write_stack_virtual || write_string_es_virtual || write_new_stack_virtual)?    result_push :
+    (write_stack_virtual || wr_string_write_select || write_new_stack_virtual)?    result_push :
     (write_system_touch)?                                                           { 24'd0, glob_descriptor[47:41], 1'b1 } :
     (write_system_busy_tss)?                                                        glob_descriptor[63:32] | 32'h00000200 :
     (write_rmw_system_dword || write_system_dword || write_system_word)?            wr_system_dword :
@@ -758,6 +1000,10 @@ wire _unused_ok = &{ 1'b0, glob_descriptor_2[63:47], glob_descriptor_2[44:0], ex
 //------------------------------------------------------------------------------
 
 write_commands write_commands_inst(
+    .wr_control_select (wr_control_select),
+    .wr_finish_select (wr_finish_select),
+    .wr_reset_select (wr_reset_select),
+
     .clk                (clk),
     .rst_n              (rst_n),
     

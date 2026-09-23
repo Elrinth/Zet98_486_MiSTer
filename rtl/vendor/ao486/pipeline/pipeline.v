@@ -454,6 +454,7 @@ wire        fetch_limit;
 wire        fetch_page_fault;
 
 wire [3:0]  dec_acceptable;
+wire        dec_fetch_fits;
 
 fetch fetch_inst(
     .clk                        (clk),
@@ -478,7 +479,8 @@ fetch fetch_inst(
     .fetch_page_fault           (fetch_page_fault),             //output
     
     // feedback from decode
-    .dec_acceptable             (dec_acceptable)                //input [3:0]
+    .dec_acceptable             (dec_acceptable),               //input [3:0]
+    .dec_fetch_fits             (dec_fetch_fits)
 );
 
 //------------------------------------------------------------------------------
@@ -529,6 +531,7 @@ decode decode_inst(
     .fetch_page_fault   (fetch_page_fault),     //input
     
     .dec_acceptable     (dec_acceptable),       //output [3:0]
+    .dec_fetch_fits     (dec_fetch_fits),
     
     //exceptions
     .dec_gp_fault       (dec_gp_fault),         //output

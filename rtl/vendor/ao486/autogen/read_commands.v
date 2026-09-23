@@ -1257,22 +1257,22 @@ assign rd_src_is_rm =
     (cond_255)? (`TRUE) :
     (cond_258 && cond_1)? (`TRUE) :
     1'd0;
+// Mutually exclusive address cases: parallel data paths, no priority chain.
 assign rd_system_linear =
-    (cond_33)? ( tr_base + 32'd102) :
-    (cond_35)? ( tr_base + { 16'd0, rd_memory_last[15:0] } + { 16'd0, 3'd0, glob_param_1[15:3] }) :
-    (cond_64)? ( idtr_base + { 22'd0, exc_vector[7:0], 2'b00 }) :
-    (cond_65)? ( idtr_base + { 22'd0, exc_vector[7:0], 2'b10 }) :
-    (cond_66)? ( idtr_base + { 21'd0, exc_vector[7:0], 3'b000 }) :
-    (cond_88)? ( tr_base) :
-    (cond_187)? ( tr_base + rd_offset_for_ss_from_tss) :
-    (cond_189)? ( tr_base + rd_offset_for_esp_from_tss) :
-    (cond_227)? ( gdtr_base + { 16'd0, tr[15:3], 3'd0 } + 32'd4) :
-    (cond_232 && cond_233)? ( glob_desc_base + 32'd12) :
-    (cond_232 && cond_234)? ( glob_desc_base + 32'h1C) :
-    (cond_232 && cond_235)? ( rd_task_switch_linear_next) :
-    (cond_237)? ( rd_task_switch_linear_next) :
-    (cond_239)? ( gdtr_base + { 16'd0, glob_param_1[15:3], 3'd0 } + 32'd4) :
-    32'd0;
+    ({32{cond_33}} & (tr_base + 32'd102)) |
+    ({32{cond_35}} & (tr_base + { 16'd0, rd_memory_last[15:0] } + { 16'd0, 3'd0, glob_param_1[15:3] })) |
+    ({32{cond_64}} & (idtr_base + { 22'd0, exc_vector[7:0], 2'b00 })) |
+    ({32{cond_65}} & (idtr_base + { 22'd0, exc_vector[7:0], 2'b10 })) |
+    ({32{cond_66}} & (idtr_base + { 21'd0, exc_vector[7:0], 3'b000 })) |
+    ({32{cond_88}} & (tr_base)) |
+    ({32{cond_187}} & (tr_base + rd_offset_for_ss_from_tss)) |
+    ({32{cond_189}} & (tr_base + rd_offset_for_esp_from_tss)) |
+    ({32{cond_227}} & (gdtr_base + { 16'd0, tr[15:3], 3'd0 } + 32'd4)) |
+    ({32{cond_232 && cond_233}} & (glob_desc_base + 32'd12)) |
+    ({32{cond_232 && cond_234}} & (glob_desc_base + 32'h1C)) |
+    ({32{cond_232 && cond_235}} & (rd_task_switch_linear_next)) |
+    ({32{cond_237}} & (rd_task_switch_linear_next)) |
+    ({32{cond_239}} & (gdtr_base + { 16'd0, glob_param_1[15:3], 3'd0 } + 32'd4));
 assign rd_glob_param_1_value =
     (cond_18 && ~cond_16)? ( { 16'd0, glob_descriptor[31:16] }) :
     (cond_51 && cond_52)? ( { 13'd0, rd_decoder[4] & rd_decoder[2], (rd_decoder[6] & rd_decoder[0]) | rd_decoder[1], rd_decoder[0], read_4[15:0] }) :

@@ -686,17 +686,17 @@ assign ds_to_reg =
 assign ds_cache_to_reg =
     (cond_87)? ( `DESC_MASK_P | `DESC_MASK_DPL | `DESC_MASK_SEG | `DESC_MASK_DATA_RWA | { 24'd0, 4'd0,wr_IRET_to_v86_ds[15:12], wr_IRET_to_v86_ds[11:0],4'd0, 16'hFFFF }) :
     ds_cache;
+wire rf_from_param3 = (wr_control_select[1] && wr_operand_32bit) || wr_control_select[2];
+wire rf_from_param5 = wr_control_select[3] && wr_operand_32bit;
+wire rf_from_result2 = wr_control_select[4] && wr_operand_32bit;
+wire rf_from_task = wr_control_select[5];
 assign rflag_to_reg =
-    (cond_60)? (  `FALSE) :
-    (cond_62)? (  `FALSE) :
-    (cond_63)? (  `FALSE) :
-    (cond_82 && cond_83)? (  glob_param_3[16]) :
-    (cond_87)? (  glob_param_3[16]) :
-    (cond_89 && cond_83)? (  glob_param_3[16]) :
-    (cond_93 && cond_83)? (  glob_param_5[16]) :
-    (cond_216 && cond_83)? (  result2[16]) :
-    (cond_240)? (  task_eflags[16]) :
-    rflag;
+    (rf_from_param3 && glob_param_3[16]) ||
+    (rf_from_param5 && glob_param_5[16]) ||
+    (rf_from_result2 && result2[16]) ||
+    (rf_from_task && task_eflags[16]) ||
+    (!(wr_control_select[0] || rf_from_param3 || rf_from_param5 ||
+       rf_from_result2 || rf_from_task) && rflag);
 assign esi_to_reg =
     (cond_107 && cond_33)? ( wr_esi_final) :
     (cond_152 && cond_33)? ( wr_esi_final) :
@@ -1038,24 +1038,9 @@ assign write_system_dword =
     (cond_232 && cond_233)? ( tr_cache[`DESC_BITS_TYPE] > 4'd3  && wr_cmdex <= `CMDEX_task_switch_2_STEP_7) :
     1'd0;
 assign wr_req_reset_pr =
-    (cond_4 && cond_5)? (`TRUE) :
-    (cond_12)? (`TRUE) :
-    (cond_25 && cond_5)? (`TRUE) :
-    (cond_38)? (`TRUE) :
-    (cond_60)? (`TRUE) :
-    (cond_62)? (`TRUE) :
-    (cond_63)? (`TRUE) :
-    (cond_82)? (`TRUE) :
-    (cond_88)? (`TRUE) :
-    (cond_89)? (`TRUE) :
-    (cond_110)? (`TRUE) :
-    (cond_113)? (`TRUE) :
-    (cond_143 && cond_5)? (`TRUE) :
-    (cond_149)? (`TRUE) :
-    (cond_178)? (`TRUE) :
-    (cond_182)? (`TRUE) :
-    (cond_204)? (`TRUE) :
-    (cond_255)? (`TRUE) :
+    (wr_reset_select[39])? (`TRUE) :(wr_reset_select[0] && cond_5)? (`TRUE) :
+    (wr_reset_select[2] && cond_5)? (`TRUE) :
+    (wr_reset_select[21] && cond_5)? (`TRUE) :
     1'd0;
 assign write_seg_sel =
     (cond_67 && cond_64)? (`TRUE) :
@@ -1147,111 +1132,24 @@ assign write_virtual =
     (cond_212)? (  wr_dst_is_memory) :
     (cond_258)? (`TRUE) :
     1'd0;
-assign wr_not_finished =
-    (cond_0)? (`TRUE) :
-    (cond_6)? (`TRUE) :
-    (cond_7)? (`TRUE) :
-    (cond_8)? (`TRUE) :
-    (cond_11)? (`TRUE) :
-    (cond_13)? (`TRUE) :
-    (cond_14)? (`TRUE) :
-    (cond_16)? (`TRUE) :
-    (cond_17)? (`TRUE) :
-    (cond_18)? (`TRUE) :
-    (cond_19)? (`TRUE) :
-    (cond_26)? (`TRUE) :
-    (cond_28)? (`TRUE) :
-    (cond_30)? (`TRUE) :
-    (cond_31)? (`TRUE) :
-    (cond_32 && cond_36)? (`TRUE) :
-    (cond_41)? (`TRUE) :
-    (cond_43)? (`TRUE) :
-    (cond_52)? (`TRUE) :
-    (cond_53)? (`TRUE) :
-    (cond_54)? (`TRUE) :
-    (cond_55)? (`TRUE) :
-    (cond_57)? (`TRUE) :
-    (cond_58)? (`TRUE) :
-    (cond_59)? (`TRUE) :
-    (cond_61)? (`TRUE) :
-    (cond_65)? (`TRUE) :
-    (cond_67)? (`TRUE) :
-    (cond_70)? (`TRUE) :
-    (cond_75)? (`TRUE) :
-    (cond_80)? (`TRUE) :
-    (cond_84)? (`TRUE) :
-    (cond_85)? (`TRUE) :
-    (cond_86)? (`TRUE) :
-    (cond_87)? (`TRUE) :
-    (cond_92)? (`TRUE) :
-    (cond_93)? (`TRUE) :
-    (cond_97)? (`TRUE) :
-    (cond_106)? (`TRUE) :
-    (cond_107 && cond_36)? (`TRUE) :
-    (cond_119 && cond_120)? (`TRUE) :
-    (cond_119 && ~cond_123)? (`TRUE) :
-    (cond_124 && cond_126)? (`TRUE) :
-    (cond_130)? (`TRUE) :
-    (cond_132)? (`TRUE) :
-    (cond_137)? (`TRUE) :
-    (cond_147)? (`TRUE) :
-    (cond_148)? (`TRUE) :
-    (cond_150)? (`TRUE) :
-    (cond_151)? (`TRUE) :
-    (cond_152 && cond_154)? (`TRUE) :
-    (cond_156)? (`TRUE) :
-    (cond_159)? (`TRUE) :
-    (cond_160)? (`TRUE) :
-    (cond_161)? (`TRUE) :
-    (cond_162 && cond_163)? (`TRUE) :
-    (cond_167 && ~cond_168)? (`TRUE) :
-    (cond_170)? (`TRUE) :
-    (cond_174)? (`TRUE) :
-    (cond_177)? (`TRUE) :
-    (cond_179)? (`TRUE) :
-    (cond_180)? (`TRUE) :
-    (cond_183)? (`TRUE) :
-    (cond_184)? (`TRUE) :
-    (cond_185)? (`TRUE) :
-    (cond_186)? (`TRUE) :
-    (cond_187)? (`TRUE) :
-    (cond_188)? (`TRUE) :
-    (cond_189)? (`TRUE) :
-    (cond_190)? (`TRUE) :
-    (cond_191)? (`TRUE) :
-    (cond_192 && cond_33 && ~cond_9 && ~cond_194 && cond_34)? (`TRUE) :
-    (cond_196 && cond_197)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_33 && ~cond_9 && ~cond_198)? (`TRUE) :
-    (cond_199 && cond_200)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_33 && ~cond_201 && ~cond_198)? (`TRUE) :
-    (cond_203)? (`TRUE) :
-    (cond_205)? (`TRUE) :
-    (cond_206)? (`TRUE) :
-    (cond_207)? (`TRUE) :
-    (cond_208)? (`TRUE) :
-    (cond_209)? (`TRUE) :
-    (cond_210 && ~cond_211)? (`TRUE) :
-    (cond_222)? (`TRUE) :
-    (cond_225)? (`TRUE) :
-    (cond_226)? (`TRUE) :
-    (cond_227)? (`TRUE) :
-    (cond_229)? (`TRUE) :
-    (cond_230)? (`TRUE) :
-    (cond_231)? (`TRUE) :
-    (cond_232)? (`TRUE) :
-    (cond_234)? (`TRUE) :
-    (cond_236)? (`TRUE) :
-    (cond_237)? (`TRUE) :
-    (cond_238)? (`TRUE) :
-    (cond_240)? (`TRUE) :
-    (cond_242)? (`TRUE) :
-    (cond_244)? (`TRUE) :
-    (cond_253)? (`TRUE) :
-    (cond_258 && cond_259)? (`TRUE) :
-    (cond_261 && cond_33 && ~cond_9 && ~cond_194 && cond_34)? (`TRUE) :
-    (cond_263 && ~cond_264)? (`TRUE) :
-    (cond_266)? (`TRUE) :
-    1'd0;
+assign wr_not_finished = wr_finish_select[0] ||
+    (wr_finish_select[1] && cond_36) ||
+    (wr_finish_select[2] && cond_36) ||
+    (wr_finish_select[3] && wr_finish_select[4]) ||
+    (wr_finish_select[3] && ~wr_finish_select[5]) ||
+    (wr_finish_select[6] && wr_finish_select[7]) ||
+    (wr_finish_select[8] && cond_154) ||
+    (wr_finish_select[9] && cond_163) ||
+    (wr_finish_select[10] && ~cond_168) ||
+    (wr_finish_select[11] && cond_33 && ~cond_9 && ~cond_194 && cond_34) ||
+    (wr_finish_select[12] && wr_finish_select[13]) ||
+    (wr_finish_select[12] && ~wr_finish_select[13] && cond_33 && ~cond_9 && ~cond_198) ||
+    (wr_finish_select[14] && cond_200) ||
+    (wr_finish_select[14] && ~cond_200 && cond_33 && ~cond_201 && ~cond_198) ||
+    (wr_finish_select[15] && ~cond_211) ||
+    (wr_finish_select[16] && wr_finish_select[17]) ||
+    (wr_finish_select[18] && cond_33 && ~cond_9 && ~cond_194 && cond_34) ||
+    (wr_finish_select[19] && ~wr_finish_select[20]);
 assign wr_int_soft_int =
     (cond_159)? (`TRUE) :
     (cond_160)? (`TRUE) :
@@ -1314,49 +1212,24 @@ assign write_regrm =
     (cond_274 && ~cond_5)? (`TRUE) :
     1'd0;
 assign wr_req_reset_rd =
-    (cond_4 && cond_5)? (`TRUE) :
-    (cond_12)? (`TRUE) :
-    (cond_25 && cond_5)? (`TRUE) :
-    (cond_27)? (`TRUE) :
-    (cond_29)? (`TRUE) :
-    (cond_32 && cond_35)? (`TRUE) :
-    (cond_38)? (`TRUE) :
-    (cond_42)? (`TRUE) :
-    (cond_44)? (`TRUE) :
-    (cond_60)? (`TRUE) :
-    (cond_62)? (`TRUE) :
-    (cond_63)? (`TRUE) :
-    (cond_76)? (`TRUE) :
-    (cond_82)? (`TRUE) :
-    (cond_88)? (`TRUE) :
-    (cond_89)? (`TRUE) :
-    (cond_107 && cond_108)? (`TRUE) :
-    (cond_110)? (`TRUE) :
-    (cond_113)? (`TRUE) :
-    (cond_119 && cond_123)? (`TRUE) :
-    (cond_138)? (`TRUE) :
-    (cond_143 && cond_5)? (`TRUE) :
-    (cond_146)? (`TRUE) :
-    (cond_149)? (`TRUE) :
-    (cond_152 && cond_153)? (`TRUE) :
-    (cond_162 && ~cond_163)? (`TRUE) :
-    (cond_164)? (`TRUE) :
-    (cond_167 && cond_168)? (`TRUE) :
-    (cond_178)? (`TRUE) :
-    (cond_182)? (`TRUE) :
-    (cond_192 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_192 && cond_195)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_195)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_195)? (`TRUE) :
-    (cond_204)? (`TRUE) :
-    (cond_210 && cond_211 && ~cond_201)? (`TRUE) :
-    (cond_216)? (`TRUE) :
-    (cond_255)? (`TRUE) :
-    (cond_261 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_261 && cond_195)? (`TRUE) :
-    (cond_270)? (`TRUE) :
+    (wr_reset_select[40])? (`TRUE) :(wr_reset_select[0] && cond_5)? (`TRUE) :
+    (wr_reset_select[2] && cond_5)? (`TRUE) :
+    (wr_reset_select[5] && cond_35)? (`TRUE) :
+    (wr_reset_select[16] && cond_108)? (`TRUE) :
+    (wr_reset_select[19] && cond_123)? (`TRUE) :
+    (wr_reset_select[21] && cond_5)? (`TRUE) :
+    (wr_reset_select[24] && cond_153)? (`TRUE) :
+    (wr_reset_select[25] && ~cond_163)? (`TRUE) :
+    (wr_reset_select[27] && cond_168)? (`TRUE) :
+    (wr_reset_select[30] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[30] && cond_195)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_195)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_195)? (`TRUE) :
+    (wr_reset_select[34] && cond_211 && ~cond_201)? (`TRUE) :
+    (wr_reset_select[37] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[37] && cond_195)? (`TRUE) :
     1'd0;
 assign wr_string_gp_fault_check =
     (cond_192)? (`TRUE) :
@@ -1409,15 +1282,9 @@ assign tlbflushall_do =
     (cond_240 && cond_241)? (`TRUE) :
     1'd0;
 assign wr_push_length_word =
-    (cond_18)? (  ~(glob_param_3[19])) :
-    (cond_19)? (  ~(glob_param_3[19])) :
-    (cond_21)? (`TRUE) :
-    (cond_54)? (  ~(glob_param_3[19])) :
-    (cond_55)? ( ~(glob_param_3[19])) :
-    (cond_65)? (`TRUE) :
-    (cond_189)? (  ~(glob_param_1[19])) :
-    (cond_253)? (  ~(glob_param_3[17])) :
-    1'd0;
+    (wr_control_select[6] && !glob_param_3[19]) || wr_control_select[7] ||
+    (wr_control_select[8] && !glob_param_1[19]) ||
+    (wr_control_select[9] && !glob_param_3[17]);
 assign wr_system_dword =
     (cond_227 && cond_228)? ( glob_param_2 & 32'hFFFFFDFF) :
     (cond_230)? (  (glob_param_1[`TASK_SWITCH_SOURCE_BITS] == `TASK_SWITCH_FROM_INT)? exc_eip : eip) :
@@ -1457,78 +1324,34 @@ assign write_seg_rpl =
     (cond_244 && cond_251 && cond_64)? (`TRUE) :
     1'd0;
 assign wr_req_reset_dec =
-    (cond_4 && cond_5)? (`TRUE) :
-    (cond_12)? (`TRUE) :
-    (cond_25 && cond_5)? (`TRUE) :
-    (cond_38)? (`TRUE) :
-    (cond_60)? (`TRUE) :
-    (cond_62)? (`TRUE) :
-    (cond_63)? (`TRUE) :
-    (cond_82)? (`TRUE) :
-    (cond_88)? (`TRUE) :
-    (cond_89)? (`TRUE) :
-    (cond_110)? (`TRUE) :
-    (cond_113)? (`TRUE) :
-    (cond_143 && cond_5)? (`TRUE) :
-    (cond_149)? (`TRUE) :
-    (cond_178)? (`TRUE) :
-    (cond_182)? (`TRUE) :
-    (cond_204)? (`TRUE) :
-    (cond_255)? (`TRUE) :
+    (wr_reset_select[41])? (`TRUE) :(wr_reset_select[0] && cond_5)? (`TRUE) :
+    (wr_reset_select[2] && cond_5)? (`TRUE) :
+    (wr_reset_select[21] && cond_5)? (`TRUE) :
     1'd0;
 assign wr_req_reset_exe =
-    (cond_4 && cond_5)? (`TRUE) :
-    (cond_12)? (`TRUE) :
-    (cond_25 && cond_5)? (`TRUE) :
-    (cond_27)? (`TRUE) :
-    (cond_29)? (`TRUE) :
-    (cond_32 && cond_35)? (`TRUE) :
-    (cond_38)? (`TRUE) :
-    (cond_42)? (`TRUE) :
-    (cond_44)? (`TRUE) :
-    (cond_60)? (`TRUE) :
-    (cond_62)? (`TRUE) :
-    (cond_63)? (`TRUE) :
-    (cond_76)? (`TRUE) :
-    (cond_82)? (`TRUE) :
-    (cond_88)? (`TRUE) :
-    (cond_89)? (`TRUE) :
-    (cond_107 && cond_108)? (`TRUE) :
-    (cond_110)? (`TRUE) :
-    (cond_113)? (`TRUE) :
-    (cond_119 && cond_123)? (`TRUE) :
-    (cond_138)? (`TRUE) :
-    (cond_143 && cond_5)? (`TRUE) :
-    (cond_146)? (`TRUE) :
-    (cond_149)? (`TRUE) :
-    (cond_152 && cond_153)? (`TRUE) :
-    (cond_162 && ~cond_163)? (`TRUE) :
-    (cond_164)? (`TRUE) :
-    (cond_167 && cond_168)? (`TRUE) :
-    (cond_178)? (`TRUE) :
-    (cond_182)? (`TRUE) :
-    (cond_192 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_192 && cond_195)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_195)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_195)? (`TRUE) :
-    (cond_204)? (`TRUE) :
-    (cond_210 && cond_211 && ~cond_201)? (`TRUE) :
-    (cond_216)? (`TRUE) :
-    (cond_255)? (`TRUE) :
-    (cond_261 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_261 && cond_195)? (`TRUE) :
-    (cond_270)? (`TRUE) :
+    (wr_reset_select[42])? (`TRUE) :(wr_reset_select[0] && cond_5)? (`TRUE) :
+    (wr_reset_select[2] && cond_5)? (`TRUE) :
+    (wr_reset_select[5] && cond_35)? (`TRUE) :
+    (wr_reset_select[16] && cond_108)? (`TRUE) :
+    (wr_reset_select[19] && cond_123)? (`TRUE) :
+    (wr_reset_select[21] && cond_5)? (`TRUE) :
+    (wr_reset_select[24] && cond_153)? (`TRUE) :
+    (wr_reset_select[25] && ~cond_163)? (`TRUE) :
+    (wr_reset_select[27] && cond_168)? (`TRUE) :
+    (wr_reset_select[30] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[30] && cond_195)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_195)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_195)? (`TRUE) :
+    (wr_reset_select[34] && cond_211 && ~cond_201)? (`TRUE) :
+    (wr_reset_select[37] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[37] && cond_195)? (`TRUE) :
     1'd0;
 assign wr_push_length_dword =
-    (cond_18)? ( glob_param_3[19]) :
-    (cond_19)? ( glob_param_3[19]) :
-    (cond_54)? ( glob_param_3[19]) :
-    (cond_55)? ( glob_param_3[19]) :
-    (cond_189)? ( glob_param_1[19]) :
-    (cond_253)? ( glob_param_3[17]) :
-    1'd0;
+    (wr_control_select[6] && glob_param_3[19]) ||
+    (wr_control_select[8] && glob_param_1[19]) ||
+    (wr_control_select[9] && glob_param_3[17]);
 assign wr_one_cycle_wait =
     (cond_8)? (`TRUE) :
     (cond_11)? (`TRUE) :
@@ -1570,49 +1393,24 @@ assign write_new_stack_virtual =
     (cond_55 && cond_15)? (`TRUE) :
     1'd0;
 assign wr_req_reset_micro =
-    (cond_4 && cond_5)? (`TRUE) :
-    (cond_12)? (`TRUE) :
-    (cond_25 && cond_5)? (`TRUE) :
-    (cond_27)? (`TRUE) :
-    (cond_29)? (`TRUE) :
-    (cond_32 && cond_35)? (`TRUE) :
-    (cond_38)? (`TRUE) :
-    (cond_42)? (`TRUE) :
-    (cond_44)? (`TRUE) :
-    (cond_60)? (`TRUE) :
-    (cond_62)? (`TRUE) :
-    (cond_63)? (`TRUE) :
-    (cond_76)? (`TRUE) :
-    (cond_82)? (`TRUE) :
-    (cond_88)? (`TRUE) :
-    (cond_89)? (`TRUE) :
-    (cond_107 && cond_108)? (`TRUE) :
-    (cond_110)? (`TRUE) :
-    (cond_113)? (`TRUE) :
-    (cond_119 && cond_123)? (`TRUE) :
-    (cond_138)? (`TRUE) :
-    (cond_143 && cond_5)? (`TRUE) :
-    (cond_146)? (`TRUE) :
-    (cond_149)? (`TRUE) :
-    (cond_152 && cond_153)? (`TRUE) :
-    (cond_162 && ~cond_163)? (`TRUE) :
-    (cond_164)? (`TRUE) :
-    (cond_167 && cond_168)? (`TRUE) :
-    (cond_178)? (`TRUE) :
-    (cond_182)? (`TRUE) :
-    (cond_192 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_192 && cond_195)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
-    (cond_196 && ~cond_197 && cond_195)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
-    (cond_199 && ~cond_200 && cond_195)? (`TRUE) :
-    (cond_204)? (`TRUE) :
-    (cond_210 && cond_211 && ~cond_201)? (`TRUE) :
-    (cond_216)? (`TRUE) :
-    (cond_255)? (`TRUE) :
-    (cond_261 && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
-    (cond_261 && cond_195)? (`TRUE) :
-    (cond_270)? (`TRUE) :
+    (wr_reset_select[43])? (`TRUE) :(wr_reset_select[0] && cond_5)? (`TRUE) :
+    (wr_reset_select[2] && cond_5)? (`TRUE) :
+    (wr_reset_select[5] && cond_35)? (`TRUE) :
+    (wr_reset_select[16] && cond_108)? (`TRUE) :
+    (wr_reset_select[19] && cond_123)? (`TRUE) :
+    (wr_reset_select[21] && cond_5)? (`TRUE) :
+    (wr_reset_select[24] && cond_153)? (`TRUE) :
+    (wr_reset_select[25] && ~cond_163)? (`TRUE) :
+    (wr_reset_select[27] && cond_168)? (`TRUE) :
+    (wr_reset_select[30] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[30] && cond_195)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_33 && ~cond_9 && cond_198)? (`TRUE) :
+    (wr_reset_select[31] && ~cond_197 && cond_195)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_33 && ~cond_201 && cond_198)? (`TRUE) :
+    (wr_reset_select[32] && ~cond_200 && cond_195)? (`TRUE) :
+    (wr_reset_select[34] && cond_211 && ~cond_201)? (`TRUE) :
+    (wr_reset_select[37] && cond_33 && ~cond_9 && cond_194)? (`TRUE) :
+    (wr_reset_select[37] && cond_195)? (`TRUE) :
     1'd0;
 assign wr_make_esp_speculative =
     (cond_7)? (`TRUE) :
@@ -1636,25 +1434,20 @@ assign wr_hlt_in_progress =
 assign wr_regrm_word =
     (cond_39)? (`TRUE) :
     1'd0;
+// Data can settle before the task-switch write/descriptor-ready decision.
+// The unchanged wr_glob_param_1_set enables it only at the original steps.
+// All seven substeps are distinct; see prove-write-parameter-payload.py.
 assign wr_glob_param_1_value =
-    (cond_240)? ( (glob_descriptor[`DESC_BITS_TYPE] <= 4'd3)? { 13'd0, `SEGMENT_LDT, exe_buffer_shifted[47:32] } : { 13'd0, `SEGMENT_LDT, exe_buffer_shifted[15:0] }) :
-    (cond_242)? ( { 13'd0, `SEGMENT_SS, task_ss }) :
-    (cond_244 && cond_246 && ~cond_9 && cond_245)? ( { 13'd0, `SEGMENT_DS, task_ds }) :
-    (cond_244 && cond_246 && ~cond_9 && cond_247)? ( { 13'd0, `SEGMENT_ES, task_es }) :
-    (cond_244 && cond_246 && ~cond_9 && cond_248)? ( { 13'd0, `SEGMENT_FS, glob_param_4[31:16] }) :
-    (cond_244 && cond_246 && ~cond_9 && cond_249)? ( { 13'd0, `SEGMENT_GS, glob_param_4[15:0] }) :
-    (cond_244 && cond_246 && ~cond_9 && cond_250)? ( { 13'd0, `SEGMENT_CS, task_cs }) :
-    (cond_244 && cond_251 && cond_245)? ( { 13'd0, `SEGMENT_DS, task_ds }) :
-    (cond_244 && cond_251 && cond_247)? ( { 13'd0, `SEGMENT_ES, task_es }) :
-    (cond_244 && cond_251 && cond_248)? ( { 13'd0, `SEGMENT_FS, glob_param_4[31:16] }) :
-    (cond_244 && cond_251 && cond_249)? ( { 13'd0, `SEGMENT_GS, glob_param_4[15:0] }) :
-    (cond_244 && cond_251 && cond_250)? ( { 13'd0, `SEGMENT_CS, task_cs }) :
-    (cond_244 && cond_252 && cond_245)? ( { 13'd0, `SEGMENT_DS, task_ds }) :
-    (cond_244 && cond_252 && cond_247)? ( { 13'd0, `SEGMENT_ES, task_es }) :
-    (cond_244 && cond_252 && cond_248)? ( { 13'd0, `SEGMENT_FS, glob_param_4[31:16] }) :
-    (cond_244 && cond_252 && cond_249)? ( { 13'd0, `SEGMENT_GS, glob_param_4[15:0] }) :
-    (cond_244 && cond_252 && cond_250)? ( { 13'd0, `SEGMENT_CS, task_cs }) :
-    32'd0;
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_1}} &
+        ((glob_descriptor[`DESC_BITS_TYPE] <= 4'd3) ?
+         {13'd0, `SEGMENT_LDT, exe_buffer_shifted[47:32]} :
+         {13'd0, `SEGMENT_LDT, exe_buffer_shifted[15:0]})) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_2}} & {13'd0, `SEGMENT_SS, task_ss}) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_3}} & {13'd0, `SEGMENT_DS, task_ds}) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_4}} & {13'd0, `SEGMENT_ES, task_es}) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_5}} & {13'd0, `SEGMENT_FS, glob_param_4[31:16]}) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_6}} & {13'd0, `SEGMENT_GS, glob_param_4[15:0]}) |
+    ({32{wr_cmdex == `CMDEX_task_switch_4_STEP_7}} & {13'd0, `SEGMENT_CS, task_cs});
 assign wr_push_ss_fault_check =
     (cond_8)? (`TRUE) :
     (cond_11)? (`TRUE) :

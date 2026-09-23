@@ -34,7 +34,7 @@ Path(sys.argv[1]).write_text(source)
 PY
 ghdl -a --std=08 --workdir="$out" "$out/delayed.vhd" tests/video_settings_transfer_tb.vhd
 ghdl -e --std=08 --workdir="$out" video_settings_transfer_tb
-for mhz in 20 40 50 60 90 100; do
+for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
     for phase in 1300 4700 9100; do
         ghdl -r --std=08 --workdir="$out" video_settings_transfer_tb -gCPU_MHZ="$mhz" -gVIDEO_PHASE_PS="$phase" --assert-level=error
     done

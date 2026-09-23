@@ -790,6 +790,8 @@ set_global_assignment -name QIP_FILE ../../sound/OPN/RHYTHM/ROM_01BD.qip
 set_global_assignment -name SOURCE_FILE ../../sound/OPN/RHYTHM/ROM_01BD.cmp
 set_global_assignment -name VHDL_FILE ../../sound/OPN/RHYTHM/OPNARHYTHM.vhd
 set_global_assignment -name VHDL_FILE ../../sound/OPN/OPNA.vhd
+set_global_assignment -name QIP_FILE ../../rtl/vendor/jt08/jt08.qip
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/opna_jt08.sv
 set_global_assignment -name VHDL_FILE ../../sound/sinwrom.vhd
 set_global_assignment -name QIP_FILE ../../sound/sinwrom.qip
 set_global_assignment -name VHDL_FILE ../../sound/sintbl.vhd
@@ -921,6 +923,7 @@ set_global_assignment -name VHDL_FILE ../../LIB/fixtimer.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/intchk.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/digifilter.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/sftgen.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/opna_clock_enable.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/signext.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/CRCGENN.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/div.vhd

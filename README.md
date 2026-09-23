@@ -9,7 +9,7 @@ video, timer, sound and disk timing.
 runs on the SuperStation One and has passed hardware CPU, 64 MB physical-memory,
 XMS, disk and interrupt diagnostics at 50 MHz. Rusty reaches its title, intro
 and first-stage graphics; Nightslave reaches its title menu. Gameplay frame
-rate and audible music quality have not yet been measured. This is not a
+rate has not yet been measured; JT08 listening results are recorded below. This is not a
 complete PC-9821 implementation or a DX4/Pentium performance claim.
 
 The current development features include:
@@ -25,6 +25,15 @@ The current development features include:
   FM timer-clear write was fixed; Native50 and Bundle50 pass 100 consecutive
   timer-B IRQ12 deliveries and cascaded PIC EOI. These silent diagnostics do
   not certify musical timing or sound quality.
+- **Alternative OPNA engine:** `-OpnaBackend JT08` selects the
+  [PC88 JT08 adaptation of Jotego JT12](rtl/OPNA_JT08.md), retaining the separate
+  86-board PCM engine. All six FM voices, three PSG voices, six rhythm sounds,
+  stereo panning, LFO, SSG envelopes and bus/timer behavior pass simulation at
+  75/100 MHz. Build #115 passes actual hardware CPU, 64 MB map, FM interrupts
+  and Rusty's original OPNA-detection procedure. Its worst reported slack is
+  -5.783 ns at 100 MHz. The user reports much better Rusty intro music and
+  authentic-sounding drums. Speech just after C-LAB still sounds unusual;
+  investigating that remaining issue is deferred at the user's request.
 - **Hard disk:** a raw `.vhd`/`.img` controller and floppy-installed disk BIOS
   boot the owner's DOS 6.20 image. The optional bounded write BIOS persists
   DOS files, verified independently against the resulting FAT and data sectors.
@@ -34,11 +43,47 @@ The current development features include:
   reports 1728x1080 fit, 1280x800 integer fit and a centered 1920x1080 crop.
   Standard 15 kHz SCART conversion is not implemented.
 
-Recent 50 MHz complete builds have no negative slack in the reported timing
-checks; SDRAM/HDMI board-I/O constraints remain incomplete. The 60 MHz builds
-are still undergoing timing work and have not been deployed. The latest
-50 MHz memory/video changes are being hardware-tested separately from the
-verified Bundle50 fallback. See [hardware evidence and limitations](HARDWARE_TESTING.md).
+The PlaneAligned60 build has no negative slack in the reported timing checks
+(minimum +0.061 ns) and runs on the SuperStation One. Fresh hardware tests pass
+the CPU checksums, 64 MB physical-memory map, graphics-plane alias checks and
+100 FM timer-B IRQ12 deliveries. Its benchmark reports 286 ALU, 152 RAM-copy
+and 114 stack blocks per ten DOS seconds. Rusty's title and intro display;
+gameplay frame rate and audible music quality remain unmeasured. External
+board-I/O constraints, including SDRAM, remain incomplete.
+
+Experimental 75 MHz build #111 has now passed the hardware CPU checksums,
+64 MB physical-memory map, both graphics-plane diagnostics, and 100 FM
+timer-B interrupts. Its benchmark scores 345 ALU, 176 RAM-copy and 127 stack
+blocks per ten DOS seconds, compared with 286/152/114 at 60 MHz. Rusty's
+opening and title menu display. This build still has -2.352 ns worst reported
+CPU setup slack; these board tests do not establish timing closure or complete
+game/audio stability. See [hardware evidence and limitations](HARDWARE_TESTING.md).
+
+Experimental build #113 runs at **100 MHz with 64 MB RAM**, using ao486,
+PC-9801-86 audio, an 8 KB conventional-memory cache, upper-RAM instruction
+cache, raw IDE and MIDI UART. It passes the hardware CPU, physical-memory,
+graphics alias, GRCG comparison and FM interrupt diagnostics. DOS 6.20 also
+passes direct XMS allocation/copy/free with 63,424 KB free and a 17 MB block
+above 16 MB (NEC MEM's display still misreports XMS with HIMEMX). The benchmark
+scores 429 ALU / 193 RAM-copy / 163 stack blocks per ten DOS seconds: 24.3% /
+9.7% / 28.3% above the tested 75 MHz build. Rusty reaches its title menu and
+responds to Enter. Worst reported slack is -6.063 ns; sustained gameplay FPS
+and audible music quality remain unmeasured.
+Build it with:
+
+```powershell
+./scripts/build.ps1 -SystemClockMHz 100 -Cpu ao486 -ExtendedRamMB 64 -SoundBoard PC9801_86 -LowMemoryCache -LowMemoryCacheKB 8 -UpperRamICache -RawIde -MidiUart -BuildCpus 8 -BuildMemoryGB 8 -StartOnly
+```
+
+The system clock changes while SDRAM remains at 100 MHz and video at 75 MHz.
+The user-approved experimental limit is -12 ns worst reported slack; this
+does not change the timing constraints or establish timing closure. Board
+diagnostics must pass before evaluating game performance. The current historical
+performance target is NEC's
+[PC-9821Xa10](https://support.nec-lavie.jp/support/product/data/spec/cpu/95110022-1.html)
+with its 100 MHz Pentium, configured with 64 MB RAM. This supersedes the earlier
+DX4/Ap3 preference. The current CPU remains ao486; matching clock frequency and
+RAM capacity does not establish Pentium performance or full-machine compatibility.
 
 An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
 `-MidiUart`, passes serial, bus and interrupt simulations, 200 guest IRQ6

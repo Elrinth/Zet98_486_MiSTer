@@ -1494,3 +1494,152 @@ is -0.097 ns and video setup -0.145 ns. It passes all HPS placement guards
 but is not deployed. Compared with ScalerSettings60's -1.320 ns CPU path,
 the worst CPU violation is smaller; reliable 60 MHz operation is still
 unproven. Detailed path analysis is running with one CPU.
+
+### Experimental 75 MHz hardware test, 2026-09-23
+
+At the user's explicit request, build #111 (`quartus-20260923-000118-549b2c`)
+was tested on the SuperStation One despite its remaining CPU setup failures:
+-2.352 ns at the slow/hot corner and -2.314 ns at slow/cold. The other reported
+checks, including HDMI, pass. RBF SHA-256 is
+`f40eec416d9d68af82bd857dffd16f7b5cabf005368f3b2f5800d7478e6221f2`.
+The complete build snapshot and detailed timing reports remain preserved.
+
+Fresh diagnostic disks on this 75 MHz/64 MB/PCM86/8 KB low-memory-cache build
+pass all CPU benchmark checksums and report 345 ALU, 176 RAM-copy, and 127
+stack blocks per ten DOS seconds. The fresh matching 60 MHz baseline is
+286/152/114, giving approximately 20.6%, 15.8%, and 11.4% improvements.
+The 64 MB physical-map probe passes independent sentinels at both ends of
+every mapped MB, byte/word/unaligned DWORD accesses, and the return from
+protected mode. This is not an XMS discovery or full-memory march test.
+
+Both GRCG captures match their independent verifiers: 512 plane-alias records
+(16,384 compared bytes) and 2,048 comparison records (12,288 bytes), with zero
+mismatches. The silent FM probe passes 100 timer-B IRQ12 deliveries, flag
+assertion/clearing, and cascaded PIC acknowledgement. It does not establish
+musical timing or sound quality. Returned disks were closed, synchronized,
+downloaded and hash-checked before result extraction.
+
+Evidence is under `build/hardware/experimental75-b111/manifest.json`, including
+raw returned disks, text/binary results, independent verification JSON and
+screen captures. The original 60 MHz RBF and launcher remain available.
+
+A separate copy of the private Rusty VHD and its boot floppy was verified
+byte-for-byte before game testing. The VHD hash remains the known pristine
+`172a3a9f48eb9580d963dd906a406263358ea95c1a121fe56da2fddd1463859b`.
+The first menu selection was followed by a return to the DOS menu; a repeat
+selection reached the animated opening. Enter then reached the correctly
+rendered title menu, and Start advanced into the illustrated story. These
+observations establish execution on this board, not all-corner timing closure
+or complete game/audio stability. Further game observations are recorded in
+the same manifest.
+### September 23: 100 MHz / 64 MB Ap3-reference experiment
+
+The user selected the PC-9821Ap3 / DX4-100, upgraded to 64 MB, as the historical
+reference and authorized hardware experiments with reported slack down to
+-12 ns. Build `quartus-20260923-011836-cc2666` (#113) compiled successfully;
+all 212 summary checks are retained. Four setup checks are negative: CPU/system
+-6.063 ns hot / -5.915 ns cold, HDMI -0.560 ns hot / -1.066 ns cold. All other
+reported summary checks are nonnegative. This meets the requested experimental
+limit, but does not establish timing closure or complete constraint coverage.
+The fitted CPU/SDRAM clock is 100 MHz, with a separate 75 MHz video clock.
+The pixel divider uses a global clock network. The full database and detailed
+reports for all four timing corners are saved with the build.
+
+The deployed experimental RBF is
+`Zet98_486_Experimental100_B113_20260923.rbf`, SHA256
+`656dec25528c99ff0fdde6a7d5fb7985eaa04104e1c2b21fd4872637f6d48873`.
+The verified 75 MHz #111 core and its game disk remain available. Fresh
+diagnostic disks and a separate Rusty VHD were copied and checksum-verified;
+the DOS image uses the full FPGA memory profile (Z98MEM.SYS + HIMEMX).
+
+The hardware CPU benchmark passes all ALU, RAM-copy and stack checksums:
+429 / 193 / 163 blocks, each over exactly 1,000 reported hundredths. Against
+the same 75 MHz workload's 345 / 176 / 127, the gains are 24.3% / 9.7% / 28.3%.
+The 64 MB physical-map diagnostic also passes its independent sentinels at
+both ends of each mapped MB, byte/word/unaligned DWORD accesses, and return
+from protected to real mode. This is not a full-memory march or XMS allocation
+test. Raw returned disks, text results and screenshots are recorded in
+`build/hardware/experimental100-b113/manifest.json`.
+
+Both graphics captures match their independent expected data: 512 alias
+records / 16,384 bytes and 2,048 GRCG comparison records / 12,288 bytes, with
+zero mismatches. FM passes 100 timer-B IRQ12 deliveries, status assertion/clear
+and cascaded PIC EOI. This diagnostic is silent and does not measure musical
+timing or audio quality. All five diagnostics therefore pass on this board.
+DOS 6.20 boots the full FPGA profile. As in the older 50 MHz tests, NEC MEM
+reports zero XMS with this HIMEMX setup. A fresh diagnostic carrier therefore
+runs the direct XMS API probe on the same 100 MHz game-disk configuration:
+63,424 KB free (`0000F7C0`), a 17 MB allocation at `01000000`, both-end copy
+and verification, unlock/free and restoration of the original free count all
+pass. The returned `Z98XMS.TXT`, disk image and screenshot are saved. Six
+hardware diagnostics now pass. The clean Rusty launcher was restored without
+the diagnostic carrier (confirmed by inspecting mounted image files). Rusty
+reaches its intact title menu and responds to Enter at 100 MHz; the core is
+left there for the user's gameplay check. Screenshot
+`build/monitor/captures/7b65d4f12a9c4e729d34861e10150113/screenshot.png`
+records the title. Sustained gameplay FPS and audible music quality have not
+been measured.
+Matching the clock and RAM capacity does not yet establish real DX4/Ap3 performance;
+`Z98PERF.COM` in the evidence directory is the identical benchmark payload
+for an eventual comparison on the physical machine.
+
+### September 23: PC88 JT08 OPNA on 100 MHz / 64 MB hardware
+
+At the user's request, the full PC88 JT08 implementation replaces the legacy
+OPNA engine in optional build #115 (`quartus-20260923-025821-a15bd7`). This is
+the PC88 adaptation of Jotego JT12, pinned to commit
+`73a620ac1fe13628e3c41afa494d54c6484202f0`; see `rtl/OPNA_JT08.md` for provenance,
+local bus adaptation and upstream limitations. The separate PC-9801-86 PCM
+FIFO/DAC remains present. The historical performance preference is now a
+Pentium 100 PC-9821Xa10 with 64 MB, superseding the earlier DX4/Ap3 choice;
+the implemented CPU still uses ao486 and has no proven Pentium equivalence.
+
+The complete build succeeded in 28m16s. All 212 reported timing checks are
+retained; four setup checks fail: CPU -5.783/-5.629 ns and HDMI -0.708/-1.173 ns
+(hot/cold). Other summary checks are nonnegative. This is within the authorized
+-12 ns experimental limit, not timing closure. Fitted CPU/SDRAM clocks are
+100 MHz and video is 75 MHz; the pixel global-clock network and HPS
+SPI/I2C/UART placements pass their guards. Complete database and logs are saved.
+
+The design uses 36,010/41,910 ALMs, 461/553 M10Ks and 42/112 DSP blocks.
+Compared with #113, whole-design use changes by +320 ALMs, -14 M10Ks and
+-24 DSP blocks. The JT08 instance itself uses 1,343 ALMs, 12 M10Ks and 5 DSPs.
+Its fitted rhythm ROM contains all 8,192 bytes. The installed RBF is
+`Zet98_486_JT08_100_B115_20260923.rbf`, SHA-256
+`f3b7171ff7161b3f0025d951aab11efc0c0dd7582b80f3b2ec1c3a85914628b4`.
+The #113 recovery RBF was independently hash-checked before installation.
+
+Four fresh tests pass on the actual board:
+
+- CPU checksums: 429 ALU / 191 RAM-copy / 163 stack blocks, each over 1,000
+  DOS hundredths; #113 had 429/193/163 on the same benchmark.
+- 64 MB physical map: independent sentinels at both ends of each mapped MB,
+  byte/word/unaligned DWORD access and return from protected to real mode.
+- 100 FM timer-B IRQ12 deliveries, status assertion/clear and cascaded PIC EOI.
+- Rusty's unchanged original ONGCHK detection procedure: code 3, PC-9801-86
+  with OPNA. The same probe also passes on legacy #113, so detection failure
+  does not explain the reported missing sounds.
+
+Raw result disks were closed, synchronized, downloaded and hash-verified.
+Evidence, screenshots, results and the exact private detector hash are in
+`build/hardware/jt08-opna/manifest.json`. The private game executable is not
+vendored. Channel-by-channel RTL tests pass at both 75 and 100 MHz, including
+six FM voices in both stereo positions, three PSG voices, all six rhythm
+instruments, timer/ID/GPIO/held-I/O checks and LFO/SSG-EG waveform effects.
+The disabled-LFO negative control is rejected; legacy timer regressions pass.
+These checks do not establish audible fidelity, full-memory stress coverage
+or complete timing stability. A separate, checksum-verified Rusty VHD/IPL is
+used for listening; original user disks and prior recovery cores are preserved.
+
+Rusty boots DOS 6.20 with the FPGA full-memory profile, displays its animated
+opening and reaches an intact title menu on JT08. Enter advances the opening.
+The candidate is left at the title/Start menu for the user's listening check.
+Only its intended VHD and IPL are open, verified from the MiSTer process file
+descriptors. Title screenshot:
+`build/monitor/captures/7b65d4f12a9c4e729d34861e10160115/screenshot.png`.
+The user subsequently listened to the intro and reports that the music sounds
+much better, especially the drums, which sound substantially more authentic.
+Speech just after C-LAB still plays strangely; the user explicitly deferred
+investigation of that remaining issue. Its cause has not been isolated, and
+the listening result is not a calibrated comparison with a physical 86 card.
+Sustained gameplay FPS has not been measured.

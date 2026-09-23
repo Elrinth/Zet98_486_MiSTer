@@ -104,7 +104,7 @@ An integration test with the original `VTIMING` generator also checks row
 alignment for 1,247,400 pixels across 16-, 20- and 32-scanline text modes,
 after its initial partial scanline on reset.
 The retrace-domain test drives the original raster and checks horizontal and
-vertical status at both 20 and 40 MHz: edges arrive within 120 ns, change only
+vertical status at both 20 and 40 MHz: edges arrive within 100 ns, change only
 on destination clock edges, and clear on reset across more than two frames.
 It verifies logical synchronization, not physical metastability or timing.
 
@@ -137,7 +137,7 @@ machine and Intel clock primitives are stubs; the bench does not exercise the
 VHDL floppy controller or real disks. Unrelated PS/2 and configuration-ROM
 logic is disabled in the bench. A temporary `hps_io` copy supplies parameter
 defaults required by Icarus; both values are overridden by the actual instances.
-This catches the previous scalar ACK connection, which discarded slots 1â€“3.
+This catches the previous scalar ACK connection, which discarded slots 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“3.
 
 `run-data-bus.sh` compiles the marked data-bus expressions directly from the
 machine top level. Its reference is the historical mux before DMA feedback
@@ -175,7 +175,7 @@ the registered count predicates against the actual register update logic
 and all outputs of the original string unit; see
 [the timing change and evidence](../rtl/cpu/STRING_COUNTS.md).
 
-`run-upper-cache.sh` tests optional instruction caching at 80000hâ€“9FFFFh
+`run-upper-cache.sh` tests optional instruction caching at 80000hÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“9FFFFh
 with actual ao486 execution and the synthesized VHDL cache policy. It covers
 native self-modification, bank aliases, DMA, remapping/restoration and ROM
 bypass, with negative controls for each external invalidation source and a
@@ -185,7 +185,7 @@ compares the policy against the real PC-98 memory mapper with the option off
 and on. See [the cache design and hardware benchmark](../rtl/cpu/UPPER_RAM_CACHE.md).
 
 `run-extmem.sh` uses the actual CPU in protected mode with the optional 16 MB
-and 64 MB DDR maps. It checks boundaries, the reserved 15â€“16 MB aperture,
+and 64 MB DDR maps. It checks boundaries, the reserved 15ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“16 MB aperture,
 partial/unaligned writes, copies between conventional and extended RAM,
 instruction execution from DDR, and persistence through CPU-only reset.
 The standalone bridge test also checks all byte masks/64-bit word lanes,
@@ -298,6 +298,20 @@ software status read.
 flag assertion/clearing and cascaded PIC EOI, with the 86-board FM/PSG muted.
 It writes `Z98FM.TXT` on a disposable boot disk and does not measure audio quality.
 
+`run-opna-jt08.sh` uses `zet98-video-sim:latest` to test PC88's JT08 YM2608
+implementation at 75 and 100 MHz. It covers all six stereo FM channels, three
+PSG voices, six rhythm ROM instruments, sample rate, chip ID, PSG/GPIO reads,
+timer IRQ/clear and one write per held CPU transaction. Synchronized control
+instances check LFO/SSG-envelope waveform changes; a deliberately disabled LFO
+must fail. See `rtl/OPNA_JT08.md` for source provenance and board limitations.
+
+`hardware/rusty_sound_probe.asm` wraps the user's locally supplied 193-byte
+`ONGCHK.COM`, preserving its detection procedure byte-for-byte. The original
+entry jump is redirected to a harness that calls the same procedure and saves
+its exit code to `Z98SND.TXT`; code 3 indicates an 86 board with extended OPNA.
+The private game binary is not included in the repository. Run on a disposable
+DOS carrier; this checks game detection, not the waveform or soundtrack choice.
+
 ## Compressed activity overlay and CRTC reset
 
 `tests/run-floppy-overlay.sh` compares every pixel of all 59 animation frames
@@ -326,3 +340,80 @@ Six source rates and four memory phases exercise 18432 CPU/drawing commands
 and 12288 continuous floppy requests. Four late-operation and two bypassed
 completion-synchronizer mutations must fail. See `rtl/cpu/SDRAM_CONTROL_CDC.md`
 for the two source-clock completion waits and required hardware comparison.
+
+`tests/run-write-reset-proof.sh` uses the formal image above to prove all five
+pipeline reset outputs against `reference/write_reset_legacy.vh`, plus temporal
+induction over the actual command and predecode register updates. Wrong-selector
+and missing-flush mutations must fail. See `rtl/cpu/WRITE_RESET_DECODE.md`.
+`tests/run-write-payload.sh` runs string-write payload equivalence and both
+cached and uncached CPU regressions in the mixed simulator image.
+
+`tests/run-turbo-cdc.sh` runs the 100 MHz system-clock transfer tests against
+100 MHz SDRAM and 75 MHz video. It exercises CPU/sub-CPU and floppy read/write
+bundles, operation/completion control, video transfers/settings/status and
+video measurement. Routing-delay assertions and intentionally broken controls
+remain enabled; the constituent rate sweeps accept `CPU_RATES` for a focused run.
+
+`tests/run-clock-rates.sh` checks FM/PIT/VFO at 40/50/60/75/90/100 MHz, rejects the
+old integer FM divider at 75 MHz, and checks PCM formats, FIFO/IRQ behavior and
+all eight sample rates at 20/40/50/60/75/90/100 MHz. These are functional simulations;
+they do not establish routed FPGA timing or audible playback quality.
+
+`tests/run-segment-fault-proof.sh` proves all seven outputs of the optimized
+read-segment checker against its frozen prior implementation, with arbitrary
+descriptors, addresses, lengths and selector combinations. Wrong stack priority
+and limit-boundary mutations must fail. `tests/run-read-segment.sh` also runs
+4,637,520 directed/random comparisons against the original upstream behavior.
+
+`tests/run-write-finish-proof.sh` proves the early write-completion selectors
+against the original decoder and checks their actual register-update invariant
+by induction, including null-command flushes with retained substeps. Wrong
+selectors and missing flushes must fail. Both new proof scripts use the formal
+image; run the mixed-simulator CPU and protected-memory suites after RTL edits.
+
+`tests/run-segment-length-proof.sh` proves the segment-only size decoder against
+the actual command decoder for all inputs, conditional only on a virtual
+segment check being active. A wrong byte-size mutation must fail. Run this in
+`zet98-formal-tests:latest` after editing either length expression.
+
+`tests/run-execute-descriptor-proof.sh` proves the execute stage's actual
+speculative descriptor payloads match the original decoder whenever their
+unchanged write enables assert. All decoder inputs are unconstrained. Wrong
+stack/second-descriptor sources must fail; the cached-limit register invariant
+and its negative controls also run. See `rtl/cpu/EXECUTE_DESCRIPTOR_PAYLOAD.md`.
+
+The decode-buffer proof now uses Intel's actual Cyclone V cell model for the
+explicit ready mux. Run `scripts/test.ps1 -SimulationImage zet98-formal-tests:latest
+-TestScript tests/run-decode-buffer-proof.sh -StartOnly` **without** `-AdaptersOnly`
+to copy/hash the vendor models from the installed Quartus image.
+`tests/run-fpga-ready-mux.sh` runs the hardware-model boundary/history test and
+focused CPU regressions; the ordinary portable buffer test remains exhaustive.
+
+System-address selection: `tests/run-system-address-proof.sh` proves the parallel mux against the preserved priority decoder for all inputs and task-address states, with a wrong-selector negative control. Use the formal image and `-AdaptersOnly`.
+
+`tests/run-write-control-proof.sh` proves early write-stage RF and stack-width
+selectors against their frozen original decoder, then checks actual pipeline
+register updates by induction. Wrong selector, missing flush, and incorrect
+simultaneous load/retire priority must fail. Use the formal image and
+`-AdaptersOnly`; run `tests/run-write-payload.sh` separately in the mixed image
+for cached/uncached CPU, interrupts, reset, and REP regressions.
+
+`tests/run-tlb-linear-proof.sh` proves exact TLB address update and hold
+behavior for arbitrary state, payload, flush, alignment-fault, and request
+combinations, followed by actual register-update induction and five negative
+controls. Use the formal image with `-AdaptersOnly`, then run CPU and
+protected-memory tests in the mixed simulator image.
+
+`tests/run-ascal-poly-prepare.sh` uses the mixed image to synthesize the actual
+scaler sum/clamp VHDL with GHDL and analyze the complete scaler. Export its
+`build/ascal-poly-proof` directory, copy it into the formal-image container at
+the same path, and run `tests/run-ascal-poly-proof.sh`. It proves all input
+pairs against the original arithmetic and rejects three deliberate faults.
+
+The decode-buffer proof and boundary/history test also check `dec_fetch_fits`
+against the original capacity comparison, including the equal-capacity case.
+`tests/run-write-parameter-proof.sh` proves task-switch global-parameter
+payloads at every enabled update and arbitrary global mux priority/hold state,
+with wrong-data and wrong-substep negative controls. Use the formal image
+with `-AdaptersOnly` for the parameter proof; the decoder proof needs the
+actual Intel atom models and therefore omits that switch.

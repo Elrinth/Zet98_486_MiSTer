@@ -321,6 +321,7 @@ wire address_edi;
 wire address_xlat_transform;
 wire address_bits_transform;
 wire address_stack_pop;
+wire address_stack_pop_reference;
 wire address_stack_pop_speedup;
 wire address_stack_pop_next;
 wire address_stack_pop_next_reference;
@@ -406,6 +407,43 @@ always @(posedge clk) begin
     else if(r_load)     rd_cmd <= micro_cmd;
     else if(rd_ready)   rd_cmd <= `CMD_NULL;
 end
+
+// Stack reads use the current SP before the existing next-SP selector below.
+// Predecode opcode/substep terms alongside rd_cmd; mode remains live.
+function [1:0] stack_pop_decode;
+    input [6:0] command;
+    input [3:0] extension;
+    begin
+        stack_pop_decode = 2'b00;
+        case (command)
+            `CMD_RET_near: stack_pop_decode[0] = extension != `CMDEX_RET_near_LAST;
+            `CMD_POP_seg: stack_pop_decode[0] = extension == `CMDEX_POP_seg_STEP_1;
+            `CMD_IRET: stack_pop_decode[0] = extension <= `CMDEX_IRET_real_v86_STEP_2;
+            `CMD_POP: stack_pop_decode[0] = extension == `CMDEX_POP_implicit ||
+                                              extension == `CMDEX_POP_modregrm_STEP_0;
+            `CMD_POPF: stack_pop_decode[0] = extension == `CMDEX_POPF_STEP_0;
+            `CMD_POPA: stack_pop_decode[0] = 1'b1;
+            `CMD_RET_far: stack_pop_decode[1] = extension == `CMDEX_RET_far_STEP_1 ||
+                                                 extension == `CMDEX_RET_far_STEP_2;
+        endcase
+    end
+endfunction
+
+(* preserve *) reg [1:0] stack_pop_flags;
+always @(posedge clk) begin
+    if(rst_n == 1'b0)       stack_pop_flags <= 2'b00;
+    else if(rd_reset)       stack_pop_flags <= 2'b00;
+    else if(r_load)         stack_pop_flags <= stack_pop_decode(micro_cmd, micro_cmdex);
+    else if(rd_ready)       stack_pop_flags <= 2'b00;
+end
+assign address_stack_pop = stack_pop_flags[0] ||
+                          (stack_pop_flags[1] && (real_mode || v8086_mode));
+
+// synthesis translate_off
+always @(posedge clk) if (rst_n &&
+    (address_stack_pop !== address_stack_pop_reference))
+    $fatal(1, "Registered current-SP selector differs from command decoder");
+// synthesis translate_on
 
 // Predecode the command-only stack selector beside rd_cmd. protected_mode
 // remains live because mode changes are not part of the command packet.
@@ -599,9 +637,29 @@ assign read_address =
 // System reads bypass segment checks. Keep their late command decoding out
 // of the virtual-access length used by read_segment. The command-level SAT
 // check proves this equals read_length whenever a segment check is active.
+// Privilege/mutex gating belongs to the request, not the segment size.
+// All-input equivalence is checked against the original command decoder.
+wire segment_length_word =
+    ((rd_cmd == `CMD_CALL && (rd_cmdex == `CMDEX_CALL_Ep_STEP_0 || rd_cmdex == `CMDEX_CALL_Ep_STEP_1)) && (rd_cmdex == `CMDEX_CALL_Ep_STEP_1))? (`TRUE) :
+    ((rd_cmd == `CMD_CALL_3 && (rd_cmdex == `CMDEX_CALL_3_call_gate_more_STEP_4 || rd_cmdex == `CMDEX_CALL_3_call_gate_more_STEP_5)) && (~(glob_param_3[19])))? (`TRUE) :
+    ((rd_cmd == `CMD_ARPL) && (rd_modregrm_mod != 2'b11))? (`TRUE) :
+    ((rd_cmd == `CMD_LxS && rd_cmdex == `CMDEX_LxS_STEP_2) && (rd_operand_32bit))? (`TRUE) :
+    (((rd_cmd == `CMD_MOV_to_seg || rd_cmd == `CMD_LLDT || rd_cmd == `CMD_LTR) && rd_cmdex == `CMDEX_MOV_to_seg_LLDT_LTR_STEP_1) && (rd_modregrm_mod != 2'b11))? (`TRUE) :
+    ((rd_cmd == `CMD_POP_seg && rd_cmdex == `CMDEX_POP_seg_STEP_1))? (`TRUE) :
+    ((rd_cmd == `CMD_IRET_2 && rd_cmdex == `CMDEX_IRET_2_protected_outer_STEP_0))? (`TRUE) :
+    ((rd_cmd == `CMD_control_reg && rd_cmdex == `CMDEX_control_reg_LMSW_STEP_0) && (rd_modregrm_mod != 2'b11))? (`TRUE) :
+    (((rd_cmd == `CMD_LGDT || rd_cmd == `CMD_LIDT) && (rd_cmdex == `CMDEX_LGDT_LIDT_STEP_1 || rd_cmdex == `CMDEX_LGDT_LIDT_STEP_2)) && (rd_cmdex == `CMDEX_LGDT_LIDT_STEP_1))? (`TRUE) :
+    ((rd_cmd == `CMD_RET_far && rd_cmdex == `CMDEX_RET_far_outer_STEP_3))? (`TRUE) :
+    (((rd_cmd == `CMD_LAR || rd_cmd == `CMD_LSL || rd_cmd == `CMD_VERR || rd_cmd == `CMD_VERW) && rd_cmdex == `CMDEX_LAR_LSL_VERR_VERW_STEP_1) && (rd_modregrm_mod != 2'b11))? (`TRUE) :
+    (((rd_cmd == `CMD_LAR || rd_cmd == `CMD_LSL || rd_cmd == `CMD_VERR || rd_cmd == `CMD_VERW) && rd_cmdex == `CMDEX_LAR_LSL_VERR_VERW_STEP_2) && (~(glob_param_1[15:2] == 14'd0) && ~(rd_descriptor_not_in_limits)))? (`TRUE) :
+    ((rd_cmd == `CMD_JMP  && (rd_cmdex == `CMDEX_JMP_Ep_STEP_0  || rd_cmdex == `CMDEX_JMP_Ep_STEP_1)) && (rd_cmdex == `CMDEX_JMP_Ep_STEP_1))? (`TRUE) :
+    (((rd_cmd == `CMD_SGDT || rd_cmd == `CMD_SIDT)) && (rd_cmdex == `CMDEX_SGDT_SIDT_STEP_1))? (`TRUE) :
+    ((rd_cmd == `CMD_MOVSX || rd_cmd == `CMD_MOVZX) && (rd_modregrm_mod != 2'b11))? (`TRUE) :
+    1'd0;
+
 wire [3:0] segment_read_length =
     rd_is_8bit?                 4'd1 :
-    read_length_word?           4'd2 :
+    segment_length_word?           4'd2 :
     read_length_dword?          4'd4 :
     rd_operand_16bit?           4'd2 :
                                 4'd4;
@@ -938,7 +996,7 @@ read_commands read_commands_inst(
     .address_xlat_transform             (address_xlat_transform),               //output
     .address_bits_transform             (address_bits_transform),               //output
     
-    .address_stack_pop                  (address_stack_pop),                    //output
+    .address_stack_pop                  (address_stack_pop_reference),          //output
     .address_stack_pop_speedup          (address_stack_pop_speedup),            //output
     
     .address_stack_pop_next             (address_stack_pop_next_reference),     //output

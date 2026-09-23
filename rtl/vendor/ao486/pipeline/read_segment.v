@@ -105,11 +105,6 @@ wire [2:0]  seg_select;
 wire        seg_read;
 wire        seg_write;
 
-wire        seg_limit_overflow;
-wire        seg_length_fault;
-wire        seg_invalid_read_access;
-wire        seg_invalid_write_access;
-wire        seg_valid;
 
 wire        seg_fault;
 
@@ -155,17 +150,8 @@ assign seg_select =
 assign seg_read  = read_virtual || read_rmw_virtual;
 assign seg_write = read_rmw_virtual || write_virtual_check;
 
-assign seg_limit_overflow =
-    (seg_select == 3'd0 && (((es_cache[43] || !es_cache[42]) && rd_address_effective > es_limit) || (!es_cache[43] && es_cache[42] && (rd_address_effective <= es_limit || rd_address_effective > { {16{es_cache[54]}}, 16'hFFFF })))) ||
-    (seg_select == 3'd1 && (((cs_cache[43] || !cs_cache[42]) && rd_address_effective > cs_limit) || (!cs_cache[43] && cs_cache[42] && (rd_address_effective <= cs_limit || rd_address_effective > { {16{cs_cache[54]}}, 16'hFFFF })))) ||
-    (seg_select == 3'd2 && (((ss_cache[43] || !ss_cache[42]) && rd_address_effective > ss_limit) || (!ss_cache[43] && ss_cache[42] && (rd_address_effective <= ss_limit || rd_address_effective > { {16{ss_cache[54]}}, 16'hFFFF })))) ||
-    (seg_select == 3'd3 && (((ds_cache[43] || !ds_cache[42]) && rd_address_effective > ds_limit) || (!ds_cache[43] && ds_cache[42] && (rd_address_effective <= ds_limit || rd_address_effective > { {16{ds_cache[54]}}, 16'hFFFF })))) ||
-    (seg_select == 3'd4 && (((fs_cache[43] || !fs_cache[42]) && rd_address_effective > fs_limit) || (!fs_cache[43] && fs_cache[42] && (rd_address_effective <= fs_limit || rd_address_effective > { {16{fs_cache[54]}}, 16'hFFFF })))) ||
-    (seg_select == 3'd5 && (((gs_cache[43] || !gs_cache[42]) && rd_address_effective > gs_limit) || (!gs_cache[43] && gs_cache[42] && (rd_address_effective <= gs_limit || rd_address_effective > { {16{gs_cache[54]}}, 16'hFFFF }))));
-
-// Compare each segment before the late segment-select mux. The original
-// path selected a five-bit remaining count and then compared read_length.
-// Keep the exact saturated count, including wraparound/invalid encodings.
+// Evaluate each segment independently before the late stack/ES/prefix selection.
+// Retained fault nets prevent sharing permission checks after that selection.
 function segment_too_short;
     input [31:0] remaining;
     input [3:0] length;
@@ -175,46 +161,60 @@ function segment_too_short;
         segment_too_short = available < {1'b0, length};
     end
 endfunction
-
-assign seg_length_fault =
-    (seg_select == 3'd0 && segment_too_short(es_left, read_length)) ||
-    (seg_select == 3'd1 && segment_too_short(cs_left, read_length)) ||
-    (seg_select == 3'd2 && segment_too_short(ss_left, read_length)) ||
-    (seg_select == 3'd3 && segment_too_short(ds_left, read_length)) ||
-    (seg_select == 3'd4 && segment_too_short(fs_left, read_length)) ||
-    (seg_select >= 3'd5 && segment_too_short(gs_left, read_length));
-
-//NOTE: only valid for SEGMENT (not SYSTEM)
-// for read: CODE and (not READABLE); for write: DATA and (not WRITABLE)
-assign seg_invalid_read_access =
-    (seg_select == 3'd0)?   (es_cache[43] && !es_cache[41]) :  
-    (seg_select == 3'd1)?   (cs_cache[43] && !cs_cache[41]) :  
-    (seg_select == 3'd2)?   (ss_cache[43] && !ss_cache[41]) :  
-    (seg_select == 3'd3)?   (ds_cache[43] && !ds_cache[41]) :  
-    (seg_select == 3'd4)?   (fs_cache[43] && !fs_cache[41]) :  
-                            (gs_cache[43] && !gs_cache[41]);
- 
-assign seg_invalid_write_access =
-    (seg_select == 3'd0)?   (es_cache[43] || !es_cache[41]) :  
-    (seg_select == 3'd1)?   (cs_cache[43] || !cs_cache[41]) :  
-    (seg_select == 3'd2)?   (ss_cache[43] || !ss_cache[41]) :  
-    (seg_select == 3'd3)?   (ds_cache[43] || !ds_cache[41]) :  
-    (seg_select == 3'd4)?   (fs_cache[43] || !fs_cache[41]) :  
-                            (gs_cache[43] || !gs_cache[41]);
-assign seg_valid =
-    (seg_select == 3'd0)?   es_cache[`DESC_BIT_P] && es_cache_valid :
-    (seg_select == 3'd1)?   cs_cache[`DESC_BIT_P] && cs_cache_valid :
-    (seg_select == 3'd2)?   ss_cache[`DESC_BIT_P] && ss_cache_valid :
-    (seg_select == 3'd3)?   ds_cache[`DESC_BIT_P] && ds_cache_valid :
-    (seg_select == 3'd4)?   fs_cache[`DESC_BIT_P] && fs_cache_valid :
-                            gs_cache[`DESC_BIT_P] && gs_cache_valid;    
-    
-//------------------------------------------------------------------------------    
-    
-assign seg_fault = 
-    (rd_address_effective_ready && (seg_read || seg_write)) &&
-    ((seg_invalid_read_access && seg_read) || (seg_invalid_write_access && seg_write) ||
-     seg_limit_overflow || seg_length_fault || ~(seg_valid));
+(* keep = "true" *) wire es_fault;
+wire es_overflow = ((es_cache[43] || !es_cache[42]) && rd_address_effective > es_limit) ||
+    (!es_cache[43] && es_cache[42] && (rd_address_effective <= es_limit || rd_address_effective > {{16{es_cache[54]}}, 16'hFFFF}));
+wire es_access_fault = (es_cache[43] && !es_cache[41] && seg_read) ||
+    ((es_cache[43] || !es_cache[41]) && seg_write) ||
+    segment_too_short(es_left, read_length) || !(es_cache[`DESC_BIT_P] && es_cache_valid);
+assign es_fault = es_access_fault || es_overflow;
+(* keep = "true" *) wire cs_fault;
+wire cs_overflow = ((cs_cache[43] || !cs_cache[42]) && rd_address_effective > cs_limit) ||
+    (!cs_cache[43] && cs_cache[42] && (rd_address_effective <= cs_limit || rd_address_effective > {{16{cs_cache[54]}}, 16'hFFFF}));
+wire cs_access_fault = (cs_cache[43] && !cs_cache[41] && seg_read) ||
+    ((cs_cache[43] || !cs_cache[41]) && seg_write) ||
+    segment_too_short(cs_left, read_length) || !(cs_cache[`DESC_BIT_P] && cs_cache_valid);
+assign cs_fault = cs_access_fault || cs_overflow;
+(* keep = "true" *) wire ss_fault;
+wire ss_overflow = ((ss_cache[43] || !ss_cache[42]) && rd_address_effective > ss_limit) ||
+    (!ss_cache[43] && ss_cache[42] && (rd_address_effective <= ss_limit || rd_address_effective > {{16{ss_cache[54]}}, 16'hFFFF}));
+wire ss_access_fault = (ss_cache[43] && !ss_cache[41] && seg_read) ||
+    ((ss_cache[43] || !ss_cache[41]) && seg_write) ||
+    segment_too_short(ss_left, read_length) || !(ss_cache[`DESC_BIT_P] && ss_cache_valid);
+assign ss_fault = ss_access_fault || ss_overflow;
+(* keep = "true" *) wire ds_fault;
+wire ds_overflow = ((ds_cache[43] || !ds_cache[42]) && rd_address_effective > ds_limit) ||
+    (!ds_cache[43] && ds_cache[42] && (rd_address_effective <= ds_limit || rd_address_effective > {{16{ds_cache[54]}}, 16'hFFFF}));
+wire ds_access_fault = (ds_cache[43] && !ds_cache[41] && seg_read) ||
+    ((ds_cache[43] || !ds_cache[41]) && seg_write) ||
+    segment_too_short(ds_left, read_length) || !(ds_cache[`DESC_BIT_P] && ds_cache_valid);
+assign ds_fault = ds_access_fault || ds_overflow;
+(* keep = "true" *) wire fs_fault;
+wire fs_overflow = ((fs_cache[43] || !fs_cache[42]) && rd_address_effective > fs_limit) ||
+    (!fs_cache[43] && fs_cache[42] && (rd_address_effective <= fs_limit || rd_address_effective > {{16{fs_cache[54]}}, 16'hFFFF}));
+wire fs_access_fault = (fs_cache[43] && !fs_cache[41] && seg_read) ||
+    ((fs_cache[43] || !fs_cache[41]) && seg_write) ||
+    segment_too_short(fs_left, read_length) || !(fs_cache[`DESC_BIT_P] && fs_cache_valid);
+assign fs_fault = fs_access_fault || fs_overflow;
+(* keep = "true" *) wire gs_fault;
+wire gs_overflow = ((gs_cache[43] || !gs_cache[42]) && rd_address_effective > gs_limit) ||
+    (!gs_cache[43] && gs_cache[42] && (rd_address_effective <= gs_limit || rd_address_effective > {{16{gs_cache[54]}}, 16'hFFFF}));
+wire gs_access_fault = (gs_cache[43] && !gs_cache[41] && seg_read) ||
+    ((gs_cache[43] || !gs_cache[41]) && seg_write) ||
+    segment_too_short(gs_left, read_length) || !(gs_cache[`DESC_BIT_P] && gs_cache_valid);
+assign gs_fault = gs_access_fault || gs_overflow;
+// Encodings 6/7 historically use GS permissions/length but no limit-overflow check.
+wire prefix_fault =
+    (rd_prefix_group_2_seg == 3'd0 && es_fault) ||
+    (rd_prefix_group_2_seg == 3'd1 && cs_fault) ||
+    (rd_prefix_group_2_seg == 3'd2 && ss_fault) ||
+    (rd_prefix_group_2_seg == 3'd3 && ds_fault) ||
+    (rd_prefix_group_2_seg == 3'd4 && fs_fault) ||
+    (rd_prefix_group_2_seg == 3'd5 && gs_fault) ||
+    (rd_prefix_group_2_seg >= 3'd6 && gs_access_fault);
+wire stack_select = address_stack_pop || address_stack_pop_next || address_enter_last || address_enter || address_leave;
+assign seg_fault = rd_address_effective_ready && (seg_read || seg_write) &&
+    (stack_select ? ss_fault : address_edi ? es_fault : prefix_fault);
 
 assign rd_seg_gp_fault_init = seg_select != 3'd2 && seg_fault;
 assign rd_seg_ss_fault_init = seg_select == 3'd2 && seg_fault;

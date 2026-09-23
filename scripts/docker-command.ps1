@@ -19,6 +19,22 @@ function Invoke-DockerCommand {
     $client.StartInfo = $startInfo
     $started = $false
     $outputStream = $null
+    # Publish only a safe operation label, never command arguments/passwords.
+    $activityId = $null
+    $activityStart = [datetime]::UtcNow
+    $activityWriter = Join-Path $PSScriptRoot 'write-monitor-activity.ps1'
+    if ($Executable -match '(plink|pscp)(\.exe)?$' -and
+        ($Arguments -join ' ') -match '192\.168\.0\.161' -and
+        (Test-Path -LiteralPath $activityWriter)) {
+        $activityId = [guid]::NewGuid().ToString('N')
+        $activityTitle = if ($Executable -match 'pscp') { 'MiSTer file transfer' } else { 'MiSTer SSH operation' }
+        $commandFileIndex = [array]::IndexOf($Arguments, '-m')
+        if ($commandFileIndex -ge 0 -and $commandFileIndex + 1 -lt $Arguments.Count) {
+            $activityTitle += ' · ' + [IO.Path]::GetFileName($Arguments[$commandFileIndex + 1])
+        }
+        try { & $activityWriter -Title $activityTitle -Status Running -Id $activityId -StartedAt $activityStart } catch { }
+    }
+    $operationSucceeded = $false
     $watch = [Diagnostics.Stopwatch]::StartNew()
     try {
         if ($OutputFile) {
@@ -42,6 +58,7 @@ function Invoke-DockerCommand {
             throw "Docker exited $($client.ExitCode): $errorText $outputText"
         }
         if ($errorText.Trim()) { Write-Host $errorText.Trim() }
+        $operationSucceeded = $true
         $outputText.TrimEnd()
     } finally {
         # Also executes on cancellation/error: an interrupted command must not
@@ -53,6 +70,10 @@ function Invoke-DockerCommand {
         $client.Dispose()
         if ($outputStream) { $outputStream.Dispose() }
         $watch.Stop()
+        if ($activityId) {
+            $activityStatus = if ($operationSucceeded) { 'Completed' } else { 'Failed' }
+            try { & $activityWriter -Title $activityTitle -Status $activityStatus -Id $activityId -StartedAt $activityStart } catch { }
+        }
     }
 }
 

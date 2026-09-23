@@ -111,3 +111,45 @@ path into the same decoder is -0.683 ns. The reported memory crossing is
 -0.030 ns and video crossing -0.185 ns. All three fitted HPS peripheral
 guards pass. These reports supersede any expectation that registered global
 limits alone would qualify the complete core for 60 MHz.
+
+## Current-SP selector at 75 MHz
+
+Build `quartus-20260922-171436-e11515` moved the worst setup path to
+`rd_cmdex[1] -> address_stack_pop -> segment checks -> TLB linear address`,
+with -2.146 ns slack. `stack_pop_decode` now registers the opcode-only part
+of this current-SP selector alongside `rd_cmd`, using the same priorities.
+Its real-mode/virtual-8086-mode gating remains combinational. The original
+read-command decoder remains the simulation reference.
+
+`tests/run-current-stack-proof.sh` proves both current-SP and next-SP
+selectors for arbitrary inputs and register-update histories, and rejects
+wrong mode gating and missing flushes. Cached/uncached real-CPU regressions
+retain 751/576 transfers and the same execution times. This does not yet
+establish 75 MHz timing closure.
+# Parallel read-segment faults
+
+The 75 MHz build #100 critical path ran from CR0.PE through the stack segment
+selection and combined fault logic into the TLB address register. The checker
+now computes each segment's complete permission, length and limit fault before
+selecting SS, ES or the prefix segment. Retained fault nets prevent synthesis
+from moving shared checks back after the late selection. No cycles are added.
+Selectors 6/7 retain the original GS access/length behavior without a limit
+overflow check. `tests/run-segment-fault-proof.sh` compares all seven outputs
+with the frozen previous implementation for unconstrained inputs, and rejects
+wrong stack priority and off-by-one boundary mutations.
+
+## 75 MHz redundant privilege gating experiment
+
+Build #102's worst path starts at CPL and passes through the command word-length
+decoder, per-segment length comparison and TLB request selection. The segment-only
+word-length expression now omits the MOV-to-segment/LLDT/LTR and LMSW privilege
+guards and LMSW mutex guard. Those guards still suppress the original virtual
+request; no permission check or memory-interface length is changed.
+
+`tests/run-segment-length-proof.sh` proves the actual command decoder's original
+length equals the new segment length whenever virtual read, read/modify/write or
+write-only segment checking is active. Every decoder input is unconstrained. A
+wrong byte length is rejected as a negative control. This passed in
+`simulation-20260922-194112-5a70b1`. Build #103 compiled but failed timing, with worst slack -2.487 ns versus
+-3.117 ns in #102. This is an improvement in the worst reported slack, not a
+75 MHz qualification or a measured hardware-speed improvement.

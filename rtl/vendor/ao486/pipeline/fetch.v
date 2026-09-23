@@ -49,7 +49,8 @@ module fetch(
     output              fetch_page_fault,
     
     // feedback from decode
-    input       [3:0]   dec_acceptable
+    input       [3:0]   dec_acceptable,
+    input               dec_fetch_fits
 );
 
 //------------------------------------------------------------------------------
@@ -82,9 +83,9 @@ assign fetch =
 
 //------------------------------------------------------------------------------
 
-assign prefetchfifo_accept_do   = dec_acceptable >= fetch_valid && prefetchfifo_accept_empty == `FALSE && prefetchfifo_accept_data[67:64] < `PREFETCH_MIN_FAULT;
+assign prefetchfifo_accept_do   = dec_fetch_fits && prefetchfifo_accept_empty == `FALSE && prefetchfifo_accept_data[67:64] < `PREFETCH_MIN_FAULT;
 
-assign partial                  = dec_acceptable <  fetch_valid && prefetchfifo_accept_empty == `FALSE && prefetchfifo_accept_data[67:64] < `PREFETCH_MIN_FAULT;
+assign partial                  = !dec_fetch_fits && prefetchfifo_accept_empty == `FALSE && prefetchfifo_accept_data[67:64] < `PREFETCH_MIN_FAULT;
 
 //------------------------------------------------------------------------------
 

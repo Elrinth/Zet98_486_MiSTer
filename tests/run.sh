@@ -30,11 +30,14 @@ bash tests/run-hdmi-tune-gate.sh
 bash tests/run-video-status.sh
 bash tests/run-lowmem-cache.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" \
-    LIB/sftgen.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
+    LIB/sftgen.vhd rtl/opna_clock_enable.vhd LIB/sftclk.vhd LIB/fixtimer.vhd tests/peripheral_rates_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb --assert-level=error
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=50000 --assert-level=error
 ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=60000 --assert-level=error
+ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=75000 --assert-level=error
+ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=90000 --assert-level=error
+ghdl -r --std=08 -fsynopsys --workdir="$out" peripheral_rates_tb -gFAST_KHZ=100000 --assert-level=error
 bash tests/run-pic.sh
 ghdl -a --std=08 --workdir="$out" VIDEO/text_row_counter.vhd tests/text_row_counter_tb.vhd
 ghdl -e --std=08 --workdir="$out" text_row_counter_tb

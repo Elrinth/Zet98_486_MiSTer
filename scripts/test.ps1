@@ -75,11 +75,11 @@ try {
             '--network','none','--cpus','1','--memory','1g','--memory-swap','1g',
             '--entrypoint','true',$modelImage) | Out-Null
         $modelContainer | Set-Content -LiteralPath (Join-Path $runRoot 'model-container-name.txt')
-        foreach ($model in @('altera_mf.v','220model.v')) {
+        foreach ($model in @('altera_mf.v','220model.v','cyclonev_atoms.v')) {
             Invoke-DockerCommand -Arguments @('--context',$DockerContext,'cp',
                 "${modelContainer}:/opt/intelFPGA_lite/quartus/eda/sim_lib/$model",(Join-Path $modelPath $model)) -TimeoutSeconds 30 | Out-Null
         }
-        Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $modelPath 'altera_mf.v'),(Join-Path $modelPath '220model.v') |
+        Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $modelPath 'altera_mf.v'),(Join-Path $modelPath '220model.v'),(Join-Path $modelPath 'cyclonev_atoms.v') |
             Select-Object Hash,Path | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runRoot 'model-hashes.json')
         Invoke-DockerCommand -Arguments @('--context',$DockerContext,'rm',$modelContainer) | Out-Null
     }

@@ -44,7 +44,7 @@ for bench in sdram_request_tb floppy_sdram_tb; do
     ghdl -e --std=08 -fsynopsys --workdir="$out" "$bench"
     for second in false true; do
         port=USE_SUB; if [ "$bench" = floppy_sdram_tb ]; then port=USE_FEC; fi
-        for mhz in 20 40 50 60 90 100; do
+        for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
             for phase in 0 1300 4700 9100; do
                 extra=(); if [ "$bench" = sdram_request_tb ]; then extra=(-gHOLD_COMPLETION_CYCLES=8); else extra=(-gCONTINUOUS=true); fi
                 ghdl -r --std=08 -fsynopsys --workdir="$out" "$bench" -gBUFFERED=true -g"$port"="$second" -gCPU_MHZ="$mhz" -gMEM_PHASE_PS="$phase" "${extra[@]}" --assert-level=error

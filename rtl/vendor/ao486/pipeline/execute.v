@@ -282,6 +282,24 @@ module execute(
 wire [31:0] tr_base;
 wire [31:0] tr_limit;
 
+// Descriptor payloads are independent of the late fault/write-enable decision.
+// Preserve command-decoder enables; values are observed only when enabled.
+wire [63:0] exe_glob_descriptor_value_reference;
+wire [63:0] exe_glob_descriptor_2_value_reference;
+assign exe_glob_descriptor_value =
+    (exe_cmd == `CMD_CALL && exe_cmdex == `CMDEX_CALL_protected_seg_STEP_0)
+    ? ss_cache : glob_descriptor_2;
+assign exe_glob_descriptor_2_value = glob_descriptor;
+
+// synthesis translate_off
+always @(posedge clk) if (rst_n) begin
+    if (exe_glob_descriptor_set && exe_glob_descriptor_value !== exe_glob_descriptor_value_reference)
+        $fatal(1, "Descriptor payload differs on enabled write");
+    if (exe_glob_descriptor_2_set && exe_glob_descriptor_2_value !== exe_glob_descriptor_2_value_reference)
+        $fatal(1, "Descriptor 2 payload differs on enabled write");
+end
+// synthesis translate_on
+
 wire [31:0] cs_limit;
 
 assign tr_base  = { tr_cache[63:56], tr_cache[39:16] };
@@ -755,10 +773,10 @@ execute_commands execute_commands_inst(
     
     //global set
     .exe_glob_descriptor_set                (exe_glob_descriptor_set),              //output
-    .exe_glob_descriptor_value              (exe_glob_descriptor_value),            //output [63:0]
+    .exe_glob_descriptor_value              (exe_glob_descriptor_value_reference),            //output [63:0]
     
     .exe_glob_descriptor_2_set              (exe_glob_descriptor_2_set),            //output
-    .exe_glob_descriptor_2_value            (exe_glob_descriptor_2_value),          //output [63:0]
+    .exe_glob_descriptor_2_value            (exe_glob_descriptor_2_value_reference),          //output [63:0]
     
     .exe_glob_param_1_set                   (exe_glob_param_1_set),                 //output
     .exe_glob_param_1_value                 (exe_glob_param_1_value),               //output [31:0]

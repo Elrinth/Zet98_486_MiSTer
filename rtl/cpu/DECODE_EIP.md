@@ -1,5 +1,27 @@
 # Instruction-length carry selection
 
+## 75 MHz: select precomputed low sums
+
+Build #101 exposed two serial additions on the path from instruction-size
+decoding to the instruction pointer: prefix plus decoded length, then that
+length plus EIP. A second path entered through the late `dec_ready` gate.
+
+The next implementation computes sixteen five-bit low sums, one for every
+decoded length, from the earlier EIP and prefix registers. The decoded length
+selects the result; `dec_ready` selects the original EIP only at the end.
+The upper 28-bit increment stays parallel. The four-bit prefix/length wrap is
+preserved, including combinations that normal decoding would reject. There
+is no extra register or cycle. Quartus retains the candidate sums so synthesis
+does not simply move the shared adder behind the late selector.
+
+`tests/run-decode-eip-proof.sh` proves the actual production EIP block against
+the original arithmetic and update priority for arbitrary length/prefix inputs,
+resets, redirects and stalls, with three negative controls. Both cached and
+uncached CPU regressions pass with unchanged cycle counts. Build #102 evaluates
+the physical timing effect; this proof alone does not establish 75 MHz operation.
+
+## Earlier nibble carry optimization
+
 The FullFont60 fit at source 4790ba7 has a slow/hot system-clock path of
 +0.253 ns from operand-size decoding through instruction-length calculation
 and the instruction-pointer update. Length arrives late enough that adding

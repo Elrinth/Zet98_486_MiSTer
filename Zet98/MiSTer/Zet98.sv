@@ -210,7 +210,13 @@ wire pll_locked;
 
 // Compile-time experiment: keep wall-clock peripheral rates consistent with
 // the PLL setting. The default remains the original 20 MHz Zet baseline.
-`ifdef ZET98_TURBO60
+`ifdef ZET98_TURBO100
+localparam integer SYS_CLK_KHZ = 100000;
+`elsif ZET98_TURBO90
+localparam integer SYS_CLK_KHZ = 90000;
+`elsif ZET98_TURBO75
+localparam integer SYS_CLK_KHZ = 75000;
+`elsif ZET98_TURBO60
 localparam integer SYS_CLK_KHZ = 60000;
 `elsif ZET98_TURBO50
 localparam integer SYS_CLK_KHZ = 50000;
@@ -223,6 +229,11 @@ localparam integer SYS_CLK_KHZ = 20000;
 localparam integer CPU486_ENABLED = 1;
 `else
 localparam integer CPU486_ENABLED = 0;
+`endif
+`ifdef ZET98_JT08
+localparam integer USE_JT08 = 1;
+`else
+localparam integer USE_JT08 = 0;
 `endif
 `ifdef ZET98_PCM86
 localparam integer SOUND_MODEL = 3;
@@ -492,7 +503,7 @@ localparam UPPER_RAM_ICACHE = 1;
 `else
 localparam UPPER_RAM_ICACHE = 0;
 `endif
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .LOWMEM_CACHE(LOWMEM_CACHE), .LOWMEM_CACHE_KB(LOWMEM_CACHE_KB), .UPPER_RAM_ICACHE(UPPER_RAM_ICACHE), .SND(SOUND_MODEL)) Zet98_top
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .LOWMEM_CACHE(LOWMEM_CACHE), .LOWMEM_CACHE_KB(LOWMEM_CACHE_KB), .UPPER_RAM_ICACHE(UPPER_RAM_ICACHE), .SND(SOUND_MODEL), .USE_JT08(USE_JT08)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),

@@ -10,6 +10,7 @@ entity Zet98MiSTer is
 generic(
 	SYSFREQ		:integer	:=20000;		--CPU clock(kHz)
 	SND			:integer	:=2;			--0:none 1:OPN(-26) 2:OPNA(-73) 3:experimental -86 PCM
+	USE_JT08   :integer :=0;          -- experimental PC88 JT08 OPNA
 	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
 	EXT_RAM_MB  :integer :=0;          -- experimental DDR-backed extended memory
 	LOWMEM_CACHE:integer :=0;          -- experimental conventional-RAM read cache
@@ -841,6 +842,17 @@ port(
 	sft		:in std_logic;
 	rstn	:in std_logic
 );
+end component;
+
+component opna_jt08 is
+generic(SYSFREQ :integer :=20000);
+port(clk,rstn :in std_logic;
+ din :in std_logic_vector(7 downto 0); adr :in std_logic_vector(1 downto 0);
+ csn,rdn,wrn :in std_logic;
+ dout :out std_logic_vector(7 downto 0); doe,waitn,irqn :out std_logic;
+ snd_l,snd_r,snd_psg :out std_logic_vector(15 downto 0);
+ pain,pbin :in std_logic_vector(7 downto 0);
+ paout,pbout :out std_logic_vector(7 downto 0); paoe,pboe :out std_logic);
 end component;
 
 component OPNA
@@ -1898,6 +1910,7 @@ signal ioaddr_even, ioaddr_odd :std_logic_vector(15 downto 0);
 signal	iord	:std_logic;
 signal	iowr	:std_logic;
 signal	iowaitn	:std_logic;
+signal OPN_WAITn :std_logic;
 signal	iack	:std_logic;
 
 --memory bus
@@ -2581,7 +2594,7 @@ begin
 	abus<=	cpuaddr when DMAen='0' else DMA_UADR & DMA_OADR(15 downto 1);
 	
 	
-	iowaitn<=TSTMP_WAITn;
+	iowaitn<=TSTMP_WAITn and OPN_WAITn;
 	
 	IOa	:IOack port map(tga,stb,abus(15 downto 1),cpusel,cpuoe,DMAen,cpu_iord,cpu_iowr,iowaitn,iack,cpuclk,irstn);
 	
@@ -4028,9 +4041,12 @@ DBIO_ODAT<=(others=>'1');
 
 	-- The baseline enables OPNA at 10 MHz (20 MHz / 2). Scale the divisor
 	-- with the system clock so a CPU speed experiment does not speed up music.
-	OPNS	:sftgen generic map(SYSFREQ/10000) port map(SYSFREQ/10000,OPN_sft,cpuclk,srstn);
+	OPNS :entity work.opna_clock_enable generic map(SYSFREQ) port map(OPN_sft,cpuclk,srstn);
 	SNDID_CS<='1' when ioaddr_even=x"a460" else '0';
 
+	no_opna_wait :if SND/=2 and SND/=3 generate
+		OPN_WAITn<='1';
+	end generate;
 	no_pcm :if SND/=3 generate
 		PCM_IRQ<='0'; PCM_EXT<='1'; PCM_FM_MUTE<='0';
 		PCM_L<=(others=>'0'); PCM_R<=(others=>'0');
@@ -4039,6 +4055,8 @@ DBIO_ODAT<=(others=>'1');
 		OPN_CS<=	'1' when ioaddr_even(15 downto 3)="0000000110001" and ioaddr_even(0)='0' and
 			(ioaddr_even(2)='0' or PCM_EXT='1') else '0';
 		
+		legacy_opna :if USE_JT08=0 generate
+		OPN_WAITn<='1';
 		FMS	:OPNA generic map(16) port map(
 			DIN		=>io_wdata(7 downto 0),
 			DOUT		=>OPN_ODAT,
@@ -4073,6 +4091,16 @@ DBIO_ODAT<=(others=>'1');
 			sft		=>OPN_sft,
 			rstn	=>srstn
 		);
+        end generate;
+        jotego_opna :if USE_JT08/=0 generate
+            synth :opna_jt08 generic map(SYSFREQ) port map(
+                clk=>cpuclk,rstn=>srstn,din=>io_wdata(7 downto 0),adr=>ioaddr(2 downto 1),
+                csn=>not OPN_CS,rdn=>not iord,wrn=>not iowr,
+                dout=>OPN_ODAT,doe=>OPN_DOE,waitn=>OPN_WAITn,irqn=>OPN_INTn,
+                snd_l=>OPN_sndL,snd_r=>OPN_sndR,snd_psg=>OPN_sndPSG,
+                pain=>OPN_GPIOAi,pbin=>x"ff",paout=>OPN_GPIOAo,pbout=>OPN_GPIOBo,
+                paoe=>OPN_GPIOAoe,pboe=>OPN_GPIOBoe);
+        end generate;
 
 		FM_ROUTE_L<=OPN_sndL when PCM_FM_MUTE='0' else (others=>'0');
 		FM_ROUTE_R<=OPN_sndR when PCM_FM_MUTE='0' else (others=>'0');

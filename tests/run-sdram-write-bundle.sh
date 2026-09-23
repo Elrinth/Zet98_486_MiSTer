@@ -14,7 +14,7 @@ for delay in 15 80; do
 done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-15.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
-for mhz in 20 40 50 60 90 100; do
+for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
     for phase in 0 1300 4700 9100; do
         ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \
             -gCPU_MHZ="$mhz" -gBUFFERED=true -gMEM_PHASE_PS="$phase" --assert-level=error

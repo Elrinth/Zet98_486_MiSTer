@@ -29,6 +29,10 @@
 //PARSED_COMMENTS: this file contains parsed script comments
 
 module write_commands(
+    input [9:0] wr_control_select,
+    input [20:0] wr_finish_select, // Registered completion opcode selectors.
+    input [43:0] wr_reset_select, // Registered opcode-only reset selectors.
+
     input               clk,
     input               rst_n,
     

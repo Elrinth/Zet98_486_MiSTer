@@ -13,10 +13,11 @@ assert 'always @(posedge clk)' in block and 'assign dec_eip' in block
 def check(actual, negative=False):
     harness = '''`include "defines.v"
 module proof(input clk, rst_n, pr_reset, dec_ready,
-             input [31:0] prefetch_eip, input [3:0] dec_consumed,
+             input [31:0] prefetch_eip, input [3:0] consume_count_local, prefix_count,
              output equivalent);
 reg [31:0] eip;
 wire [31:0] dec_eip;
+wire [3:0] dec_consumed = dec_ready ? consume_count_local + prefix_count : 4'd0;
 ''' + actual + '''
 reg [31:0] reference_eip;
 always @(posedge clk) begin
@@ -44,7 +45,7 @@ endmodule
 
 
 check(block)
-print('PASS: all EIP values, lengths 0..15, wraparound, resets, redirects and stalls')
+print('PASS: all EIP values, all length/prefix combinations, four-bit wrap, resets, redirects and stalls')
 for name, old, new in (
         ('wrong carry bit', 'dec_eip_low[4]', 'dec_eip_low[3]'),
         ('missing high increment', "eip[31:4] + 28'd1", "eip[31:4] + 28'd0"),

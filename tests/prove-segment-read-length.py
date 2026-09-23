@@ -34,6 +34,7 @@ miter = '\n'.join([
     'module segment_length_proof(' + ',\n'.join(ports) + ');',
     'wire ' + ', '.join(outputs) + ';',
     'read_commands decoder(' + ',\n'.join(connections) + ');',
+    'wire segment_length_word = ' + re.search(r'wire segment_length_word =([^;]+);', source).group(1) + ';',
     *lengths,
     'assign equivalent = !(read_virtual || read_rmw_virtual || write_virtual_check)',
     '                    || read_length == segment_read_length;',

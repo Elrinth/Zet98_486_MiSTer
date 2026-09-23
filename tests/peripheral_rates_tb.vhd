@@ -17,7 +17,7 @@ begin
     clk20 <= not clk20 after 25 ns;
     clk40 <= not clk40 after 1 ms / FAST_KHZ / 2;
     opn_base : entity work.sftgen generic map(2) port map(2, opn20, clk20, rstn);
-    opn_fast : entity work.sftgen generic map(FAST_KHZ/10000) port map(FAST_KHZ/10000, opn40, clk40, rstn);
+    opn_fast : entity work.opna_clock_enable generic map(FAST_KHZ) port map(opn40, clk40, rstn);
     pit_base : entity work.sftclk generic map(20000, 2458, 1) port map("1", pit20, clk20, rstn);
     pit_fast : entity work.sftclk generic map(FAST_KHZ, 2458, 1) port map("1", pit40, clk40, rstn);
     -- The common timebase isolates pulse-width scaling from timer start delay.
@@ -50,7 +50,7 @@ begin
         t20 := now;
         assert abs(t20 - t40) <= 50 ns report "VFO timer duration changed" severity failure;
         wait until pulse40 = '0';
-        assert abs(now - t40 - 100 ns) < 1 ps report "Fast VFO pulse width changed" severity failure;
+        assert abs(now - t40 - (2*FAST_KHZ/20000)*(1 ms / FAST_KHZ)) < 1 ps report "Fast VFO pulse width changed" severity failure;
         wait until pulse20 = '0';
         assert now - t20 = 100 ns report "20 MHz VFO pulse width changed" severity failure;
         wait for 100 us;
@@ -58,7 +58,7 @@ begin
             report "OPNA clock-enable frequency changed" severity failure;
         assert abs(integer(pit_count20) - integer(pit_count40)) <= 1
             report "PIT clock-enable frequency changed" severity failure;
-        report "PASS: 20 MHz / " & integer'image(FAST_KHZ) & " kHz OPNA/PIT rates and 100 ns VFO pulses" severity note;
+        report "PASS: 20 MHz / " & integer'image(FAST_KHZ) & " kHz OPNA/PIT rates and VFO pulses within one system cycle of 100 ns" severity note;
         finish;
     end process;
     process begin

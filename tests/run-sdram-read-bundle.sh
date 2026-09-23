@@ -17,7 +17,7 @@ done
 ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-5.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
 for sub in false true; do
-    for mhz in 20 40 50 60 90 100; do
+    for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
         for phase in 0 417 833 1250 1667 2083 2500 2917 3333 3750 4167 4583 5000 5417 5833 6250 6667 7083 7500 7917 8333 8750 9167 9583; do
             ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \
                 -gUSE_SUB="$sub" -gCPU_MHZ="$mhz" -gBUFFERED=true -gMEM_PHASE_PS="$phase" --assert-level=error

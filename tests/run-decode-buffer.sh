@@ -6,6 +6,12 @@ trap 'rm -rf "$out"' EXIT
 sed 's/module decode_regs(/module decode_regs_legacy(/' tests/reference/decode_regs_legacy.v > "$out/legacy.v"
 iverilog -g2012 -s decode_regs_tb -o "$out/test" rtl/vendor/ao486/pipeline/decode_regs.v "$out/legacy.v" tests/decode_regs_tb.sv
 vvp "$out/test"
+# Exercise the actual Cyclone V LUT branch, not just the portable simulator mux.
+intel_lib=${INTEL_SIM_LIB:-/project/intel-sim}
+iverilog -g2012 -DZET98_CYCLONEV_READY_MUX -Pdecode_regs_tb.COUNT_STRIDE=5 -s decode_regs_tb -o "$out/fpga" \
+    rtl/vendor/ao486/pipeline/decode_regs.v "$out/legacy.v" \
+    tests/decode_regs_tb.sv "$intel_lib/cyclonev_atoms.v"
+vvp "$out/fpga"
 sed 's/consume_enabled ? consume_step : stalled_step/consume_step/' rtl/vendor/ao486/pipeline/decode_regs.v > "$out/ignored-stall.v"
 iverilog -g2012 -s decode_regs_tb -o "$out/negative" "$out/ignored-stall.v" "$out/legacy.v" tests/decode_regs_tb.sv
 if vvp "$out/negative" > "$out/negative.log" 2>&1; then

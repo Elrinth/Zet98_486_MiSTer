@@ -38,6 +38,7 @@ module decode_regs(
     input               consume_enabled,
     
     output      [3:0]   dec_acceptable,
+    output              dec_fetch_fits,
     
     output reg  [95:0]  decoder,
     output reg  [3:0]   decoder_count
@@ -120,7 +121,33 @@ endfunction
 
 wire [103:0] consume_step = buffer_step(decoder,decoder_count,consume_count,prefix_count,fetch_valid,fetch,dec_reset);
 wire [103:0] stalled_step = buffer_step(decoder,decoder_count,4'd0,prefix_count,fetch_valid,fetch,dec_reset);
-wire [103:0] selected_step = consume_enabled ? consume_step : stalled_step;
+wire [103:0] selected_step;
+// Compare both capacities before the late pipeline-ready decision. Fetch can
+// consume this one-bit result directly instead of comparing the selected bus.
+wire consume_fetch_fits = consume_step[103:100] >= fetch_valid;
+wire stalled_fetch_fits = stalled_step[103:100] >= fetch_valid;
+`ifdef ZET98_CYCLONEV_READY_MUX
+// Use a three-input LUT for late readiness; keep the complete buffer results
+// on the data inputs. A generic mux was folded back into the byte selectors.
+genvar ready_bit;
+generate for (ready_bit=0; ready_bit<104; ready_bit=ready_bit+1) begin: ready_mux
+    cyclonev_lcell_comb #(.lut_mask(64'hCACACACACACACACA),
+        .shared_arith("off"), .extended_lut("off"), .dont_touch("on")) mux (
+        .dataa(stalled_step[ready_bit]), .datab(consume_step[ready_bit]),
+        .datac(consume_enabled), .datad(), .datae(), .dataf(),
+        .datag(), .cin(), .sharein(),
+        .combout(selected_step[ready_bit]), .sumout(), .cout(), .shareout());
+end endgenerate
+cyclonev_lcell_comb #(.lut_mask(64'hCACACACACACACACA),
+    .shared_arith("off"), .extended_lut("off"), .dont_touch("on")) fetch_fits_mux (
+    .dataa(stalled_fetch_fits), .datab(consume_fetch_fits),
+    .datac(consume_enabled), .datad(), .datae(), .dataf(),
+    .datag(), .cin(), .sharein(),
+    .combout(dec_fetch_fits), .sumout(), .cout(), .shareout());
+`else
+assign selected_step = consume_enabled ? consume_step : stalled_step;
+assign dec_fetch_fits = consume_enabled ? consume_fetch_fits : stalled_fetch_fits;
+`endif
 assign dec_acceptable = selected_step[103:100];
 always @(posedge clk) begin
     if(!rst_n) begin

@@ -1226,14 +1226,29 @@ assign tlbcode_cache_disable = 1'b0;
 //wire  tlbcode_cache_disable_to_reg =
 //    (cond_22 && ~cond_23 && cond_17 && ~cond_18)? (   cr0_cd || translate_pcd || memtype_cache_disable) :
 //    tlbcode_cache_disable;
+// TLB_LINEAR_MUX_BEGIN
+// Choose the address independently of the late alignment/flush checks. Those
+// checks still gate the register enable, preserving its exact hold behavior.
+// The six data masks are mutually exclusive; no priority mux follows the
+// alignment-fault path. See tests/prove-tlb-linear.py.
+wire linear_idle_load = cond_0 && !cond_1 && !cond_2 && !cond_3 &&
+    (cond_4 || cond_5 || (!cond_6 && (cond_7 || cond_8)));
+wire linear_load = linear_idle_load || cond_9;
+wire linear_select_write = cond_0 && cond_4;
+wire linear_select_check = cond_0 && !cond_4 && cond_5;
+wire linear_select_read = cond_0 && !cond_4 && !cond_5 && cond_7;
+wire linear_select_code = cond_0 && !cond_4 && !cond_5 && !cond_7;
+wire linear_select_next_page = cond_9 && cond_10;
+wire linear_select_saved = cond_9 && !cond_10;
+wire [31:0] linear_next_page = {linear[31:12], 12'd0} + 32'h00001000;
 wire [31:0] linear_to_reg =
-    (cond_0 && ~cond_1 && ~cond_2 && ~cond_3 && cond_4)? ( tlbwrite_address) :
-    (cond_0 && ~cond_1 && ~cond_2 && ~cond_3 && ~cond_4 && cond_5)? ( tlbcheck_address) :
-    (cond_0 && ~cond_1 && ~cond_2 && ~cond_3 && ~cond_4 && ~cond_5 && ~cond_6 && cond_7)? ( tlbread_address) :
-    (cond_0 && ~cond_1 && ~cond_2 && ~cond_3 && ~cond_4 && ~cond_5 && ~cond_6 && ~cond_7 && cond_8)? ( tlbcoderequest_address) :
-    (cond_9 && cond_10)? ( { linear[31:12], 12'd0 } + 32'h00001000) :
-    (cond_9 && ~cond_10)? ( write_double_linear) :
-    linear;
+    ({32{linear_select_write}} & tlbwrite_address) |
+    ({32{linear_select_check}} & tlbcheck_address) |
+    ({32{linear_select_read}} & tlbread_address) |
+    ({32{linear_select_code}} & tlbcoderequest_address) |
+    ({32{linear_select_next_page}} & linear_next_page) |
+    ({32{linear_select_saved}} & write_double_linear);
+// TLB_LINEAR_MUX_END
 wire [15:0] tlb_code_pf_error_code_to_reg =
     (cond_22 && ~cond_23 && cond_17 && cond_18)? ({ 13'd0, su, rw, `TRUE }) :
     (cond_24 && cond_14 && cond_25 && cond_26)? ( { 13'd0, su, rw, `FALSE }) :
@@ -1348,7 +1363,7 @@ end
 //end
 always @(posedge clk) begin
     if(rst_n == 1'b0) linear <= 32'd0;
-    else              linear <= linear_to_reg;
+    else if(linear_load) linear <= linear_to_reg;
 end
 always @(posedge clk) begin
     if(rst_n == 1'b0) tlb_code_pf_error_code <= 16'd0;
