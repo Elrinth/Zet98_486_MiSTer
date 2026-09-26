@@ -136,6 +136,12 @@ setup program on build B164; report problems in the issue tracker.
 **1. Core menu (F12 in the Zet98 core)**
 
 - **MPU MIDI: UART** (the default is Off, which disables the interface).
+- **DIP2-8 GDC clock: 2.5MHz.** With the 5MHz default, some games (e.g. Nightslave)
+  program the graphics GDC for 5 MHz timing and the core shows the picture repeated
+  and shifted across the screen.
+- **DIP1-3 Display: Normal** (the Plasma default changes some games' palettes).
+- These settings are saved per core name: loading the RBF directly uses the name
+  `Zet98`, while the test launchers (`.mgl`) use `Zet98_Test`, so set them for each.
 - In the MiSTer UART settings for this core, set the UART connection to **MIDI**
   and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
   FluidSynth, as for other cores).
