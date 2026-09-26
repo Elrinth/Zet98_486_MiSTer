@@ -68,6 +68,9 @@ bash tests/run-egc-write.sh
 bash tests/run-egc-engine.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
+bash tests/run-audio-decimator.sh
+bash tests/run-alsa-gain.sh
+bash tests/run-snac-psx.sh
 bash tests/run-opna-timer.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/DMA/DMASW.vhd tests/dma_grant_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" dma_grant_tb

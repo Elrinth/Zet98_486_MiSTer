@@ -1433,8 +1433,8 @@ audio_out audio_out
 	.core_l(audio_l),
 	.core_r(audio_r),
 
-	.alsa_l(alsa_l),
-	.alsa_r(alsa_r),
+	.alsa_l(alsa_scaled_l),
+	.alsa_r(alsa_scaled_r),
 
 	.i2s_bclk(HDMI_SCLK),
 	.i2s_lrclk(HDMI_LRCLK),
@@ -1454,6 +1454,28 @@ wire        alsa_req;
 wire        alsa_late;
 
 wire [15:0] alsa_l, alsa_r;
+
+// Zet98/PC98 local change: core-selected gain for Linux audio (MidiLink /
+// FluidSynth). The setting is static, so a two-stage synchronizer suffices.
+wire [2:0] alsa_gain;
+reg  [2:0] alsa_gain_meta = 0, alsa_gain_sync = 0;
+reg  [15:0] alsa_scaled_l = 0, alsa_scaled_r = 0;
+function automatic [15:0] alsa_scale(input signed [15:0] s, input [2:0] g);
+	reg signed [20:0] p;
+	begin
+		case(g)
+			0: p = s * 8;  1: p = s * 6;  2: p = s * 4;  3: p = s * 2;
+			4: p = 0;      5: p = s * 10; 6: p = s * 12; default: p = s * 16;
+		endcase
+		p = p >>> 3;
+		alsa_scale = p > 32767 ? 16'h7fff : p < -32768 ? 16'h8000 : p[15:0];
+	end
+endfunction
+always @(posedge clk_audio) begin
+	alsa_gain_meta <= alsa_gain; alsa_gain_sync <= alsa_gain_meta;
+	alsa_scaled_l <= alsa_scale(alsa_l, alsa_gain_sync);
+	alsa_scaled_r <= alsa_scale(alsa_r, alsa_gain_sync);
+end
 
 alsa alsa
 (
@@ -1643,6 +1665,7 @@ emu emu
 	.AUDIO_R(audio_r),
 	.AUDIO_S(audio_s),
 	.AUDIO_MIX(audio_mix),
+	.ALSA_GAIN(alsa_gain),
 
 	.ADC_BUS({ADC_SCK,ADC_SDO,ADC_SDI,ADC_CONVST}),
 

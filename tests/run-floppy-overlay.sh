@@ -11,7 +11,7 @@ done
 # and a miswired bit order in the existing boot font.
 for variant in old_position opaque wrong_font; do
     case "$variant" in
-      old_position) sed "s/bottom_edge-12'd90/bottom_edge-12'd74/;s/bottom_edge-12'd20/bottom_edge-12'd4/" rtl/floppy_overlay.sv > "$out/bad.sv" ;;
+      old_position) sed "s/bottom_edge-12'd30/bottom_edge-12'd14/;s/bottom_edge-12'd20/bottom_edge-12'd4/" rtl/floppy_overlay.sv > "$out/bad.sv" ;;
       opaque) sed "s/else {out_r,out_g,out_b}<=rgb_pipe2;/else {out_r,out_g,out_b}<=0;/" rtl/floppy_overlay.sv > "$out/bad.sv" ;;
       wrong_font) sed "s/font_row\[3'd7-text_column\]/font_row[text_column]/" rtl/floppy_overlay.sv > "$out/bad.sv" ;;
     esac

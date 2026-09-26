@@ -10,9 +10,7 @@ module floppy_caption_tb;
     reg [7:0] in_r=0,in_g=0,in_b=0;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
-    floppy_overlay #(.TILE_MAP_FILE("rtl/assets/floppy-tile-map.mem"),
-        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem"),
-        .FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
+    floppy_overlay #(.FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
     reg [11:0] test_x=0,test_right=0;
     integer i,j,offset,checks=0;
     initial begin

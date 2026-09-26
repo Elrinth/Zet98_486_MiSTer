@@ -88,15 +88,20 @@ checks, not boot tests. Several sampled translation HDIs instead contain
 ## Native image containers (candidate, hardware validation pending)
 
 The MiSTer image bridge now validates headers before announcing mounted media.
-FDD0/FDD1 accept D88, HDM, FDI and NFD. HDM supports standard 77x2x8x1024,
+FDD0/FDD1 accept D88, HDM and FDI. HDM supports standard 77x2x8x1024,
 80x2x15x512, 80x2x18x512, 80x2x8x512, 80x2x9x512 and 40x2x8x512 images.
 FDI supports those same regular geometries, with an arbitrary byte-aligned
-header offset. NFD supports regular 77x2x8x1024 revision-0 images with a 68112-byte
-header and normal MFM sectors. All four owner-supplied Burning Dragon Plus
-NFD images pass this metadata validation. Revision 1, retries, deleted sectors,
-CRC/error records and irregular layouts are rejected rather than flattened.
+header offset. Native NFD loading was removed after B167 to free FPGA area:
+NFD images are rejected at mount; convert them to D88 with
+`scripts/import_disk_image.py` (revision-0, error-free images). Irregular
+layouts are rejected rather than flattened.
 
-Native HDM/FDI/NFD mounts are **read-only**. Their virtual D88 view contains
+Both drives share one converter (`pc98_floppy_images.sv`): a mount header parse
+or a virtual-D88 sector transfer owns it until it finishes, and each drive keeps
+only its published geometry. `tests/run-native-images.sh` runs every fixture on
+both drives and reads two mounted images concurrently.
+
+Native HDM/FDI mounts are **read-only**. Their virtual D88 view contains
 write-protect metadata; the source images are never rewritten as D88.
 Use `scripts/import_disk_image.py` to create a writable D88 copy when needed.
 Existing D88 read/write/sync behavior is retained.

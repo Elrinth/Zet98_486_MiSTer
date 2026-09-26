@@ -119,6 +119,12 @@ after the startup interval must not mute later speaker audio. Clock and duration
 generics are reduced for simulation; the core uses its system clock frequency
 and a 10,000 ms interval.
 
+`run-audio-decimator.sh` drives `rtl/audio_decimator.sv` with a 10 kHz tone at the
+OPNA rate and 13 kHz at 44.1 kHz on a 24.576 MHz clock, samples the output at
+48 kHz like the framework and checks the spectrum: tone level within 0.5 dB and
+every alias at least 65 dB down, while the bypass instance must show the aliases
+and a boxcar-only filter must fail.
+
 `run-pcm86.sh` verifies the experimental PCM86 playback module: signed samples
 in all six audible 8/16-bit mono/stereo formats, a complete 32 KB FIFO with
 wrap and concurrent refill, held I/O writes, full/empty/reset, volume/mute,

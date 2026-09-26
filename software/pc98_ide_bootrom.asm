@@ -38,6 +38,12 @@ initialize:
     mov cx,memfix_end-memfix
     rep movsb
     call 0da00h:0
+    ; The core has an EGC. The PC-9801VM BIOS never reports one, so set
+    ; 054Dh bit 6 as an EGC-equipped BIOS does (NP2kai bios.c: grcg.chip>=3).
+    ; Games such as Rusty select their EGC graphics driver from this bit.
+    xor ax,ax
+    mov es,ax
+    or byte [es:054dh],40h
     mov ax,0d800h
     mov es,ax
     xor di,di

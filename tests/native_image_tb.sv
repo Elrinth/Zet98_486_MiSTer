@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 module native_image_tb;
 parameter FLOPPY=1;
+parameter SLOT=0; // floppy: which drive of the shared converter is exercised
 reg clk=0; always #5 clk=~clk;
 reg mounted=0, readonly=0;
 reg [63:0] image_size;
@@ -19,7 +20,27 @@ reg host_ack=0,host_buff_wr=0;
 reg [8:0] host_buff_addr=0;
 reg [7:0] host_buff_dout=0;
 generate if(FLOPPY) begin
-pc98_floppy_image dut(.*);
+// The other drive stays idle; the shared converter must serve SLOT alone.
+wire [1:0] m2,ro2,ack2,bw2,hrd,hwr,inv2;
+wire [63:0] size2[2];
+wire [31:0] lba2[2],hlba2[2];
+wire [7:0] din2[2],hdin2[2],dout2[2];
+wire [8:0] addr2[2];
+assign lba2[SLOT]=disk_lba; assign lba2[1-SLOT]=0;
+assign din2[SLOT]=disk_buff_din; assign din2[1-SLOT]=0;
+pc98_floppy_images dut(.clk(clk),.mounted(SLOT ? {mounted,1'b0} : {1'b0,mounted}),.readonly(readonly),
+ .image_size(image_size),.media_mounted(m2),.media_readonly(ro2),.media_size(size2),
+ .disk_lba(lba2),.disk_rd(SLOT ? {disk_rd,1'b0} : {1'b0,disk_rd}),.disk_wr(SLOT ? {disk_wr,1'b0} : {1'b0,disk_wr}),
+ .disk_buff_din(din2),.disk_ack(ack2),.disk_buff_wr(bw2),.disk_buff_addr(addr2),.disk_buff_dout(dout2),
+ .host_lba(hlba2),.host_rd(hrd),.host_wr(hwr),.host_buff_din(hdin2),
+ .host_ack(SLOT ? {host_ack,1'b0} : {1'b0,host_ack}),.host_buff_wr(host_buff_wr),
+ .host_buff_addr(host_buff_addr),.host_buff_dout(host_buff_dout),.invalid(inv2));
+assign media_mounted=m2[SLOT]; assign media_readonly=ro2[SLOT]; assign media_size=size2[SLOT];
+assign disk_ack=ack2[SLOT]; assign disk_buff_wr=bw2[SLOT]; assign disk_buff_addr=addr2[SLOT];
+assign disk_buff_dout=dout2[SLOT]; assign host_lba=hlba2[SLOT]; assign host_rd=hrd[SLOT];
+assign host_wr=hwr[SLOT]; assign host_buff_din=hdin2[SLOT]; assign invalid=inv2[SLOT];
+always @(posedge clk) if(hrd[1-SLOT] || hwr[1-SLOT] || ack2[1-SLOT] || m2[1-SLOT])
+ $fatal(1,"idle drive %0d was touched",1-SLOT);
 end else begin
 pc98_hdi_image dut(.*);
 assign disk_buff_addr=host_buff_addr;

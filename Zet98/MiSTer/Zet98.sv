@@ -76,6 +76,9 @@ module emu #(parameter NATIVE_IMAGES=1)
 	output [15:0] AUDIO_R,
 	output        AUDIO_S, // 1 - signed audio samples, 0 - unsigned
 	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
+	// Linux (MidiLink/FluidSynth) audio gain, applied in sys_top:
+	// 0 100%, 1 75%, 2 50%, 3 25%, 4 mute, 5 125%, 6 150%, 7 200%.
+	output  [2:0] ALSA_GAIN,
 
 	//ADC
 	inout   [3:0] ADC_BUS,
@@ -132,9 +135,13 @@ module emu #(parameter NATIVE_IMAGES=1)
 );
 
 assign ADC_BUS  = 'Z;
-assign USER_OUT  = '1;
 
 assign AUDIO_MIX = 0;
+`ifdef ZET98_MPU_UART
+assign ALSA_GAIN = status[37:35];
+`else
+assign ALSA_GAIN = 0;
+`endif
 assign VGA_SL    = 0;
 assign VGA_F1    = 0;
 assign VGA_SCALER = 0;
@@ -166,16 +173,19 @@ parameter CONF_STR = {
 	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
-	"O5,Floppy icon,On,Off;",
+	"o2,Audio filter,On,Off;",
+	"o6,SNAC PS pads,Off,On;",
+	"O5,Loading text,On,Off;",
 `ifdef ZET98_MPU_UART
 	"OQ,MPU MIDI,Off,UART;",
+	"o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
 `endif
 	"-;",
 	"R6,Reset;",
 	"OR,Empty boot,Wait for disk,Start BIOS;",
 	"-;",
-	"S0,D88HDMFDINFD,FDD0;",
-	"S1,D88HDMFDINFD,FDD1;",
+	"S0,D88HDMFDI,FDD0;",
+	"S1,D88HDMFDI,FDD1;",
 `ifdef ZET98_RAW_IDE
 	"S2,VHDIMGHDI,IDE hard disk;",
 `else
@@ -282,12 +292,30 @@ sdramclk_ddr
 /////////////////  HPS  ///////////////////////////
 
 wire [63:0] status;
+
+// Band-limit the core mix to 48 kHz on the framework's audio clock so the
+// OPNA/PCM86 staircases do not alias (rtl/audio_decimator.sv).
+wire [15:0] core_snd_l, core_snd_r;
+audio_decimator audio_decimator (
+	.clk(CLK_AUDIO), .enable(~status[34]),
+	.in_l(core_snd_l), .in_r(core_snd_r),
+	.out_l(AUDIO_L), .out_r(AUDIO_R)
+);
+
 wire  [1:0] buttons;
 
 wire [15:0] joystick_0, joystick_1;
 
-wire  [5:0] joyA = ~{joystick_0[5:4],joystick_0[0],joystick_0[1],joystick_0[2],joystick_0[3]};
-wire  [5:0] joyB = ~{joystick_1[5:4],joystick_1[0],joystick_1[1],joystick_1[2],joystick_1[3]};
+// PlayStation pads on the user port (SNAC) add to USB joysticks 1 and 2.
+wire  [5:0] snac_joy1, snac_joy2;
+snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
+	.clk(clk_sys), .enable(status[38]), .user_in(USER_IN), .user_out(USER_OUT),
+	.joy1(snac_joy1), .joy2(snac_joy2)
+);
+wire  [5:0] joy0_bits = joystick_0[5:0] | snac_joy1;
+wire  [5:0] joy1_bits = joystick_1[5:0] | snac_joy2;
+wire  [5:0] joyA = ~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
+wire  [5:0] joyB = ~{joy1_bits[5:4],joy1_bits[0],joy1_bits[1],joy1_bits[2],joy1_bits[3]};
 
 wire        ioctl_download;
 wire  [7:0] ioctl_index;
@@ -643,8 +671,8 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pVideoEN(native_de),
 	.pVideoClk(native_ce),
 
-	.pSndL(AUDIO_L),
-	.pSndR(AUDIO_R),
+	.pSndL(core_snd_l),
+	.pSndR(core_snd_r),
 	.pStartupBeeps(status[4]),
 
 	.rstn(reset_n & ~reset)

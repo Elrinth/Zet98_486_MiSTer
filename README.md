@@ -29,7 +29,9 @@ and Lemmings into its intro through a temporary loader on #142. The integrated
 #143R2 revision remains to be hardware-tested. MiSTer Main intercepts PC-98 `.fdi` files as Spectrum images; a
 byte-identical `.hdm` copy bypasses that host bug. It is not fully qualified
 yet. See [format limits](rtl/storage/README.md) and [CPU speed control](rtl/Z486_PC98.md).
-Native HDM/FDI/NFD mounts are read-only; D88 supports saving as before.
+Native HDM/FDI mounts are read-only; D88 supports saving as before. Native NFD
+loading was removed after B167 to free FPGA area; convert NFD images to D88 with
+`scripts/import_disk_image.py`.
 
 The development features and earlier qualification history include:
 
@@ -149,6 +151,11 @@ setup program on build B164; report problems in the issue tracker.
 **1. Core menu (F12 in the Zet98 core)**
 
 - **MPU MIDI: UART** (the default is Off, which disables the interface).
+- **MIDI volume** (100% default; 75/50/25%, Mute, 125/150/200%) sets the level of the
+  FluidSynth/MidiLink music relative to the core's own sound. It scales the Linux
+  audio stream where the MiSTer framework mixes it in (a local `sys_top.v` change),
+  so it does not alter the game's MIDI data. `FSYNTH_VOLUME` in
+  `/media/fat/linux/MidiLink.INI` still sets FluidSynth's own gain.
 - **DIP2-8 GDC clock: 2.5MHz** (the default since B165). With 5MHz, some games
   (e.g. Nightslave) program the graphics GDC for 5 MHz timing and the core shows
   the picture repeated and shifted across the screen.
@@ -355,11 +362,22 @@ detection; early software speaker tones within those ten seconds are also
 muted. Earlier test RBFs use a fixed ten-second timer that can expose a long
 beep's tail. The revised behavior passes simulation; hardware checks are pending.
 
-`Floppy icon: On / Off` defaults to **On** (status bit 5 clear). A small rotating
-floppy appears at the lower right during controller activity and floppy image
-transfers, with a short hold for visibility. It follows the measured active
-raster, leaves blanking/sync unchanged, and disappears when idle. This is new
-source functionality, not present in the earlier Cache hardware test RBF.
+`Audio filter: On / Off` defaults to **On** (status bit 34 clear). The FM (OPNA, 55.5 kHz) and PCM86 (44.1 kHz) outputs are held sample staircases; the MiSTer framework takes 48 kHz samples of them, which folds high tones back as audible noise (a 10 kHz FM tone also appears at 2.5 kHz, only 13 dB down). `rtl/audio_decimator.sv` band-limits the mix to 48 kHz on the framework's audio clock: a CIC to 768 kHz, then a 255-tap FIR (flat to 18 kHz, -75 dB from 28 kHz, coefficients from `scripts/design_audio_decimator.py`). In simulation the worst alias drops from -13 to -67 dBc (FM) and from -7 to -65 dBc (PCM86). **Off** restores the previous direct output for comparison.
+
+`SNAC PS pads: Off / On` (default Off, status bit 38) reads original PlayStation
+controllers on the MiSTer user port with the standard SNAC wiring (for example the
+SuperStation One's PlayStation ports): port 1 is joystick 1, port 2 joystick 2,
+combined with USB controllers. D-pad, or the left stick of a DualShock in analog mode,
+gives the directions; Cross/Square are trigger 1 and Circle/Triangle trigger 2 of the
+PC-98 sound-board joystick port. `rtl/snac_psx_pad.sv` polls both ports about 60
+times per second at 250 kHz; with the option Off the user port is not driven.
+
+`Loading text: On / Off` defaults to **On** (status bit 5 clear). The caption
+`LOADING D0...` or `LOADING D1...` (with cycling dots) appears at the lower right
+during floppy controller activity and floppy image transfers, with a short hold
+for visibility. It follows the measured active raster, leaves blanking/sync
+unchanged, and disappears when idle. After B167 the animated disk icon was
+removed to free FPGA area for EGC and the audio filter; the text remains.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

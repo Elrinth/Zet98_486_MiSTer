@@ -497,6 +497,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/floppy_overlay.sv
 set_global_assignment -name VHDL_FILE ../../rtl/startup_mute.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_retrace_cdc.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pcm86.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/audio_decimator.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/snac_psx_pad.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/pegc_raster.vhd
@@ -504,6 +506,11 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_cont
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_palette.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_memory.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_bus.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_egc_rop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_egc_registers.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_egc_shift.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_egc_write.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_egc_word_engine.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_ddr_arbiter.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_line_fetch.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/CRTC98.vhd
@@ -565,5 +572,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/hdmi_tune_gate.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/midi/pc98_mpu_uart.sv
 
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_image_bridge.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_floppy_image.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_floppy_images.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_hdi_image.sv

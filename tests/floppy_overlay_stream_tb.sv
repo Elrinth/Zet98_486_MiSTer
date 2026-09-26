@@ -9,11 +9,7 @@ module floppy_overlay_stream_tb;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
     floppy_overlay #(.ANIMATION_CYCLES(0),
-        .TILE_MAP_FILE("rtl/assets/floppy-tile-map.mem"),
-        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem"),
         .FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
-    reg [1:0] reference_pixels[0:165199];
-    initial $readmemb("rtl/assets/floppy-animation.mem",reference_pixels);
     reg [23:0] expected_rgb=0,rgb_q[0:2];
     reg check_rgb=1;
     reg [2:0] ce_q=0,check_q=0,sync_q[0:2];
@@ -52,12 +48,8 @@ module floppy_overlay_stream_tb;
                 in_ce=1;in_de=x<128 && y<96;in_hs=x>=130 && x<133;in_vs=y==98;
                 {in_r,in_g,in_b}={8'(x),8'(y),8'(x^y)};
                 expected_rgb={in_r,in_g,in_b};check_rgb=1;
-                if(animation>=0 && in_de && x>=16 && x<124 && y>=6 && y<76) begin
-                    if(x>=45 && x<95 && y<62 && reference_pixels[animation*2800+(y-6)*50+x-45]!=0)
-                        expected_rgb=color(reference_pixels[animation*2800+(y-6)*50+x-45]);
-                    // The separate all-frame test checks the caption glyphs.
-                    if(x>=18 && x<122 && y>=66 && y<74) check_rgb=0;
-                end
+                // Only the caption row may change; the separate test checks glyphs.
+                if(animation>=0 && in_de && x>=18 && x<122 && y>=66 && y<74) check_rgb=0;
                 if(gaps && (x*7+y*13)%5==0) begin
                     @(negedge clk);in_ce=0;
                     repeat((x+y)%3) @(negedge clk);

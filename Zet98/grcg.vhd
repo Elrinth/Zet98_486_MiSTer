@@ -35,6 +35,7 @@ port(
 	memwdat3:out std_logic_vector(15 downto 0);
 	memwmask :out std_logic_vector(15 downto 0);
 	memwrpsel	:out std_logic_vector(3 downto 0);
+	cgenout	:out std_logic;
 	
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -163,6 +164,7 @@ begin
 		compare0 and compare1 and compare2 and compare3;
 	
 	poe<=	pmemcs and prd;
+	cgenout<=CGEN;
 	
 end rtl;
 	

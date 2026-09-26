@@ -578,9 +578,38 @@ port(
 	memwdat3:out std_logic_vector(15 downto 0);
 	memwmask :out std_logic_vector(15 downto 0);
 	memwrpsel	:out std_logic_vector(3 downto 0);
+	cgenout	:out std_logic;
 	
 	clk		:in std_logic;
 	rstn	:in std_logic
+);
+end component;
+
+-- EGC word engine (rtl/graphics): registers 04A0h-04AFh, shifter, raster
+-- operation and SDRAMC read4 / affine RMW4 client.
+component pc98_egc_word_engine
+generic(ADDRESS_WIDTH :integer := 22);
+port(
+	clk, reset, soft_reset, egc_enable :in std_logic;
+	io_address :in std_logic_vector(15 downto 1);
+	io_select :in std_logic_vector(1 downto 0);
+	io_writedata :in std_logic_vector(15 downto 0);
+	io_strobe, io_write :in std_logic;
+	request, request_write :in std_logic;
+	request_address :in std_logic_vector(ADDRESS_WIDTH-1 downto 0);
+	request_bank, request_bytes :in std_logic_vector(1 downto 0);
+	request_writedata :in std_logic_vector(15 downto 0);
+	busy :out std_logic;
+	acknowledge, fault :out std_logic;
+	readdata :out std_logic_vector(15 downto 0);
+	memory_address :out std_logic_vector(ADDRESS_WIDTH-1 downto 0);
+	memory_bank :out std_logic_vector(1 downto 0);
+	memory_read4, memory_rmw4 :out std_logic;
+	memory_bytes :out std_logic_vector(1 downto 0);
+	memory_planes :out std_logic_vector(3 downto 0);
+	memory_base, memory_xor_mask :out std_logic_vector(63 downto 0);
+	memory_acknowledge :in std_logic;
+	memory_readdata :in std_logic_vector(63 downto 0)
 );
 end component;
 
@@ -2090,6 +2119,15 @@ signal	GCG_RD4		:std_logic;
 signal	GCG_RMW1	:std_logic;
 signal	GCG_RMW4	:std_logic;
 signal GCG_WMASK, CB_PRESERVE :std_logic_vector(15 downto 0);
+signal	GCG_CGEN :std_logic;
+signal	GCG_ODAT_G :std_logic_vector(15 downto 0);
+signal	EGC_EN, EGC_ACTIVE, EGC_REQ, EGC_BUSY, EGC_PATH, EGC_ACK, EGC_FAULT :std_logic;
+signal	EGC_RD4, EGC_RMW4, EGC_RESET, EGC_SOFTRESET, EGC_IOSTB :std_logic;
+signal	EGC_RDAT :std_logic_vector(15 downto 0);
+signal	EGC_MADDR :std_logic_vector(21 downto 0);
+signal	EGC_MBANK, EGC_MBYTES :std_logic_vector(1 downto 0);
+signal	EGC_MPLANES :std_logic_vector(3 downto 0);
+signal	EGC_MBASE, EGC_MXOR, CB_RDAT64 :std_logic_vector(63 downto 0);
 signal	GCG_WDAT0	:std_logic_vector(15 downto 0);
 signal	GCG_WDAT1	:std_logic_vector(15 downto 0);
 signal	GCG_WDAT2	:std_logic_vector(15 downto 0);
@@ -2364,7 +2402,7 @@ begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
 
-	ram	:SDRAMC generic map(22,100,64000/8192,true,true,true) port map(
+	ram	:SDRAMC generic map(22,100,64000/8192,true,true,true,true) port map(
 		-- SDRAM PORTS
 		PMEMCKE			=>pMemCke,
 		PMEMCS_N			=>pMemCs_n,
@@ -2452,7 +2490,9 @@ begin
 		mem_inidone		=>MEM_INIDONE,
 		
 		memclk			=>ramclk,
-		rstn				=>mrstn
+		rstn				=>mrstn,
+		CPUAFFINE	=>EGC_RMW4,
+		CPUXORMASK	=>EGC_MXOR
 	);
 	
     -- All irstn consumers use cpuclk. SDRAM ready is released in ramclk.
@@ -2618,42 +2658,54 @@ begin
 		
 	CB_WR1<=
 		LDR_WR	when LDR_OE='1' else
+		'0'		when EGC_PATH='1' else
 		GCG_WR1	when GCG_MCS='1' else
 		MWR		when MSD_CS='1' else
 		'0';
 	
-	CB_WR4<=	GCG_WR4 when GCG_MCS='1' else
+	CB_WR4<=	'0' when EGC_PATH='1' else
+				GCG_WR4 when GCG_MCS='1' else
 				'0';
 	
-	CB_RD1<=	GCG_RD1	when GCG_MCS='1' else
+	CB_RD1<=	'0'		when EGC_PATH='1' else
+				GCG_RD1	when GCG_MCS='1' else
 				MRD		when MSD_CS='1' else
 				'0';
 	
-	CB_RD4<=	GCG_RD4 when GCG_MCS='1' else
+	CB_RD4<=	EGC_RD4 when EGC_PATH='1' else
+				GCG_RD4 when GCG_MCS='1' else
 				'0';
 	
-	CB_RMW1<=	GCG_RMW1 when GCG_MCS='1' else
+	CB_RMW1<=	'0' when EGC_PATH='1' else
+				GCG_RMW1 when GCG_MCS='1' else
 				'0';
 	
-	CB_RMW4<=	GCG_RMW4 when GCG_MCS='1' else
+	CB_RMW4<=	EGC_RMW4 when EGC_PATH='1' else
+				GCG_RMW4 when GCG_MCS='1' else
 				'0';
 
 	CB_BSEL<=
 		"01"	when LDR_OE='1' and LDR_ADDR(0)='0' else
 		"10"	when LDR_OE='1' and LDR_ADDR(0)='1' else
+		EGC_MBYTES	when EGC_PATH='1' else
 		bussel;
 		
-    CB_PRESERVE <= GCG_WMASK when GCG_MCS='1' else x"0000";
-	CB_WDAT0<=	GCG_WDAT0	when GCG_MCS='1' else
+    CB_PRESERVE <= x"0000" when EGC_PATH='1' else GCG_WMASK when GCG_MCS='1' else x"0000";
+	CB_WDAT0<=	EGC_MBASE(15 downto 0)	when EGC_PATH='1' else
+				GCG_WDAT0	when GCG_MCS='1' else
 				mem_wdata;
-	CB_WDAT1<=	GCG_WDAT1	when GCG_MCS='1' else
+	CB_WDAT1<=	EGC_MBASE(31 downto 16)	when EGC_PATH='1' else
+				GCG_WDAT1	when GCG_MCS='1' else
 				(others=>'0');
-	CB_WDAT2<=	GCG_WDAT2	when GCG_MCS='1' else
+	CB_WDAT2<=	EGC_MBASE(47 downto 32)	when EGC_PATH='1' else
+				GCG_WDAT2	when GCG_MCS='1' else
 				(others=>'0');
-	CB_WDAT3<=	GCG_WDAT3	when GCG_MCS='1' else
+	CB_WDAT3<=	EGC_MBASE(63 downto 48)	when EGC_PATH='1' else
+				GCG_WDAT3	when GCG_MCS='1' else
 				(others=>'0');
 				
-	CB_PSEL<=	GCG_WPSEL	when GCG_MCS='1' else
+	CB_PSEL<=	EGC_MPLANES	when EGC_PATH='1' else
+				GCG_WPSEL	when GCG_MCS='1' else
 				"0001";
 	
 	abus<=	cpuaddr when DMAen='0' else DMA_UADR & DMA_OADR(15 downto 1);
@@ -2676,10 +2728,12 @@ begin
 	
 
 	CB_BANK<=	RAM_BIOS(23 downto 22)	when LDR_OE='1' else
+				EGC_MBANK when EGC_PATH='1' else
 				MBANK;
 
 	
 	CB_ADDR<=	RAM_BIOS(21 downto 0) + ("000" & LDR_ADDR(19 downto 1))	when LDR_OE='1' else
+				EGC_MADDR when EGC_PATH='1' else
 				MADDR;
 	
 	DMA_CS<='1' when ioaddr_odd(15 downto 5)=(x"00" & "000") and ioaddr_odd(0)='1' else '0';
@@ -2841,7 +2895,7 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	MEMack<=CB_ACK or tramack or aramack or NVR_ACK;
+	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK;
 	ack<=MEMack or iack;
 	
 --	DBIO	:diskbios port map(
@@ -2869,7 +2923,7 @@ begin
 		ppsel		=>abus(2 downto 1),
 		prd			=>MRD,
 		pwr			=>MWR,
-		prddat		=>GCG_ODAT,
+		prddat		=>GCG_ODAT_G,
 		pwrdat		=>mem_wdata,
 		poe			=>GCG_DOE,
 		
@@ -2889,11 +2943,38 @@ begin
 		memwdat2	=>GCG_WDAT2,
 		memwdat3	=>GCG_WDAT3,
 		memwrpsel	=>GCG_WPSEL,
+		cgenout		=>GCG_CGEN,
 		
 		clk			=>cpuclk,
 		rstn		=>srstn
 	);	
 	
+	-- EGC operates when enabled through mode register 6Ah and GRCG is on
+	-- (NP2kai vacctbl: GRCG enable plus EGC bit, TDW or RMW alike).
+	EGC_ACTIVE<=EGC_EN and GCG_CGEN;
+	EGC_REQ<=GCG_MCS and EGC_ACTIVE and (MRD or MWR) and not DMAen;
+	-- busy also covers soft reset (boot.rom load, wait-for-disk); only a real
+	-- CPU transaction may take the SDRAM command/data lines from the loader.
+	EGC_PATH<=(EGC_REQ or EGC_BUSY) and srstn and not LDR_OE;
+	EGC_RESET<=not mrstn;
+	EGC_SOFTRESET<=not srstn;
+	EGC_IOSTB<=cpu_iowr and not DMAen;
+	CB_RDAT64<=CB_RDAT3 & CB_RDAT2 & CB_RDAT1 & CB_RDAT0;
+	GCG_ODAT<=EGC_RDAT when EGC_ACTIVE='1' else GCG_ODAT_G;
+	egc	:pc98_egc_word_engine generic map(ADDRESS_WIDTH=>22) port map(
+		clk=>cpuclk, reset=>EGC_RESET, soft_reset=>EGC_SOFTRESET, egc_enable=>EGC_EN,
+		io_address=>cpuaddr(15 downto 1), io_select=>cpusel, io_writedata=>io_wdata,
+		io_strobe=>EGC_IOSTB, io_write=>'1',
+		request=>EGC_REQ, request_write=>MWR, request_address=>MADDR,
+		request_bank=>MBANK, request_bytes=>bussel, request_writedata=>mem_wdata,
+		busy=>EGC_BUSY, acknowledge=>EGC_ACK, fault=>EGC_FAULT, readdata=>EGC_RDAT,
+		memory_address=>EGC_MADDR, memory_bank=>EGC_MBANK,
+		memory_read4=>EGC_RD4, memory_rmw4=>EGC_RMW4,
+		memory_bytes=>EGC_MBYTES, memory_planes=>EGC_MPLANES,
+		memory_base=>EGC_MBASE, memory_xor_mask=>EGC_MXOR,
+		memory_acknowledge=>CB_ACK, memory_readdata=>CB_RDAT64
+	);
+
 	IN00f0_ODAT<="11101011";
 	IN00f0_DOE<='1' when ioaddr_even=x"00f0" and iord='1' else '0';
 	
@@ -3298,7 +3379,7 @@ begin
 		NVMWPROT=>NVR_WPROT,
 		DISPEN	=>pc_display,
 		COLORMODE=>tGDC_COLORMODE,
-		EGCEN	=>open,
+		EGCEN	=>EGC_EN,
 		GDCCLK	=>pc_clk1,
 		GDCCLK2	=>pc_clk2,
 		CUREN	=>tGDC_CUREN,
@@ -3403,6 +3484,7 @@ begin
 		memwdat2		=>GCG_GDC_WDAT2,
 		memwdat3		=>GCG_GDC_WDAT3,
 		memwrpsel	=>GCG_GDC_WPSEL,
+		cgenout		=>open,
 		
 		clk			=>cpuclk,
 		rstn		=>srstn

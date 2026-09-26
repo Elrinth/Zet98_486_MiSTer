@@ -16,8 +16,6 @@ module mister_ide_interface_tb;
     defparam dut.hps_io.PS2DIV=0;
     defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
-    defparam dut.floppy_icon.TILE_MAP_FILE="rtl/assets/floppy-tile-map.mem";
-    defparam dut.floppy_icon.TILE_PIXELS_FILE="rtl/assets/floppy-tile-pixels.mem";
     defparam dut.floppy_icon.FONT_FILE="rtl/assets/boot-font.mem";
     integer floppy_bytes=0;
     always @(posedge clk) begin

@@ -10,11 +10,7 @@ module floppy_overlay_tb;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
     floppy_overlay #(.HOLD_FRAMES(3),.ANIMATION_CYCLES(0),
-        .TILE_MAP_FILE("rtl/assets/floppy-tile-map.mem"),
-        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem"),
         .FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
-    reg [1:0] reference_pixels[0:165199];
-    initial $readmemb("rtl/assets/floppy-animation.mem",reference_pixels);
     reg [23:0] screen[0:12287];
     reg [26:0] held;
     integer changed,px,py,frames=0,frame_number=0;
@@ -42,7 +38,7 @@ module floppy_overlay_tb;
             caption="LOADING D0...";
             if(expected_drive) caption[31:24]="1";
             bx=(expected_right ? expected_right : w)-112;
-            by=(expected_bottom ? expected_bottom : h)-90;
+            by=(expected_bottom ? expected_bottom : h)-30;
             for(py=0;py<h+8;py=py+1) begin
                 for(px=0;px<w+8;px=px+1) begin
                     @(negedge clk);in_ce=1;in_de=px<w && py<h;
@@ -64,17 +60,15 @@ module floppy_overlay_tb;
                         if(!in_de) $fatal(1,"overlay drew in blanking");
                         if(bounds && !(px>=(expected_right ? expected_right : w)-112 &&
                             px<(expected_right ? expected_right : w)-4 &&
-                            py>=(expected_bottom ? expected_bottom : h)-90 &&
+                            py>=(expected_bottom ? expected_bottom : h)-30 &&
                             py<(expected_bottom ? expected_bottom : h)-20))
                             $fatal(1,"overlay outside bottom-right rectangle");
                     end
                     if(animation>=0) begin
                         expected_pixel=24'h112233;
                         local_x=px-bx;local_y=py-by;
-                        if(in_de && local_x>=29 && local_x<79 && local_y>=0 && local_y<56)
-                            expected_pixel=color(reference_pixels[animation*2800+local_y*50+local_x-29]);
-                        if(in_de && local_x>=2 && local_x<106 && local_y>=60 && local_y<68) begin
-                            cx=local_x-2;cy=local_y-60;char_index=cx/8;
+                        if(in_de && local_x>=2 && local_x<106 && local_y>=0 && local_y<8) begin
+                            cx=local_x-2;cy=local_y;char_index=cx/8;
                             char_code=caption[103-char_index*8 -:8];
                             if(char_index>=10 && char_index-10>=dots) char_code=" ";
                             if(reference_font[char_code*8+cy][7-(cx%8)]) expected_pixel=24'h0044ff;
@@ -87,23 +81,16 @@ module floppy_overlay_tb;
             frames=frames+1;
         end
     endtask
-    integer preview;
     initial begin
         repeat(3) @(negedge clk);reset=0;
         frame(128,96,-1,-1,1);if(changed) $fatal(1,"idle indicator visible");
         activity=1;
-        // Every original animation frame must be reproduced, and wrap to 0.
-        for(i=0;i<60;i=i+1) begin
-            frame(128,96,i%59,(i/8)%4,1);
-            if(changed<100 || changed>=108*70) $fatal(1,"overlay rectangle incomplete %0d",changed);
+        // Caption with every dot phase and its wrap over 56 frames (ends on phase 3).
+        for(i=0;i<56;i=i+1) begin
+            frame(128,96,i,(i/8)%4,1);
+            if(changed<60 || changed>=108*10) $fatal(1,"overlay caption incomplete %0d",changed);
             if(i==0) begin
                 for(j=0;j<64;j=j+1) digit0[j]=screen[(66+j/8)*128+90+j%8]==24'h0044ff;
-                preview=$fopen("build/floppy-animation/overlay-sim.ppm","w");
-                if(preview) begin
-                    $fwrite(preview,"P3\n128 96\n255\n");
-                    for(j=0;j<12288;j=j+1) $fwrite(preview,"%0d %0d %0d\n",screen[j][23:16],screen[j][15:8],screen[j][7:0]);
-                    $fclose(preview);
-                end
             end
         end
         activity=2;frame(128,96,1,3,1);
@@ -119,20 +106,20 @@ module floppy_overlay_tb;
         repeat(4) frame(128,96,-1,-1,1);
         if(changed) $fatal(1,"indicator failed to expire");
         activity=1;frame(160,120,-1,-1,0);frame(160,120,-1,-1,1);
-        if(changed<100 || changed>=108*70) $fatal(1,"mode-change placement failed");
+        if(changed<60 || changed>=108*10) $fatal(1,"mode-change placement failed");
         crop_left=20;crop_top=10;crop_width=120;crop_height=100;
         // A new crop is adopted at VS; the current picture retains its bounds.
         frame(160,120,-1,-1,1);
         expected_right=140;expected_bottom=110;
         frame(160,120,-1,-1,1);
-        if(changed<100 || changed>=108*70) $fatal(1,"cropped viewport clipped loading caption");
+        if(changed<60 || changed>=108*10) $fatal(1,"cropped viewport clipped loading caption");
         // Ignore invalid crop dimensions, including stale mode-change data.
         crop_width=200;
         frame(160,120,-1,-1,1);
         expected_right=0;expected_bottom=0;
         frame(160,120,-1,-1,1);
-        if(changed<100 || changed>=108*70) $fatal(1,"invalid crop did not use native bounds");
-        $display("PASS floppy animation: all 59 frames/wrap, boot-font captions, transparent backgrounds, 16-pixel lift, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);
+        if(changed<60 || changed>=108*10) $fatal(1,"invalid crop did not use native bounds");
+        $display("PASS floppy caption: LOADING D0/D1 boot-font text, dot phases/wrap, transparent backgrounds, 16-pixel lift, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);
         $finish;
     end
     initial begin #100000000; $fatal(1,"floppy overlay watchdog");end

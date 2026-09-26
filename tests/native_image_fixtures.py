@@ -1,4 +1,5 @@
-"""Synthetic images and independent D88 oracle. No private assets."""
+"""Synthetic images and independent D88 oracle. No private assets.
+NFD support was removed to save FPGA area; NFD images must be rejected."""
 import pathlib,struct,sys
 out=pathlib.Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 def fixture(name,source,oracle,reject=False,direct=False):
@@ -22,7 +23,7 @@ for c,s,b in [(77,8,1024),(80,15,512),(80,18,512),(80,8,512),(80,9,512),(40,8,51
    for r in range(26):
     p=288+(t*26+r)*16
     nfd[p:p+11]=bytes((t//2,t%2,r+1,3,1,0,0,(t%2)*4,0,0,0x90)) if t<154 and r<8 else bytes([255])*11
-  fixture('nfd',nfd+raw,d88);nfd[296]=32;fixture('nfd-crc',nfd+raw,d88,reject=True)
+  fixture('nfd',nfd+raw,d88,reject=True);nfd[296]=32;fixture('nfd-crc',nfd+raw,d88,reject=True)
   nfd[12]=ord('1');fixture('nfd-r1',nfd+raw,d88,reject=True)
   bad=bytearray(struct.pack('<8I',0,0x90,4096,len(raw),b,s,2,c)+bytes(4064)+raw);bad[12]^=1;fixture('fdi-length',bad,d88,reject=True)
 raw=bytes((i*19+(i>>9))&255 for i in range(512*17*4*7))
