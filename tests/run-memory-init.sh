@@ -10,7 +10,7 @@ sed -e "s/\.wren_a(memory_we\[i\])/\.wren_a(memory_we[i] \& 1'b1)/" \
 sed -e "s/(clk)/(clk \& 1'b1)/g" rtl/vendor/common/simple_fifo_mlab.v > "$out/simple_fifo_mlab.v"
 mapfile -t sources < <(sed -n 's@.*qip_path) \([^ ]*\.v\) .*@rtl/vendor/ao486/\1@p' rtl/vendor/ao486/ao486.qip)
 for ram in 0 16 64; do
-    nasm -DTOP_MB="$ram" -DSIM=1 -f bin software/z98mem.asm -o "$out/init.bin"
+    nasm -Isoftware/ -DTOP_MB="$ram" -DSIM=1 -f bin software/z98mem.asm -o "$out/init.bin"
     iverilog -g2012 -I rtl/vendor/ao486 -s ao486_extmem_tb -Pao486_extmem_tb.RAM_MB="$ram" \
         -Pao486_extmem_tb.DOS_PROBE=1 -Pao486_extmem_tb.MEMORY_INIT=1 -Pao486_extmem_tb.LOWMEM_CACHE=1 \
         -o "$out/cpu.vvp" "${sources[@]}" "$out/l1_icache.v" "$out/simple_fifo_mlab.v" \

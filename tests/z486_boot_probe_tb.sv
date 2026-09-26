@@ -41,6 +41,7 @@ module z486_boot_probe_tb;
     reg [15:0] held_data;
     reg [1:0] held_select;
     reg held_write, held_io;
+    string recent_in = "";
     always @(posedge clk) if (interrupt_done) begin
         interrupt_do <= 0;
         irq_count <= irq_count + 1;
@@ -72,7 +73,21 @@ module z486_boot_probe_tb;
                            end
                        end
                        bus_readdata = {ports[held_addr[15:0]+16'd1], ports[held_addr[15:0]]};
+`ifdef BIOS_WORK_TRACE
+                       if (!held_write)
+                           recent_in = {recent_in.len() > 90 ? recent_in.substr(recent_in.len()-90, recent_in.len()-1) : recent_in,
+                                        $sformatf(" %h=%h", held_addr[15:0], bus_readdata)};
+`endif
                    end else begin
+`ifdef BIOS_WORK_TRACE
+                       // CPU identity / memory-size work area written by the BIOS.
+                       if (held_write && (held_addr == 20'h00500 || held_addr == 20'h00400 ||
+                                          held_addr == 20'h00594 || held_addr == 20'h00480)) begin
+                           $display("BIOS WORK W %h=%h lanes=%b EIP=%h CS=%h recent IN: %s",
+                                    held_addr, held_data, held_select, dut.cpu.eip,
+                                    dut.cpu.core.seg_unit.desc_cache[1].base, recent_in);
+                       end
+`endif
                        if (held_write) begin
                            if (held_select[0]) memory[held_addr] = held_data[7:0];
                            if (held_select[1]) memory[held_addr+20'd1] = held_data[15:8];

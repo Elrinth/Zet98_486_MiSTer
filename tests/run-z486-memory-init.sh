@@ -6,7 +6,7 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 for ram in 0 16 64; do
-    nasm -DTOP_MB="$ram" -DSIM=1 -f bin software/z98mem.asm -o "$out/init.bin"
+    nasm -Isoftware/ -DTOP_MB="$ram" -DSIM=1 -f bin software/z98mem.asm -o "$out/init.bin"
     verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
         -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG \
         -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj-$ram" \
@@ -20,8 +20,9 @@ for ram in 0 16 64; do
         (cd "$out"; "./obj-$ram/Vao486_extmem_tb" "+program=$out/init.bin" "+identity_flag=$flag")
     done
     if [ "$ram" = 64 ]; then
-        sed '/and byte \[es:501h\], 0bfh/d' software/z98mem.asm > "$out/old.asm"
-        nasm -DTOP_MB=64 -DSIM=1 -f bin "$out/old.asm" -o "$out/old.bin"
+        cp software/z98mem.asm "$out/old.asm"
+        sed '/and byte \[es:501h\], 0bfh/d' software/z98mem_probe.inc > "$out/z98mem_probe.inc"
+        nasm -I"$out/" -DTOP_MB=64 -DSIM=1 -f bin "$out/old.asm" -o "$out/old.bin"
         if (cd "$out"; "./obj-$ram/Vao486_extmem_tb" "+program=$out/old.bin" > "$out/negative.log" 2>&1); then
             echo 'FAIL: old V30 identification accepted'; exit 1
         fi

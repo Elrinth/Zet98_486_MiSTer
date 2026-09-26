@@ -58,7 +58,7 @@ Build `software/Dockerfile` as `zet98-dos-tools`. Inside a container with the
 repository mounted at `/project`:
 
 ```sh
-nasm -f bin software/z98mem.asm -o build/hardware/Z98MEM.SYS
+nasm -Isoftware/ -f bin software/z98mem.asm -o build/hardware/Z98MEM.SYS
 nasm -DTOP_MB=64 -f bin tests/hardware/xms_probe.asm -o build/hardware/Z98XMS.COM
 ```
 

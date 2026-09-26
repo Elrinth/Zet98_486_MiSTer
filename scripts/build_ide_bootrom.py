@@ -17,8 +17,12 @@ resident = out/'resident.bin'
 rom = out/'bootrom.bin'
 subprocess.run([args.nasm, '-f', 'bin', 'software/pc98_ide_resident.asm',
                 '-o', str(resident), '-l', str(out/'resident.lst')], cwd=root, check=True)
+memfix = out/'memfix.bin'
+subprocess.run([args.nasm, '-Isoftware/', '-f', 'bin', 'software/z98mem_rom.asm',
+                '-o', str(memfix), '-l', str(out/'memfix.lst')], cwd=root, check=True)
 subprocess.run([args.nasm, '-f', 'bin', 'software/pc98_ide_bootrom.asm',
                 '-DRESIDENT_BINARY="'+resident.as_posix()+'"',
+                '-DMEMFIX_BINARY="'+memfix.as_posix()+'"',
                 '-o', str(rom), '-l', str(out/'bootrom.lst')], cwd=root, check=True)
 data = rom.read_bytes()
 assert len(data) == 8192 and data[9:12] == bytes.fromhex('55aa10')

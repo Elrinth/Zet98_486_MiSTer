@@ -155,11 +155,11 @@ wire [11:0] aspect_y = status[2] ? 12'd0 : (status[1] ? 12'd9 : 12'd3);
 `include "build_id.v" 
 parameter CONF_STR = {
 `ifdef ZET98_Z486_DEBUG
-    "Zet98;UART115200;",
+    "PC98;UART115200;",
 `elsif ZET98_MPU_UART
-	"Zet98;UART31250,MIDI31250;",
+	"PC98;UART31250,MIDI31250;",
 `else
-	"Zet98;;",
+	"PC98;;",
 `endif
 	"-;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
@@ -193,7 +193,7 @@ parameter CONF_STR = {
 	"RC,STORE SRAM;",
 	"-;",
 	"OD,DIP1-8 HGC,Extend,Normal;",
-	"OE,DIP1-3 Display,Plasma,Normal;",
+	"o0,DIP1-3 Display,Normal,Plasma;",
 	"OF,DIP2-1 NOP,0,1;",
 	"OG,DIP2-2 Basic mode,Terminal,Basic;",
 	"OH,DIP2-3 Cols,80,40;",
@@ -201,7 +201,7 @@ parameter CONF_STR = {
 	"OJ,DIP2-5 Memory SW,Keep,Clear;",
 	"OK,DIP2-6 Int.HDD,Disconnect,Connect;",
 	"OL,DIP2-7 FDD Motor,Control,ON;",
-	"OM,DIP2-8 GDC clock,5MHz,2.5MHz;",
+	"o1,DIP2-8 GDC clock,2.5MHz,5MHz;",
 	"J,Fire 1,Fire 2;",
 	"V,v",`BUILD_DATE
 };
@@ -281,7 +281,7 @@ sdramclk_ddr
 
 /////////////////  HPS  ///////////////////////////
 
-wire [31:0] status;
+wire [63:0] status;
 wire  [1:0] buttons;
 
 wire [15:0] joystick_0, joystick_1;
@@ -472,8 +472,11 @@ wire [1:0] fdsync = status[8:7];
 wire [1:0] fdeject = status[10:9];
 wire sramld	= status[11];
 wire sramst = status[12];
-wire [1:0]pdip1 = status[14:13];
-wire [7:0]pdip2 = status[22:15];
+// Display and GDC clock moved to status[32]/[33] so a fresh setup defaults
+// to Normal display and 2.5 MHz GDC (5 MHz tiles e.g. Nightslave). Old bits
+// 14/22 stay reserved so earlier saved settings cannot alias the new ones.
+wire [1:0]pdip1 = {~status[32], status[13]};
+wire [7:0]pdip2 = {~status[33], status[21:15]};
 
 assign CLK_VIDEO = clk_vid;
 assign AUDIO_S = 1;

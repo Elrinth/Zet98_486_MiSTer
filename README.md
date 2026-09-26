@@ -126,6 +126,19 @@ Native HDI/HDM/FDI/NFD loading is implemented in the next candidate and awaits
 hardware qualification; the import utility remains available for writable D88 copies. Original PC-98 Doom and Doom II
 reach their menus and play on the 90 MHz z486 test build B164 (see below); sound and long play are still being checked.
 
+## Installing on MiSTer
+
+- Copy the core `.rbf` to `/media/fat/_Computer/`.
+- Put `boot.rom` and your disk images in `/media/fat/games/PC98/` (builds after
+  B165; earlier builds use `/games/Zet98/`). Settings are saved as `PC98.CFG`.
+- `DEVICE=HIMEM.SYS` works without any extra driver since B165: the core's disk
+  extension ROM publishes the extended RAM and clears the V30 flag that the
+  PC-9801VM BIOS always sets. `Z98MEM.SYS`/`Z98FIX.SYS` are no longer needed.
+- The defaults (Display: Normal, GDC clock: 2.5MHz) suit most games. Only
+  **MPU MIDI: UART** needs to be enabled for General MIDI music (below).
+- `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout and the plan for an
+  open replacement BIOS.
+
 ## Playing Doom with General MIDI music
 
 The z486 build with `-MidiUart` contains an MPU-PC98II-compatible MIDI interface
@@ -136,17 +149,17 @@ setup program on build B164; report problems in the issue tracker.
 **1. Core menu (F12 in the Zet98 core)**
 
 - **MPU MIDI: UART** (the default is Off, which disables the interface).
-- **DIP2-8 GDC clock: 2.5MHz.** With the 5MHz default, some games (e.g. Nightslave)
-  program the graphics GDC for 5 MHz timing and the core shows the picture repeated
-  and shifted across the screen.
-- **DIP1-3 Display: Normal** (the Plasma default changes some games' palettes).
+- **DIP2-8 GDC clock: 2.5MHz** (the default since B165). With 5MHz, some games
+  (e.g. Nightslave) program the graphics GDC for 5 MHz timing and the core shows
+  the picture repeated and shifted across the screen.
+- **DIP1-3 Display: Normal** (the default since B165; Plasma changes some games' palettes).
 - These settings are saved per core name: loading the RBF directly uses the name
   `Zet98`, while the test launchers (`.mgl`) use `Zet98_Test`, so set them for each.
 - In the MiSTer UART settings for this core, set the UART connection to **MIDI**
   and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
   FluidSynth, as for other cores).
 
-**2. DOS: load the memory drivers.** Stock PC-98 `HIMEM.SYS` works when the
+**2. DOS: load HIMEM.** Since B165 plain `DEVICE=HIMEM.SYS` is enough. On older builds, stock PC-98 `HIMEM.SYS` works when the
 included `Z98MEM.SYS` driver ([software/z98mem.asm](software/z98mem.asm); the same file is also shared as `Z98FIX.SYS`) loads
 first; Doom then starts in about 10-15 seconds:
 

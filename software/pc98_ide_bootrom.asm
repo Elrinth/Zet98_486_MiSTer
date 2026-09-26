@@ -28,6 +28,16 @@ initialize:
     cld
     push cs
     pop ds
+    ; Publish the core's extended RAM and clear the legacy BIOS's V30 flag
+    ; (Z98MEM's probe). It patches itself, so run it from the reserved RAM
+    ; before the resident service is copied below it.
+    mov ax,0da00h
+    mov es,ax
+    xor di,di
+    mov si,memfix
+    mov cx,memfix_end-memfix
+    rep movsb
+    call 0da00h:0
     mov ax,0d800h
     mov es,ax
     xor di,di
@@ -45,4 +55,7 @@ boot:
 resident:
     incbin RESIDENT_BINARY
 resident_end:
+memfix:
+    incbin MEMFIX_BINARY
+memfix_end:
     times 8192-($-$$) db 0ffh

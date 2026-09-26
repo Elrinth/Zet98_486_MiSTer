@@ -26,8 +26,11 @@ def synthetic(heads=8, sectors=17, cylinders=1024):
 class Machine:
     def __init__(self, rom, heads=8, sectors=17, image=None, absent=False, bad_bpb=False, readonly=False):
         self.u = Uc(UC_ARCH_X86, UC_MODE_16)
-        self.u.mem_map(0, 0x200000)
+        # 64 MB flat map: the ROM's Z98MEM probe checks every megabyte.
+        self.u.mem_map(0, 0x4000000)
         self.u.mem_write(0xd0000, rom)
+        # The legacy BIOS sets the V30 flag (bit 6) and bit 5 unconditionally.
+        self.u.mem_write(0x501, bytes([0x63]))
         self.original_vector = struct.pack('<HH', 0x1a82, 0xfd80)
         self.u.mem_write(0x6c, self.original_vector)
         self.capacity, self.disk = synthetic(heads, sectors)
@@ -156,6 +159,11 @@ class Machine:
         assert self.u.reg_read(UC_X86_REG_SP)==0x1800
         assert self.u.reg_read(UC_X86_REG_EFLAGS)&0x600==0x600
         assert not any(cmd==0x30 for cmd,_ in self.commands), 'Initialization wrote to disk'
+        # Built-in Z98MEM: 14 MB below 16 MB (128 KB units), 48 MB above it,
+        # V30 flag cleared, every other identification bit preserved.
+        assert self.u.mem_read(0x401,1)[0]==112, 'extended RAM below 16 MB not published'
+        assert struct.unpack('<H',self.u.mem_read(0x594,2))[0]==48, 'RAM above 16 MB not published'
+        assert self.u.mem_read(0x501,1)[0]==0x23, 'V30 flag not cleared or other bits changed'
         return self.u.mem_read(0xd8008,1)[0]
 
     def owner_boot(self):
