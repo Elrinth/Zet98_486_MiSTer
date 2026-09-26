@@ -123,8 +123,46 @@ not establish hardware music compatibility.
 DOS, BIOS ROMs, games and prepared private disk packages are not distributed
 in this repository. Complete intelligent-mode MPU-401 and optical-drive support remain pending.
 Native HDI/HDM/FDI/NFD loading is implemented in the next candidate and awaits
-hardware qualification; the import utility remains available for writable D88 copies. Doom II boots in software emulation, but
-its FPGA graphics are currently corrupt; it is not a supported playable title.
+hardware qualification; the import utility remains available for writable D88 copies. Original PC-98 Doom and Doom II
+reach their menus and play on the 90 MHz z486 test build B164 (see below); sound and long play are still being checked.
+
+## Playing Doom with General MIDI music
+
+The z486 build with `-MidiUart` contains an MPU-PC98II-compatible MIDI interface
+(port E0D0h, IRQ6). It sends MIDI to the MiSTer's UART, where MidiLink can play
+it through FluidSynth (or MUNT / a USB MIDI device). Tested with the PC-98 Doom
+setup program on build B164; report problems in the issue tracker.
+
+**1. Core menu (F12 in the Zet98 core)**
+
+- **MPU MIDI: UART** (the default is Off, which disables the interface).
+- In the MiSTer UART settings for this core, set the UART connection to **MIDI**
+  and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
+  FluidSynth, as for other cores).
+
+**2. DOS: load the memory drivers.** Stock PC-98 `HIMEM.SYS` works when the
+included `Z98MEM.SYS` driver ([software/z98mem.asm](software/z98mem.asm); the same file is also shared as `Z98FIX.SYS`) loads
+first; Doom then starts in about 10-15 seconds:
+
+```
+DEVICE=A:\Z98MEM.SYS
+DEVICE=A:\DOS\HIMEM.SYS /TESTMEM:OFF
+```
+
+**3. Doom's SETUP.** Run `SETUP` in the Doom directory.
+
+- BGM driver (music): **4 General MIDI (MPU-PC98)**. Sound effects driver: keep
+  **PC-9801-86** (Doom's effects are digital samples, not MIDI). Do not choose
+  5 (Sound Blaster MIDI) or 6 (RS-232C); those ports are not connected.
+
+  ![Doom SETUP: choose 4, General MIDI (MPU-PC98), as the BGM driver](docs/images/doom-setup-midi-driver.png)
+
+- MPU-PC98(II) base address: **5 E0D0H** (the factory default, 工場出荷時の設定).
+  If SETUP asks for an interrupt, choose INT 2 (IRQ6).
+
+  ![Doom SETUP: choose 5, E0D0H, as the MPU-PC98(II) base address](docs/images/doom-setup-mpu-address.png)
+
+Save the settings and start `DOOM` (or `DOOM2`).
 
 ## Priorities
 
