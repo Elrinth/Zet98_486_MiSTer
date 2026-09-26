@@ -141,6 +141,32 @@ reach their menus and play on the 90 MHz z486 test build B164 (see below); sound
 - `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout and the plan for an
   open replacement BIOS.
 
+## Video outputs: HDMI, VGA and SCART RGB
+
+HDMI always carries the scaled picture. The analog outputs (VGA, and SCART RGB
+on boards such as the SuperStation One) carry the PC-98's native signal:
+640x400 at about 24.8 kHz horizontal and 56 Hz vertical. That is not a TV
+standard, so 15 kHz TVs and plain SCART monitors will not sync; use a
+multisync monitor or a scaler that accepts 24 kHz (for example a RetroTINK 4K).
+HDMI and the analog outputs work at the same time.
+
+Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
+`setname` section you use, such as `[Zet98_Test]`):
+
+```ini
+[PC98]
+vga_mode=rgb          ; plain RGB (a global vga_mode=subcarrier/ypbpr would override it otherwise)
+composite_sync=1      ; combined sync on the HSync pin, needed for SCART RGB
+vga_scaler=0          ; analog outputs keep the native 24.8 kHz signal
+forced_scandoubler=0
+```
+
+On a RetroTINK 4K select **SCART -> RGBS (75 ohm)** for the SCART cable, or
+**HD-15 -> RGBS** for the VGA cable (combined sync is on the H pin; with
+`composite_sync=0` choose **HD-15 -> RGBHV**, but SCART then has no sync).
+If a display cannot lock to 24.8 kHz, `vga_scaler=1` sends the scaled HDMI
+mode (for example 1080p) to VGA instead; SCART is then unusable.
+
 ## Playing Doom with General MIDI music
 
 The z486 build with `-MidiUart` contains an MPU-PC98II-compatible MIDI interface
