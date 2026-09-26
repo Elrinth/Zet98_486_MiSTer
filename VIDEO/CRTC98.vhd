@@ -72,7 +72,15 @@ port(
 
 	gclk		:out std_logic;
 	clk			:in std_logic;
-	rstn		:in std_logic
+	rstn		:in std_logic;
+    ATRSEL :in std_logic := '0';
+    PC_MODE,PC_SINGLE,PC_PAGE,PC_FAST,PC_B0HI,PC_B1HI :in std_logic := '0';
+    PC_RGB :in std_logic_vector(23 downto 0) := (others=>'0');
+    PC_VALID :in std_logic := '0';
+    PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
+    PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
+    PC_X :out std_logic_vector(9 downto 0);
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
 );
 end CRTC98;
 
@@ -143,7 +151,8 @@ port(
 	VCOMP	:in std_logic;
 
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+    ATRSEL :in std_logic := '0'
 );
 end component;
 
@@ -285,6 +294,7 @@ signal ETRAM_ADRX	:std_logic_Vector(11 downto 0);
 -- Stage GDC settings on the parent video clock before the pixel registers.
 signal tbaseaddr_video : std_logic_vector(12 downto 0);
 signal tpitch_video : std_logic_vector(7 downto 0);
+signal atrsel_video, atrsel_pixel_source :std_logic;
 signal hmode_video : std_logic;
 signal vlines_video : std_logic_vector(4 downto 0);
 signal curaddr_video : std_logic_vector(12 downto 0);
@@ -321,6 +331,15 @@ signal dotpline_pixel_source : std_logic_vector(4 downto 0);
 signal graphen_pixel_source : std_logic;
 signal txten_video : std_logic;
 signal lowbl_pixel_source : std_logic;
+signal pc_video,pc_pixel_source :std_logic_vector(5 downto 0);
+signal pc_mode_pixel :std_logic;
+signal pc_mode_delay :std_logic_vector(8 downto 0);
+signal pc_valid_delay :std_logic_vector(6 downto 0);
+type pc_rgb_array is array(0 to 5) of std_logic_vector(23 downto 0);
+signal pc_rgb_delay :pc_rgb_array;
+signal legacy_r,legacy_g,legacy_b :std_logic_vector(3 downto 0);
+signal pc_single_pixel :std_logic;
+
 
 begin
 	-- The resettable divide-by-three pixel clock has three possible phases.
@@ -337,6 +356,8 @@ begin
 			tbaseaddr_video <= TBASEADDR;
 			tpitch_video <= TPITCH;
 			hmode_video <= HMODE;
+            atrsel_video <= ATRSEL;
+            pc_video<=PC_FAST & PC_PAGE & PC_SINGLE & PC_MODE & PC_B1HI & PC_B0HI;
 			vlines_video <= VLINES;
 			curaddr_video <= CURADDR;
 			cure_video <= CURE;
@@ -364,6 +385,8 @@ begin
             tbaseaddr_pixel_source <= tbaseaddr_video;
             tpitch_pixel_source <= tpitch_video;
             hmode_pixel_source <= hmode_video;
+            atrsel_pixel_source <= atrsel_video;
+            pc_pixel_source<=pc_video;
             vlines_pixel_source <= vlines_video;
             curaddr_pixel_source <= curaddr_video;
             cure_pixel_source <= cure_video;
@@ -381,6 +404,41 @@ begin
             lowbl_pixel_source <= lowbl_video;
         end if;
     end process;
+
+    packed_raster:entity work.pegc_raster port map(
+        clk=>clk3,rstn=>pixel_rstn,mode256=>pc_pixel_source(2),
+        single_page=>pc_pixel_source(3),display_page=>pc_pixel_source(4),fast_clock=>pc_pixel_source(5),
+        graph_enable=>graphen_pixel_source,base0=>pc_pixel_source(0) & gbaseaddr0_pixel_source,
+        base1=>pc_pixel_source(1) & gbaseaddr1_pixel_source,
+        length0=>glinenum0_pixel_source,length1=>glinenum1_pixel_source,
+        pitch=>gpitch_pixel_source,repeat_lines=>dotpline_pixel_source,
+        hunit=>HUCOUNT,dot=>UCOUNT,row=>VCOUNT,
+        line_start=>PC_LINE_START,line_enable=>PC_LINE_ENABLE,active=>PC_ACTIVE,
+        line_address=>PC_LINE_ADDRESS,pixel_x=>PC_X,mode_pixel=>pc_mode_pixel);
+    PC_RSTN<=pixel_rstn;
+    PC_PAGE_WRAP<=not pc_single_pixel;
+    process(clk3,pixel_rstn) begin
+        if pixel_rstn='0' then
+            pc_single_pixel<='0';pc_mode_delay<=(others=>'0');pc_valid_delay<=(others=>'0');
+            pc_rgb_delay<=(others=>(others=>'0'));
+        elsif rising_edge(clk3) then
+            pc_single_pixel<=pc_pixel_source(3);
+            pc_mode_delay<=pc_mode_delay(7 downto 0) & pc_mode_pixel;
+            pc_valid_delay<=pc_valid_delay(5 downto 0) & PC_VALID;
+            pc_rgb_delay(0)<=PC_RGB;
+            for i in 1 to 5 loop pc_rgb_delay(i)<=pc_rgb_delay(i-1);end loop;
+        end if;
+    end process;
+    -- Existing text/sync are nine clocks after the raw pixel coordinate.
+    -- Line RAM+byte selection+palette take three clocks: delay RGB six more,
+    -- and valid seven after its two-clock line-reader pipeline.
+    ROUT<=legacy_r;GOUT<=legacy_g;BOUT<=legacy_b;
+    ROUT8<=legacy_r & legacy_r when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
+           pc_rgb_delay(5)(23 downto 16) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
+    GOUT8<=legacy_g & legacy_g when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
+           pc_rgb_delay(5)(15 downto 8) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
+    BOUT8<=legacy_b & legacy_b when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
+           pc_rgb_delay(5)(7 downto 0) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
 
 	TIM	:vtiming generic map(
 	DOTPU	=>DOTPU,
@@ -422,6 +480,7 @@ begin
 		
 		BASEADDR=>tbaseaddr_pixel_source,
 		HMODE	=>hmode_pixel_source,
+        ATRSEL=>atrsel_pixel_source,
 		VLINES	=>vlines_pixel_source,
 		PITCH	=>tpitch_pixel_source,
 		
@@ -533,19 +592,19 @@ begin
 
 	GPALNO<=G_DOT;
 
-	BOUT<="0000" when VISIBLE='0' else 
+	legacy_b<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(0)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(0)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(0)='1' and T_BIT='1' and txten_video='1' else
 			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHB;
-	ROUT<="0000" when VISIBLE='0' else 
+	legacy_r<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(2)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(2)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(1)='1' and T_BIT='1' and txten_video='1' else
 			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHR;
-	GOUT<="0000" when VISIBLE='0' else 
+	legacy_g<="0000" when VISIBLE='0' else 
 			(others=>EF_COLOR(1)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(1)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(2)='1' and T_BIT='1' and txten_video='1' else

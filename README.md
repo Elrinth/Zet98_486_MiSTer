@@ -12,7 +12,26 @@ and first-stage graphics; Nightslave reaches its title menu. Gameplay frame
 rate has not yet been measured; JT08 listening results are recorded below. This is not a
 complete PC-9821 implementation or a DX4/Pentium performance claim.
 
-The current development features include:
+The current tested z486 candidate is **#139: 90 MHz / 64 MB / JT08**, with
+bank-aware upper-conventional instruction caching and native VHD/IMG boot.
+The user reports correct Rusty gameplay speed on #138 and correct C-LAB speech
+pitch after #139's PIT clock correction. #139 passes CPU, RAM, FM IRQ and OPNA
+diagnostics plus full saved-result disk audits. Worst setup slack is -6.434 ns,
+within the user's experimental allowance; hold/recovery/removal pass. This is
+not timing closure or a measured historical-CPU performance equivalence.
+
+Build #142 adds native HDM/FDI/NFD/HDI loading, CPU speed selection and MPU
+MIDI. Full90 diagnostics pass and the user confirms NightSlave MIDI music.
+**Use Full speed:**60/30 selections stall during DOS startup. Popful Mail has
+striped graphics; Metal Force and Burning Dragon remain unresolved. A revised
+disk ROM boots the previously failing Xanadu HDI into user-confirmed gameplay
+and Lemmings into its intro through a temporary loader on #142. The integrated
+#143R2 revision remains to be hardware-tested. MiSTer Main intercepts PC-98 `.fdi` files as Spectrum images; a
+byte-identical `.hdm` copy bypasses that host bug. It is not fully qualified
+yet. See [format limits](rtl/storage/README.md) and [CPU speed control](rtl/Z486_PC98.md).
+Native HDM/FDI/NFD mounts are read-only; D88 supports saving as before.
+
+The development features and earlier qualification history include:
 
 - **ao486 and memory:** optional 16/64 MB DDR-backed RAM and a conventional-RAM
   cache. The 50 MHz hardware benchmark is about 2.31x faster for arithmetic and
@@ -32,12 +51,14 @@ The current development features include:
   75/100 MHz. Build #115 passes actual hardware CPU, 64 MB map, FM interrupts
   and Rusty's original OPNA-detection procedure. Its worst reported slack is
   -5.783 ns at 100 MHz. The user reports much better Rusty intro music and
-  authentic-sounding drums. Speech just after C-LAB still sounds unusual;
-  investigating that remaining issue is deferred at the user's request.
-- **Hard disk:** a raw `.vhd`/`.img` controller and floppy-installed disk BIOS
-  boot the owner's DOS 6.20 image. The optional bounded write BIOS persists
-  DOS files, verified independently against the resulting FAT and data sectors.
-  General geometry discovery and ROM-based HDD boot remain unfinished.
+  authentic-sounding drums. The later #139 PIT correction is now user-confirmed to fix C-LAB speech pitch.
+- **Hard disk:** a raw `.vhd`/`.img` controller and DOS disk service support
+  file persistence, independently checked against the resulting FAT and data
+  sectors. New `-RawIde` builds include a [native disk option ROM](software/DISK_BIOS.md)
+  with common PC-98 DOS geometry discovery and an empty-media prompt. Build
+  #137R3 boots DOS 6.20 directly from both raw VHD and IMG on hardware, with
+  70,001-byte file persistence and complete image audits passing. Earlier
+  builds through #136 require the helper floppy.
 - **Display:** native-aspect fit, exact integer fit and HDMI-only integer crop,
   plus the supplied animated floppy indicator with D0/D1 captions. Hardware
   reports 1728x1080 fit, 1280x800 integer fit and a centered 1920x1080 crop.
@@ -82,7 +103,7 @@ diagnostics must pass before evaluating game performance. The current historical
 performance target is NEC's
 [PC-9821Xa10](https://support.nec-lavie.jp/support/product/data/spec/cpu/95110022-1.html)
 with its 100 MHz Pentium, configured with 64 MB RAM. This supersedes the earlier
-DX4/Ap3 preference. The current CPU remains ao486; matching clock frequency and
+DX4/Ap3 preference. The current CPU is z486, with ao486 retained as an alternative; matching clock frequency and
 RAM capacity does not establish Pentium performance or full-machine compatibility.
 
 An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
@@ -100,9 +121,9 @@ sequencing. A private Nightslave UART trace passes RTL replay; that alone does
 not establish hardware music compatibility.
 
 DOS, BIOS ROMs, games and prepared private disk packages are not distributed
-in this repository. Complete MIDI/MPU-401, optical-drive support, native HDI mounting,
-and native HDM/FDI/NFD selection are still pending. The import utility covers
-standard images described below. Doom II boots in software emulation, but
+in this repository. Complete intelligent-mode MPU-401 and optical-drive support remain pending.
+Native HDI/HDM/FDI/NFD loading is implemented in the next candidate and awaits
+hardware qualification; the import utility remains available for writable D88 copies. Doom II boots in software emulation, but
 its FPGA graphics are currently corrupt; it is not a supported playable title.
 
 ## Priorities
@@ -296,7 +317,28 @@ same scaler/HDMI path (status bit 3). This helps distinguish PC-98 graphics
 generation from output-path faults. These changes pass simulation; the hardware
 glitch is not claimed fixed until retested.
 
+For the existing experimental RBFs, select **DIP1-3 Display: Normal** and
+restart the game. The legacy zero-valued setting is **Plasma**. Popful Mail
+reads this switch and selects a different palette routine in plasma mode,
+producing incorrect colours on the normal colour display. B148's unmodified
+intro was verified with the Normal setting; it also requires B148's
+semigraphics fix to remove the vertical white stripes.
+
 ## Credits and provenance
+
+- **DoubleJ472** — thanks for pointing us to z486 and CPUBENCH.EXE, and for
+  sharing practical PC-98 core development and audio experience.
+- **nand2mario and z486 contributors** — [z486 CPU](https://github.com/nand2mario/z486)
+  and [z486 MiSTer integration](https://github.com/nand2mario/z486_MiSTer).
+  The exact imported revisions and local changes are recorded in
+  [z486 provenance](rtl/vendor/z486/UPSTREAM.json).
+- **José Tejada Gómez / Jotego and JT12/JT49 contributors** — Yamaha sound
+  implementations underlying our JT08 OPNA backend; **PC88_MiSTer contributors**
+  — the imported YM2608 integration. This is the PC88 JT08 adaptation, not a
+  claim that jt08.v is part of the current upstream JT12 tree. See
+  [audio provenance](rtl/vendor/jt08/UPSTREAM.json) and
+  [OPNA integration notes](rtl/OPNA_JT08.md).
+- **ZOBplus Hayami** — CPUBENCH, the owner's separately supplied benchmark.
 
 - **Puu / ãƒ—ãƒ¼** â€” original Zet/98 PC-98 implementation and peripheral work.
   [Original development blog](https://fpga8801.seesaa.net/category/22270192-1.html).

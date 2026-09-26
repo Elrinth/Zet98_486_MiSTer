@@ -50,4 +50,13 @@ foreach {port width} {fde 10 fec 16} {
         }
     }
     set_max_delay -from $read_source -to $read_target 5.000
+    if {$port eq "fec"} {
+        # B145 placed fec_read_data[2] beside FECRDAT[2]: 0.746 ns data
+        # against 1.066 ns clock skew, failing ordinary hold by 0.389 ns.
+        # Strengthen the minimum timing requirement by a positive 0.5 ns
+        # relationship (clock latency remains included), keeping the 5 ns
+        # maximum and every completion/WAIT/control check. This asks fitting
+        # to repair the short route; it does not exclude a hold path.
+        set_min_delay -from $read_source -to $read_target 0.500
+    }
 }

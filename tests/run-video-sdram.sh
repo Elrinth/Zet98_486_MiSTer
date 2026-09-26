@@ -8,7 +8,7 @@ trap 'rm -rf "$out"' EXIT
 sed '/WDAT0<=GRAMDAT0; WDAT1<=GRAMDAT1;/i\                    assert GRAMDAT0\x27stable(20 ns) and GRAMDAT1\x27stable(20 ns) and GRAMDAT2\x27stable(20 ns) and GRAMDAT3\x27stable(20 ns) report "Graphics data changed too close to WDAT capture" severity failure;' \
     VIDEO/GRAPHSCR98.vhd > "$out/graphics.vhd"
 grep -q 'too close to WDAT capture' "$out/graphics.vhd"
-ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd LIB/delayer.vhd \
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd VIDEO/video_timing_pkg.vhd LIB/delayer.vhd \
     rtl/reset_release.vhd rtl/display_page_address.vhd \
     Zet98/sdramc.vhd "$out/graphics.vhd" tests/video_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_sdram_tb
@@ -40,7 +40,7 @@ sed "s/when page_sync(1)='0'/when cpu_page='0'/" rtl/display_page_address.vhd > 
 # Start the bypass control at page zero so it reaches a live page change,
 # rather than failing only the independent reset-to-front assertion.
 sed "s/signal cpu_page : std_logic := '1';/signal cpu_page : std_logic := '0';/" tests/video_sdram_tb.vhd > "$out/page-bypass-tb.vhd"
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/bad-page.vhd" "$out/page-bypass-tb.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/bad-page.vhd" "$out/page-bypass-tb.vhd"
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_sdram_tb
 if ghdl -r --std=08 -fsynopsys --workdir="$out" video_sdram_tb --assert-level=error > "$out/bad-page.log" 2>&1; then
     echo 'FAIL: unsynchronized display-page bypass passed' >&2; exit 1

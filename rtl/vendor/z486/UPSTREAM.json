@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/nand2mario/z486",
+  "commit": "53dc450e01302c174f75fc9280417a4dc5884863",
+  "mister_commit": "ce3d7538b647297db31fb508b883d228ca07e925",
+  "configuration": "8 KB I + 8 KB D, x87 disabled, PC98_MODE enabled",
+  "local_changes": [
+    "PC-98 cache address policy honoring configured RAM size",
+    "draining full-cache invalidation",
+    "complete uncached instruction lines",
+    "registered shift operand source selector",
+    "registered demand request stage in PC98 mode",
+    "preread forwarded GPR operands for the barrel shifter",
+    "parallel byte segment-limit comparison and combinational endpoint equality",
+    "select chain address before late fault qualification, retaining actual issue/start fault gates",
+    "precompute normal/redirected prefetch windows before final late-flush selection, no new cycles",
+    "resolve load forwarding and partial-register merges per GPR before read selection, with prior reader equivalence checks",
+    "PC98 empty-pipe ROM launches use the registered D1 skeleton, adding one launch cycle",
+    "PC98 entry ROM reads a registered opcode/prefix tag and waits for the matching result instead of routing speculative next-window decode into M10K",
+    "PC98 memory ModR/M EAs always stage base/index before displacement/segment relocation, with live-address equivalence assertion",
+    "optional bank-aware upper conventional instruction cache, direct-store line invalidation, and speculative-fetch discard on full cache invalidation",
+    "PC98 runtime Full/60/30/15 execution-rate selections using upstream cpu_throttle; actual host clock propagated from SYSFREQ",
+    "Preserve visible real-mode CS across CR0.PE transitions; track entry CPL0 until CS reload, fixing HIMEMX block-resize corruption.",
+    "Commit the successor VIPT load WB after older hardwired-load memory tokens (write and forward priority); fixes mov r,[m] followed by add r,[m] keeping the MOV value (PC-98 Doom R_PrecacheLevel).",
+    "Deferred memory/shift GPR tokens stop committing and forwarding once a younger load WB has written their register or a younger RMW-fast step replaced OPR_R (they still recommit through stalls to deliver late OPR_R data, e.g. POP).",
+    "A VIPT EX op whose destination is the register of a deferred memory token whose optimistic (DLY grace) read missed (mem_opt_wait) is routed to the slow path instead of capturing stale OPR_R (mov eax,[uncached]; and eax,[m])."
+  ]
+}

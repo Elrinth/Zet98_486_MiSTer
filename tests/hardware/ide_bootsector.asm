@@ -24,7 +24,11 @@ start:
 .retry:
     mov ax,0d800h
     mov es,ax
+%ifdef NATIVE_GEOMETRY_BOOT
+    xor bp,bp
+%else
     mov bp,0100h
+%endif
     mov bx,4096
     mov cx,0300h              ; N=3 (1024 bytes), cylinder zero
     mov dx,0002h              ; head zero, first payload sector is two
@@ -53,7 +57,22 @@ start:
     hlt
     jmp .stop
 .loaded:
+%ifdef NATIVE_GEOMETRY_BOOT
+    ; Disposable geometry qualification floppy: install the actual resident
+    ; option-ROM implementation before DOS, then boot the attached HDD.
+    ; Its initializer uses D800:7FFE internally, so keep the far-call return
+    ; address on a separate stack (the ordinary ROM wrapper does likewise).
+    cli
+    xor ax,ax
+    mov ss,ax
+    mov sp,7c00h
+    call 0d800h:0
+    mov al,0ah
+    call 0d800h:3
+    jmp .stop
+%else
     jmp 0d800h:0100h
+%endif
 drive: db 0
 attempts: db 0
 error: db 'Zet98: could not read resident VHD loader from floppy.',0

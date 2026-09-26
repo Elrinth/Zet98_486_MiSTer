@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-// Compare the actual caption-coordinate path with the original arithmetic
+// Compare the actual caption-coordinate path with the 8-pixel font-cell arithmetic
 // over all low-bit coordinate/origin combinations, including wrapped offsets.
 module floppy_caption_tb;
     reg clk=0,reset=1,enabled=0;
@@ -11,7 +11,8 @@ module floppy_caption_tb;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
     floppy_overlay #(.TILE_MAP_FILE("rtl/assets/floppy-tile-map.mem"),
-        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem")) dut(.*);
+        .TILE_PIXELS_FILE("rtl/assets/floppy-tile-pixels.mem"),
+        .FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
     reg [11:0] test_x=0,test_right=0;
     integer i,j,offset,checks=0;
     initial begin
@@ -24,14 +25,14 @@ module floppy_caption_tb;
             @(negedge clk);release dut.position_pending;
             for(j=0;j<128;j=j+1) begin
                 test_x=j;#1;
-                offset=((j-((i-92)&127))-5)&127;
-                if(dut.character!==((offset/6)&15) || dut.column!==(offset%6))
+                offset=((j-((i-112)&127))-2)&127;
+                if(dut.character!==((offset/8)&15) || dut.column!==(offset%8))
                     $fatal(1,"caption coordinate mismatch right=%0d x=%0d",i,j);
                 checks=checks+1;
             end
         end
         release dut.x;release dut.right_edge;
-        $display("PASS caption coordinates: %0d original-division comparisons",checks);
+        $display("PASS caption coordinates: %0d 8-pixel cell comparisons",checks);
         $finish;
     end
 endmodule

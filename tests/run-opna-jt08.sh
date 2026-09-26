@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 mapfile -t rtl < <(find rtl/vendor/jt08/jt12/hdl rtl/vendor/jt08/jt49/hdl -name '*.v' -print | sort)
-for khz in 75000 100000; do
+for khz in 75000 90000 100000; do
     verilator --binary --timing -Wno-fatal --top-module opna_jt08_tb \
         -GKHZ="$khz" --Mdir "$out/obj$khz" -j 1 \
         "${rtl[@]}" rtl/opna_jt08.sv tests/opna_jt08_tb.sv > "$out/compile$khz.log" 2>&1 || \

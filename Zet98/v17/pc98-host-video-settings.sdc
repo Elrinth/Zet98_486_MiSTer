@@ -11,6 +11,7 @@ foreach instance {
     emu|hdmi_scale|host_scale_settings
     emu|hps_io|video_calc|video_measurements
     emu|hps_io|video_calc|time_measurements
+    emu|boot_prompt_cdc
 } {
     set payload [get_registers "${instance}|held_data*"]
     set capture [get_registers "${instance}|video_data*"]

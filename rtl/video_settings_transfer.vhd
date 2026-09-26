@@ -5,7 +5,7 @@ use ieee.std_logic_1164.all;
 -- Continuously refresh a coherent snapshot of slowly programmed settings.
 -- The source stays held until the receiving domain acknowledges its copy.
 entity video_settings_transfer is
-    generic(WIDTH:positive:=121);
+    generic(WIDTH:positive:=128);
     port(cpu_clk,video_clk,rstn:in std_logic;
          settings_in:in std_logic_vector(WIDTH-1 downto 0);
          settings_out:out std_logic_vector(WIDTH-1 downto 0));

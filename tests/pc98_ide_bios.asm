@@ -9,8 +9,15 @@ org 1000h
 start:
     cli
     xor ax,ax
+%ifdef BIOS_HIGH_STACK
+    mov ax,0d800h
+    mov ss,ax
+    mov sp,7000h
+    xor ax,ax
+%else
     mov ss,ax
     mov sp,9000h
+%endif
     mov ds,ax
     mov es,ax
     cld

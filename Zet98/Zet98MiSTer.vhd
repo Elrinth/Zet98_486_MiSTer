@@ -11,7 +11,9 @@ generic(
 	SYSFREQ		:integer	:=20000;		--CPU clock(kHz)
 	SND			:integer	:=2;			--0:none 1:OPN(-26) 2:OPNA(-73) 3:experimental -86 PCM
 	USE_JT08   :integer :=0;          -- experimental PC88 JT08 OPNA
+    USE_IDE_BOOTROM :integer :=0;
 	CPU486      :integer :=0;          -- opt-in ao486 bring-up build
+    PEGC_ENABLE :integer :=0;          -- opt-in packed RGB888 framebuffer
 	EXT_RAM_MB  :integer :=0;          -- experimental DDR-backed extended memory
 	LOWMEM_CACHE:integer :=0;          -- experimental conventional-RAM read cache
 	LOWMEM_CACHE_KB:integer :=8;
@@ -52,6 +54,8 @@ port(
 	LDR_WR		:in std_logic;
 	LDR_ACK		:out std_logic;
 	LDR_DONE		:in std_logic;
+    pBootHold   :in std_logic := '0';
+    pFloppyPresent :out std_logic_vector(1 downto 0);
 
 	-- PS/2 keyboard ports
 	pPs2Clkin	: in std_logic;
@@ -94,6 +98,8 @@ port(
 	pIDEOE, pIDEIRQ :in std_logic;
 	pMPUReadData :in std_logic_vector(7 downto 0);
 	pMPUOE, pMPUIRQ :in std_logic;
+    pCPUSpeed :in std_logic_vector(1 downto 0) := "00";
+    pCPUDebug :out std_logic_vector(127 downto 0);
 
 -- DIP switch, Lamp ports
 	pDip1			: in std_logic_vector(1 downto 0);
@@ -120,6 +126,10 @@ port(
 end Zet98MiSTer;
 
 architecture rtl of Zet98MiSTer is
+component pc98_ide_bootrom
+port(clk:in std_logic; address:in std_logic_vector(11 downto 0);
+     q:out std_logic_vector(15 downto 0));
+end component;
 
 component cyclone_asmiblock   	-- Altera specific component
     port (
@@ -164,10 +174,11 @@ port(
 end component;
 
 component pc98_ao486
-generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8; UPPER_RAM_ICACHE :integer :=0);
+generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8; UPPER_RAM_ICACHE :integer :=0; CLOCK_RATE_MHZ :integer :=90; PEGC_ENABLE :integer :=0);
 port(
     clk, reset :in std_logic;
     cache_invalidate, cache_upper_ram_native :in std_logic;
+    cpu_speed_sel :in std_logic_vector(1 downto 0);
     interrupt_do :in std_logic;
     interrupt_vector :in std_logic_vector(7 downto 0);
     interrupt_done :out std_logic;
@@ -178,13 +189,35 @@ port(
     bus_readdata :in std_logic_vector(15 downto 0);
     bus_ack :in std_logic;
     unmapped_access :out std_logic;
+    debug_snapshot :out std_logic_vector(127 downto 0);
     ddr_address :out std_logic_vector(28 downto 0);
     ddr_writedata :out std_logic_vector(63 downto 0);
     ddr_byteenable, ddr_burstcount :out std_logic_vector(7 downto 0);
     ddr_read, ddr_write :out std_logic;
     ddr_busy, ddr_readdatavalid :in std_logic;
-    ddr_readdata :in std_logic_vector(63 downto 0)
+    ddr_readdata :in std_logic_vector(63 downto 0);
+    pegc_analog16, pegc_display_enable, pegc_gdc_5mhz :in std_logic;
+    pegc_mode256, pegc_single_page :out std_logic;
+    pegc_pixel_clk :in std_logic;
+    pegc_palette_index :in std_logic_vector(7 downto 0);
+    pegc_palette_rgb :out std_logic_vector(23 downto 0);
+    pegc_video_address :in std_logic_vector(18 downto 3);
+    pegc_video_burstcount :in std_logic_vector(4 downto 0);
+    pegc_video_read :in std_logic;
+    pegc_video_busy, pegc_video_readdatavalid :out std_logic;
+    pegc_video_readdata :out std_logic_vector(63 downto 0)
 );
+end component;
+
+component pc98_pegc_line_fetch
+port(cpu_clk,video_clk,reset:in std_logic;
+     line_start,line_enable:in std_logic;
+     line_address:in std_logic_vector(18 downto 3);page_wrap,active:in std_logic;
+     pixel_x:in std_logic_vector(9 downto 0);pixel_data:out std_logic_vector(7 downto 0);
+     pixel_valid,underrun,line_busy:out std_logic;
+     memory_address:out std_logic_vector(18 downto 3);memory_burstcount:out std_logic_vector(4 downto 0);
+     memory_read:out std_logic;memory_busy,memory_readdatavalid:in std_logic;
+     memory_readdata:in std_logic_vector(63 downto 0));
 end component;
 
 component zet
@@ -278,7 +311,15 @@ port(
 
 	gclk		:out std_logic;
 	clk			:in std_logic;
-	rstn		:in std_logic
+	rstn		:in std_logic;
+    ATRSEL :in std_logic := '0';
+    PC_MODE,PC_SINGLE,PC_PAGE,PC_FAST,PC_B0HI,PC_B1HI :in std_logic := '0';
+    PC_RGB :in std_logic_vector(23 downto 0) := (others=>'0');
+    PC_VALID :in std_logic := '0';
+    PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
+    PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
+    PC_X :out std_logic_vector(9 downto 0);
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
 );
 end component;
 
@@ -1789,7 +1830,7 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
-signal video_settings_source,video_settings_received : std_logic_vector(120 downto 0);
+signal video_settings_source,video_settings_received : std_logic_vector(127 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -1991,6 +2032,15 @@ signal	VRTC		:std_logic;
 signal	HRTC		:std_logic;
 signal VRTC_video, HRTC_video : std_logic;
 signal	GLOWBLK		:std_logic;
+signal pc_mode,pc_single,pc_fast,pc_clk1,pc_clk2,pc_display:std_logic;
+signal pc_line_start,pc_line_enable,pc_active,pc_page_wrap,pc_rstn:std_logic;
+signal pc_line_address,pc_ddr_address:std_logic_vector(18 downto 3);
+signal pc_x:std_logic_vector(9 downto 0);
+signal pc_index:std_logic_vector(7 downto 0);
+signal pc_rgb:std_logic_vector(23 downto 0);
+signal pc_pixel_valid,pc_ddr_read,pc_ddr_busy,pc_ddr_valid:std_logic;
+signal pc_ddr_count:std_logic_vector(4 downto 0);
+signal pc_ddr_data:std_logic_vector(63 downto 0);
 signal	VidR4		:std_logic_vector(3 downto 0);
 signal	VidG4		:std_logic_vector(3 downto 0);
 signal	VidB4		:std_logic_vector(3 downto 0);
@@ -2005,6 +2055,7 @@ signal	gGDCoe		:std_logic;
 signal	tGDC_C40			:std_logic;
 signal	gGDC_VGRAMSEL	:std_logic;
 signal	gGDC_CGRAMSEL	:std_logic;
+signal tGDC_ATRSEL :std_logic;
 signal	tGDC_VIDEN		:std_logic;
 signal	tGDC_CUREN		:std_logic;
 signal	tGDC_CHARLINES	:std_logic_vector(4 downto 0);
@@ -2410,7 +2461,9 @@ begin
 	
 	LDR_ACK<=CB_ACK;
 	
-	srstn<=rstn and LDR_DONE and EMU_INIDONE;
+    -- Hold the CPU/peripherals, not the SDRAM/FEC loader: disks must still
+    -- finish loading while the empty-boot prompt is displayed.
+	srstn<=rstn and LDR_DONE and EMU_INIDONE and not pBootHold;
 	
 	vrstn<=LDR_DONE;-- and rstn;
 	video_reset : entity work.reset_release port map(vidclk,vrstn,video_logic_rstn);
@@ -2441,18 +2494,30 @@ begin
 	);
     end generate;
 
+    zet_debug: if CPU486=0 generate
+        pCPUDebug <= (others=>'0');
+        pc_mode<='0';pc_single<='0';pc_rgb<=(others=>'0');pc_ddr_busy<='1';pc_ddr_valid<='0';pc_ddr_data<=(others=>'0');
+    end generate;
+
     ao486_cpu: if CPU486/=0 generate
-        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE) port map(
+        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE, CLOCK_RATE_MHZ=>SYSFREQ/1000, PEGC_ENABLE=>PEGC_ENABLE) port map(
+            cpu_speed_sel=>pCPUSpeed,
             clk=>cpuclk, reset=>not srstn,
             interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
-            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open,
+            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open, debug_snapshot=>pCPUDebug,
             cache_invalidate=>cache_invalidate, cache_upper_ram_native=>cache_upper_ram_native,
             ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
             ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
             ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
-            ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData
+            ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData,
+            pegc_analog16=>tGDC_COLORMODE, pegc_display_enable=>pc_display, pegc_gdc_5mhz=>pc_clk2,
+            pegc_mode256=>pc_mode, pegc_single_page=>pc_single, pegc_pixel_clk=>grpclk,
+            pegc_palette_index=>pc_index, pegc_palette_rgb=>pc_rgb,
+            pegc_video_address=>pc_ddr_address, pegc_video_burstcount=>pc_ddr_count,
+            pegc_video_read=>pc_ddr_read, pegc_video_busy=>pc_ddr_busy, pegc_video_readdatavalid=>pc_ddr_valid,
+            pegc_video_readdata=>pc_ddr_data
         );
         cyc<=stb;
         nmia<='0';
@@ -2784,7 +2849,12 @@ begin
 --		clock		=>cpuclk,
 --		q			=>DBIO_ODAT
 --	);
-DBIO_ODAT<=(others=>'1');
+    ide_boot_firmware: if USE_IDE_BOOTROM/=0 generate
+        firmware: pc98_ide_bootrom port map(cpuclk,DBIO_ADDR,DBIO_ODAT);
+    end generate;
+    no_ide_boot_firmware: if USE_IDE_BOOTROM=0 generate
+        DBIO_ODAT<=(others=>'1');
+    end generate;
 
 	DBIO_DOE<=	MRD when DBIO_CS='1' else '0';
 	
@@ -2997,6 +3067,13 @@ DBIO_ODAT<=(others=>'1');
     video_settings_source(118) <= gGDC_GRAPHEN;
     video_settings_source(119) <= tGDC_VIDEN;
     video_settings_source(120) <= GLOWBLK;
+    video_settings_source(121) <= tGDC_ATRSEL;
+    video_settings_source(122) <= gGDC_BASEADDR0(14);
+    video_settings_source(123) <= gGDC_BASEADDR1(14);
+    video_settings_source(124) <= pc_mode;
+    video_settings_source(125) <= pc_single;
+    video_settings_source(126) <= gGDC_VGRAMSEL;
+    video_settings_source(127) <= pc_fast;
     gdc_settings : entity work.video_settings_transfer
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
@@ -3039,6 +3116,17 @@ DBIO_ODAT<=(others=>'1');
 		GRAPHEN		=>video_settings_received(118),
 		DOTPLINE	=>video_settings_received(117 downto 113),
 		LOWBL		=>video_settings_received(120),
+        ATRSEL=>video_settings_received(121),
+        PC_B0HI=>video_settings_received(122),
+        PC_B1HI=>video_settings_received(123),
+        PC_MODE=>video_settings_received(124),
+        PC_SINGLE=>video_settings_received(125),
+        PC_PAGE=>video_settings_received(126),
+        PC_FAST=>video_settings_received(127),
+        PC_RGB=>pc_rgb,PC_VALID=>pc_pixel_valid,PC_LINE_START=>pc_line_start,
+        PC_LINE_ENABLE=>pc_line_enable,PC_ACTIVE=>pc_active,PC_PAGE_WRAP=>pc_page_wrap,
+        PC_RSTN=>pc_rstn,PC_LINE_ADDRESS=>pc_line_address,PC_X=>pc_x,
+        ROUT8=>pVideoR,GOUT8=>pVideoG,BOUT8=>pVideoB,
 		GCOLOR		=>'0',
 		MONOSEL		=>(others=>'0'),
 		TXTEN		=>video_settings_received(119),
@@ -3079,9 +3167,14 @@ DBIO_ODAT<=(others=>'1');
 		vrtc_out => VRTC, hrtc_out => HRTC
 	);
 	pVideoClk<=grpclk;
-	pVideoR<=VidR4 & VidR4;
-	pVideoG<=VidG4 & VidG4;
-	pVideoB<=VidB4 & VidB4;
+    pc_fast<=pc_clk1 and pc_clk2;
+    packed_fetch:pc98_pegc_line_fetch port map(
+        cpu_clk=>cpuclk,video_clk=>grpclk,reset=>(not srstn) or (not pc_rstn),
+        line_start=>pc_line_start,line_enable=>pc_line_enable,line_address=>pc_line_address,
+        page_wrap=>pc_page_wrap,active=>pc_active,pixel_x=>pc_x,pixel_data=>pc_index,
+        pixel_valid=>pc_pixel_valid,underrun=>open,line_busy=>open,
+        memory_address=>pc_ddr_address,memory_burstcount=>pc_ddr_count,memory_read=>pc_ddr_read,
+        memory_busy=>pc_ddr_busy,memory_readdatavalid=>pc_ddr_valid,memory_readdata=>pc_ddr_data);
 --	monFntAdr<=VID_KNJADDR;
 --	monFntDat<=VID_KNJ1DAT;
 --	KNJ1	:KANJI1ROM PORT map(
@@ -3196,18 +3289,18 @@ DBIO_ODAT<=(others=>'1');
 		VRTC	=>VRTC,
 		HRTC	=>HRTC,
 		
-		ATRSEL	=>open,
+		ATRSEL	=>tGDC_ATRSEL,
 		C40		=>tGDC_C40,
 		GRMONO	=>open,
 		FONTSEL	=>open,
 		GRPMODE	=>GLOWBLK,
 		KACMODE	=>open,
 		NVMWPROT=>NVR_WPROT,
-		DISPEN	=>open,
+		DISPEN	=>pc_display,
 		COLORMODE=>tGDC_COLORMODE,
 		EGCEN	=>open,
-		GDCCLK	=>open,
-		GDCCLK2	=>open,
+		GDCCLK	=>pc_clk1,
+		GDCCLK2	=>pc_clk2,
 		CUREN	=>tGDC_CUREN,
 		CHARLINES=>tGDC_CHARLINES,
 		BLRATE	=>tGDC_BLRATE,
@@ -3628,7 +3721,7 @@ DBIO_ODAT<=(others=>'1');
 		fdc_siden	=>FDE_SIDEn,
 		fdc_wprotn	=>FDE_WPROTn,
 		fdc_eject	=>pFDEJECT,
-		fdc_indisk	=>open,
+		fdc_indisk	=>pFloppyPresent,
 		fdc_trackwid=>'1',
 		fdc_dencity	=>FDC_H_Dn,
 		fdc_rpm		=>'0',
@@ -3912,8 +4005,7 @@ DBIO_ODAT<=(others=>'1');
 			'1' when ioaddr_odd(15 downto 3)=(x"3fd" & '1') and ioaddr_odd(0)='1' else
 			'0';
 	
-	PTCCLK	:SFTCLK generic map(SYSFREQ,2458,1) port map(
-		sel		=>"1",
+	PTCCLK :entity work.pc98_pit_clock generic map(SYSFREQ) port map(
 		SFT		=>PTC_SFT,
 
 		clk		=>cpuclk,

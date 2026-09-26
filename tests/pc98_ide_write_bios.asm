@@ -13,8 +13,15 @@ org 1000h
     cli
     xor ax,ax
     mov ds,ax
+%ifdef BIOS_HIGH_STACK
+    mov ax,0d800h
+    mov ss,ax
+    mov sp,7000h
+    xor ax,ax
+%else
     mov ss,ax
     mov sp,9000h
+%endif
     mov word [1bh*4],bios_int1b
     mov word [1bh*4+2],0
     mov ax,2000h

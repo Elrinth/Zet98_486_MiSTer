@@ -9,11 +9,14 @@ module mister_mpu_interface_tb;
     assign bus[35:33]={1'b0,enable,strobe};
     assign bus[31:16]=host_data;
     wire serial;
-    emu dut(.CLK_50M(clk),.RESET(1'b0),.HPS_BUS(bus),.UART_RXD(1'b1),.UART_TXD(serial));
+    emu #(.NATIVE_IMAGES(0)) dut(.CLK_50M(clk),.RESET(1'b0),.HPS_BUS(bus),.UART_RXD(1'b1),.UART_TXD(serial));
     defparam dut.hps_io.CONF_STR_BRAM=0;
     defparam dut.hps_io.PS2DIV=0;
+    defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
+    defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
     defparam dut.floppy_icon.TILE_MAP_FILE="rtl/assets/floppy-tile-map.mem";
     defparam dut.floppy_icon.TILE_PIXELS_FILE="rtl/assets/floppy-tile-pixels.mem";
+    defparam dut.floppy_icon.FONT_FILE="rtl/assets/boot-font.mem";
     task word_io(input [15:0] value);
         @(negedge clk);enable=1;strobe=1;host_data=value;
         @(negedge clk);strobe=0;
@@ -38,32 +41,50 @@ module mister_mpu_interface_tb;
         if(dut.Zet98_top.pIDEOE) $fatal(1,"MPU read selected IDE");
         dut.Zet98_top.pIDERead=0;repeat(4) @(negedge clk);
     endtask
-    reg [7:0] received;
+    reg [7:0] expected[0:1023];
+    integer queued=0,received_count=0;
+    task add(input [7:0] b);expected[queued]=b;queued++;endtask
+    task panic;
+        add(8'hf7);
+        for(integer c=0;c<16;c++) begin
+            add(8'hb0+c);add(64);add(0);
+            add(8'hb0+c);add(120);add(0);
+            add(8'hb0+c);add(123);add(0);
+            add(8'hb0+c);add(121);add(0);
+        end
+    endtask
+    task drain;wait(received_count==queued);#64000;endtask
+    always begin : decoder
+        reg [7:0] received;
+        @(negedge serial);#16000;
+        if(serial!==0)$fatal(1,"HPS MIDI start bit");
+        for(integer b=0;b<8;b++)begin #32000;received[b]=serial;end
+        #32000;
+        if(serial!==1 || received_count>=queued || received!==expected[received_count])
+            $fatal(1,"HPS MIDI serial route/baud/panic incorrect byte %0d got %02x",received_count,received);
+        received_count++;
+    end
     initial begin
         force dut.hps_io.EXT_BUS[32]=1'b0;
         option_midi(0);dut.Zet98_top.pIDEResetn=1;
         outb('he0d2,'hff);
         if(dut.Zet98_top.pMPUIRQ || serial!==1) $fatal(1,"Disabled MIDI active");
-        option_midi(1);
+        panic();option_midi(1);drain();
+        panic();
         outb('he0d2,'hff);
         if(!dut.Zet98_top.pMPUIRQ) $fatal(1,"ACK IRQ not connected to machine");
         inb('he0d0,'hfe);
         if(dut.Zet98_top.pMPUIRQ) $fatal(1,"IRQ did not clear through wrapper");
         outb('he0d2,'h3f);inb('he0d0,'hfe);
-        fork
-            outb('he0d0,'h95);
-            begin
-                @(negedge serial);#16000;
-                for(integer b=0;b<8;b=b+1) begin #32000;received[b]=serial;end
-                #32000;
-                if(serial!==1 || received!==8'h95) $fatal(1,"HPS MIDI serial route/baud incorrect");
-            end
-        join
+        drain();
+        add(8'h95);outb('he0d0,'h95);drain();
+        panic();
         option_midi(0);
+        drain();
         if(dut.Zet98_top.pMPUIRQ || dut.Zet98_top.pMPUOE || serial!==1)
             $fatal(1,"HPS off option failed");
         $display("PASS real HPS MPU wrapper: option bit26, PC98 ports, ACK IRQ, 31250 baud UART_TXD, IDE isolation");
         $finish;
     end
-    initial begin #2000000;$fatal(1,"MPU wrapper timeout");end
+    initial begin #300000000;$fatal(1,"MPU wrapper timeout");end
 endmodule

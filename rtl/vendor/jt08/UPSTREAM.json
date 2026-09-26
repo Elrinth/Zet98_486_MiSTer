@@ -8,7 +8,8 @@
   ],
   "patches": [
     "Expose native busy through jt12_top and jt08 for sound-IO wait control",
-    "Move operator-result declarations ahead of generate blocks; no algorithm change"
+    "Move operator-result declarations ahead of generate blocks; no algorithm change",
+    "YM2608 PSG writes do not assert FM busy; end PSG write strobe on the host clock so rapid address changes cannot overwrite adjacent registers"
   ],
   "rhythm_rom_sha256": "53afd0fa9c62eda3e2be939e23f3adf48a2af8ad37bb1640261726c5d5adeba8"
 }

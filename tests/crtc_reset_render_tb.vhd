@@ -12,7 +12,7 @@ begin q <= (others=>'0'); end architecture;
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-entity crtc_reset_render_tb is end;
+entity crtc_reset_render_tb is generic(SEMIGRAPHICS_TEST:boolean:=false); end;
 architecture test of crtc_reset_render_tb is
     signal clk, raw_rstn, rstn, pixel_clk, de : std_logic := '0';
     signal running : boolean := true;
@@ -20,8 +20,13 @@ architecture test of crtc_reset_render_tb is
     signal r,g,b : std_logic_vector(3 downto 0);
     signal base : std_logic_vector(12 downto 0) := (others=>'0');
     signal pitch : std_logic_vector(7 downto 0) := (others=>'0');
+    signal semimode :std_logic := '0';
+    signal textcode :std_logic_vector(15 downto 0);
+    signal textattr :std_logic_vector(7 downto 0);
     signal lines : std_logic_vector(4 downto 0) := (others=>'0');
 begin
+    textcode<=x"0000" when SEMIGRAPHICS_TEST else x"0041";
+    textattr<=x"f1" when SEMIGRAPHICS_TEST else x"e1";
     process begin
         wait for 6667 ps;
         if done then wait;
@@ -30,7 +35,7 @@ begin
     end process;
     parent_reset : entity work.reset_release port map(clk,raw_rstn,rstn);
     dut : entity work.CRTC98 port map(
-        TRAM_ADR=>open,TRAM_DAT=>x"0041",TRAM_ATR=>x"e1",
+        TRAM_ADR=>open,TRAM_DAT=>textcode,TRAM_ATR=>textattr,
         KNJSEL=>open,KNJADR=>open,KNJDAT=>x"ff",
         GRAMADR=>open,GRAMRD=>open,GRAMACK=>'0',
         GRAMDAT0=>x"0000",GRAMDAT1=>x"0000",GRAMDAT2=>x"0000",GRAMDAT3=>x"0000",
@@ -42,12 +47,13 @@ begin
         GBASEADDR0=>(others=>'0'),GBASEADDR1=>(others=>'0'),
         GLINENUM0=>(others=>'0'),GLINENUM1=>(others=>'0'),GPITCH=>x"28",
         EMUMODE=>'0',VRTC=>open,HRTC=>open,GPALNO=>open,GPALR=>x"0",GPALG=>x"0",GPALB=>x"0",
-        gclk=>pixel_clk,clk=>clk,rstn=>rstn);
+        gclk=>pixel_clk,clk=>clk,rstn=>rstn,ATRSEL=>semimode);
     process
         variable count,white : natural;
     begin
         for phase in 0 to 5 loop
             raw_rstn<='0';
+            if SEMIGRAPHICS_TEST and phase mod 2=0 then semimode<='1'; else semimode<='0'; end if;
             -- Change settings during reset, including once with no clock.
             base<=std_logic_vector(to_unsigned(phase*80,13));pitch<=x"50";lines<="01111";
             if phase=5 then running<=false;wait for 100 ns;end if;
@@ -70,7 +76,11 @@ begin
                 end if;
             end loop;
             assert count=640 report "Wrong visible line width: " & integer'image(count) severity failure;
-            assert white>=624 report "Text settings failed after reset: " & integer'image(white) severity failure;
+            if SEMIGRAPHICS_TEST and phase mod 2=0 then
+                assert white=0 report "ATRSEL lost through CRTC parent/pixel stages" severity failure;
+            else
+                assert white>=624 report "Text settings failed after reset: " & integer'image(white) severity failure;
+            end if;
             report "PASS CRTC reset/render phase " & integer'image(phase) & ": 640 pixels, white=" & integer'image(white);
         end loop;
         done<=true;wait;

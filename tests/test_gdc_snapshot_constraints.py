@@ -10,6 +10,7 @@ class SnapshotConstraints(unittest.TestCase):
     def evaluate(self, scenario='normal'):
         t = tkinter.Tcl()
         t.setvar('scenario', scenario)
+        t.setvar('pegc_enabled', 1)
         t.eval('''
             set exceptions {}; set bounds {}
             proc get_collection_size {x} {llength $x}
@@ -23,9 +24,11 @@ class SnapshotConstraints(unittest.TestCase):
                 foreach field {held_data received_data} {
                     if {[string first $field $pattern]>=0} {
                         set result {}
-                        for {set i 0} {$i<121} {incr i} {
-                            if {$i>=95 && $i<=104} {continue}
+                        for {set i 0} {$i<128} {incr i} {
                             if {$scenario eq "missing_$field" && $i==62} {continue}
+                            if {$scenario eq "missing_atrsel_$field" && $i==121} {continue}
+                            if {$scenario eq "missing_pegc_$field" && $i==127} {continue}
+                            if {$scenario eq "missing_partition_$field" && $i==100} {continue}
                             lappend result [format {emu|Zet98_top|gdc_settings|%s[%d]} $field $i]
                         }
                         if {$scenario eq "copies"} {
@@ -59,10 +62,11 @@ class SnapshotConstraints(unittest.TestCase):
                         }
                     }
                 ''')
-                self.assertEqual(int(t.eval('llength $settings_payload')),112 if scenario=='copies' else 111)
+                self.assertEqual(int(t.eval('llength $settings_payload')),129 if scenario=='copies' else 128)
 
     def test_missing_payload_bit_aborts(self):
-        for scenario in ('missing_held_data', 'missing_received_data'):
+        for scenario in ('missing_held_data', 'missing_received_data', 'missing_atrsel_held_data', 'missing_atrsel_received_data',
+                         'missing_pegc_held_data', 'missing_pegc_received_data', 'missing_partition_held_data', 'missing_partition_received_data'):
             with self.subTest(scenario=scenario), self.assertRaises(tkinter.TclError):
                 self.evaluate(scenario)
 

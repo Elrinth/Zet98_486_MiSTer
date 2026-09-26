@@ -7,7 +7,9 @@ module video_output_tb;
     reg nh=0, nv=0, nd=0;
     wire ce, hs, vs, de;
     wire [7:0] r,g,b;
-    video_output dut(clk,reset,pattern,native_ce,nr,ng,nb,nh,nv,nd,ce,r,g,b,hs,vs,de);
+    video_output #(.BOOT_TEXT_FILE("rtl/assets/boot-text.mem"),
+                   .BOOT_FONT_FILE("rtl/assets/boot-font.mem"))
+        dut(clk,reset,pattern,3'd0,native_ce,nr,ng,nb,nh,nv,nd,ce,r,g,b,hs,vs,de);
     integer i, pixels, active_pixels, hsync_pixels, vsync_pixels, line_pixels;
     integer active_lines, line_active, enable_spacing;
     reg last_vs;

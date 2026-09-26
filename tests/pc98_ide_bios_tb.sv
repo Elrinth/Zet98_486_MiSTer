@@ -3,6 +3,7 @@
 module pc98_ide_bios_tb;
     parameter LOWMEM_CACHE=0;
     parameter EXPECT_READS=7;
+    parameter WATCHDOG_NS=20000000;
     parameter WRITE_TEST=0;
     parameter EXPECT_WRITES=0;
     reg clk = 0;
@@ -19,18 +20,27 @@ module pc98_ide_bios_tb;
     wire bus_write, bus_strobe, bus_io, unmapped_access;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
+    wire [127:0] debug_snapshot;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;
     wire [7:0] ddr_byteenable, ddr_burstcount;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
-    pc98_ao486 #(.LOWMEM_CACHE(LOWMEM_CACHE)) dut (.*);
+    pc98_ao486 #(.LOWMEM_CACHE(LOWMEM_CACHE)) dut (
+        .pegc_analog16(1'b0),.pegc_display_enable(1'b0),.pegc_gdc_5mhz(1'b0),
+        .pegc_mode256(),.pegc_single_page(),.pegc_pixel_clk(clk),
+        .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
+        .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
+        .pegc_video_readdatavalid(),.pegc_video_readdata(),
+        .cpu_speed_sel(2'b0),.*);
 
     reg [7:0] memory [0:1048575];
     reg [7:0] ports [0:65535];
     integer phase = 0, wait_count = 0, transactions = 0, irq_count = 0, boot_count = 0;
     integer reset_alias_reads = 0;
+    reg [31:0] bus_delay_state = 0;
+    reg random_bus_delays = 0;
     reg [19:0] held_addr;
     reg [15:0] held_data;
     reg [1:0] held_select;
@@ -49,7 +59,12 @@ module pc98_ide_bios_tb;
                 held_addr = {bus_address, 1'b0};
                 held_data = bus_writedata; held_select = bus_select;
                 held_write = bus_write; held_io = bus_io;
-                wait_count = transactions % 4;
+                if (random_bus_delays) begin
+                    bus_delay_state = bus_delay_state ^ (bus_delay_state << 13);
+                    bus_delay_state = bus_delay_state ^ (bus_delay_state >> 17);
+                    bus_delay_state = bus_delay_state ^ (bus_delay_state << 5);
+                    wait_count = bus_delay_state[3:0];
+                end else wait_count = transactions % 4;
                 phase = 1;
             end
             1: if (!bus_strobe || {bus_address, 1'b0} !== held_addr ||
@@ -141,6 +156,11 @@ module pc98_ide_bios_tb;
     string program_path;
     integer i, fd, loaded;
     initial begin
+        if ($value$plusargs("bus_seed=%d", bus_delay_state)) begin
+            if (bus_delay_state == 0) $fatal(1, "Random bus seed must be nonzero");
+            random_bus_delays = 1;
+            $display("BIOS random bus stalls, seed=%0d, wait=0..15 cycles", bus_delay_state);
+        end
         for (i = 0; i < 1048576; i = i + 1) memory[i] = 0;
         for (i = 0; i < 65536; i = i + 1) ports[i] = 8'hff;
         if (!$value$plusargs("program=%s", program_path)) $fatal(1, "missing test program");
@@ -158,7 +178,7 @@ module pc98_ide_bios_tb;
         @(negedge clk); reset = 0;
     end
     initial begin
-        #20000000;
+        #(WATCHDOG_NS);
         $fatal(1, "CPU watchdog: transfers=%0d boots=%0d IRQs=%0d PC=%h", transactions, boot_count,
                irq_count, dut.cpu.eip);
     end

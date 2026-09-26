@@ -5,7 +5,7 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 ghdl --synth --std=08 -fsynopsys --out=verilog -gADRWIDTH=22 \
     -gCPU_WRITE_BUNDLE=true -gSUB_WRITE_BUNDLE=true -gFLOPPY_REQUEST_BUNDLE=true \
-    -gCPU_AFFINE_RMW=true Zet98/sdramc.vhd -e sdramc > "$out/memory.v" 2> "$out/synthesis.log" || {
+    -gCPU_AFFINE_RMW=true tests/lcell_model.vhd Zet98/sdramc.vhd -e sdramc > "$out/memory.v" 2> "$out/synthesis.log" || {
     cat "$out/synthesis.log"; exit 1;
 }
 grep -q '^module SDRAMC$' "$out/memory.v" || { head -n 2 "$out/memory.v"; exit 1; }

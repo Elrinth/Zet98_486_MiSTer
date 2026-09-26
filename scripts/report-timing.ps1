@@ -5,6 +5,7 @@ param(
     [string]$DockerContext = 'desktop-linux',
     [ValidateRange(1, 3)][int]$BuildCpus = 1,
     [ValidateRange(2, 8)][int]$MemoryGB = 4,
+    [switch]$Z486ChecksumPaths,
     [switch]$StartOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -19,10 +20,22 @@ $activeJobs = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'ps',
 if (@($activeJobs -split '\r?\n' | Where-Object { $_ -match '^zet98-(quartus|simulation|timequest)-' }).Count) {
     throw 'An FPGA/test/timing job is already running; let it finish before starting TimeQuest.'
 }
+$analysisCommand = 'quartus_sta -t ../../scripts/report-timing.tcl'
+if ($Z486ChecksumPaths) {
+    # Copy this read-only report into the evidence snapshot so it can also be
+    # used on older builds. Record exactly which report script was run.
+    $reportScript = Join-Path $PSScriptRoot 'report-z486-checksum-timing.tcl'
+    $savedScript = Join-Path $sourceRoot 'scripts/report-z486-checksum-timing.tcl'
+    Copy-Item -LiteralPath $reportScript -Destination $savedScript
+    Get-FileHash -LiteralPath $savedScript -Algorithm SHA256 |
+        Select-Object Hash,Path | ConvertTo-Json |
+        Set-Content -LiteralPath (Join-Path $buildRoot 'checksum-report-script.json')
+    $analysisCommand += ' && quartus_sta -t ../../scripts/report-z486-checksum-timing.tcl'
+}
 $containerName = 'zet98-timequest-' + [guid]::NewGuid().ToString('N').Substring(0, 12)
 $containerId = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'create','--name',$containerName,
     '--network','none','--cpus',"$BuildCpus",'--memory',"${MemoryGB}g",'--memory-swap',"${MemoryGB}g",
-    '--workdir','/project/Zet98/v17',$Image,'bash','-lc','quartus_sta -t ../../scripts/report-timing.tcl')
+    '--workdir','/project/Zet98/v17',$Image,'bash','-lc',$analysisCommand)
 $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'timequest-container-id.txt')
 $containerName | Set-Content -LiteralPath (Join-Path $buildRoot 'timequest-container-name.txt')
 Invoke-DockerCommand -Arguments @('--context',$DockerContext,'cp',"$sourceRoot/.","${containerName}:/project/") -TimeoutSeconds 60 | Out-Null

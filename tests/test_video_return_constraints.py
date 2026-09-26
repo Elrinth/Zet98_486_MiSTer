@@ -29,7 +29,7 @@ class Guards(unittest.TestCase):
         t.setvar('inventory', tuple(names))
         t.eval('''
             set exceptions {}
-            set bounds {}
+            set bounds {}; set minima {}
             proc get_collection_size {x} {llength $x}
             proc get_node_info {node args} {return $node}
             proc foreach_in_collection {var nodes body} {
@@ -46,6 +46,7 @@ class Guards(unittest.TestCase):
                 return $result
             }
             proc set_false_path {args} {global exceptions; lappend exceptions $args}
+            proc set_min_delay {args} {global minima; lappend minima $args}
             proc set_max_delay {args} {global bounds; lappend bounds $args}
         ''')
         t.call('source', str(ROOT / name))
@@ -67,6 +68,24 @@ class Guards(unittest.TestCase):
         self.assertEqual(int(t.eval('llength $exceptions')), 0)
         self.assertEqual(int(t.eval('llength $bounds')), 4)
         t.eval('foreach bound $bounds {if {[lindex $bound end] != 5.0} {error bound}}')
+
+    def test_fec_minimum_is_stricter_and_exactly_scoped(self):
+        for copies in (False, True):
+            t = self.run_sdc('pc98-read-transfer.sdc', duplicates=copies)
+            self.assertEqual(int(t.eval('llength $minima')), 1)
+            t.eval('''
+                set minimum [lindex $minima 0]
+                if {[lindex $minimum 0] ne "-from" || [lindex $minimum 2] ne "-to"} {error scope}
+                if {[lindex $minimum end] != 0.5} {error margin}
+                foreach node [lindex $minimum 1] {
+                    if {[string first "|fec_read_data" $node]<0} {error source}
+                }
+                foreach node [lindex $minimum 3] {
+                    if {[string first "|FECRDAT" $node]<0} {error target}
+                }
+                if {[llength [lindex $minimum 3]]!=16} {error width}
+                if {[llength $exceptions]!=0} {error "Hold exception introduced"}
+            ''')
 
     def test_missing_endpoints_abort(self):
         for bad in ['hdmi_out_vs','hdmi_vs_meta','hdmi_vs_sync','source_status','status_meta','status_sync']:

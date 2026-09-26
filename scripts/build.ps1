@@ -10,7 +10,7 @@ param(
     [int]$MaxConcurrentBuilds = 1,
     [ValidateSet(20, 40, 50, 60, 75, 90, 100)]
     [int]$SystemClockMHz = 20,
-    [ValidateSet('Zet', 'ao486')]
+    [ValidateSet('Zet', 'ao486', 'z486')]
     [string]$Cpu = 'Zet',
     [ValidateSet(0, 16, 64)]
     [int]$ExtendedRamMB = 0,
@@ -18,21 +18,31 @@ param(
     [string]$SoundBoard = 'OPNA',
     [ValidateSet('Legacy','JT08')]
     [string]$OpnaBackend = 'Legacy',
+    [ValidateSet('SparseAuto', 'Normal')]
+    [string]$RegisterPacking = 'SparseAuto',
     [switch]$LowMemoryCache,
     [switch]$UpperRamICache,
     [ValidateSet(8, 32, 64)]
     [int]$LowMemoryCacheKB = 8,
     [switch]$RawIde,
     [switch]$MidiUart,
+    [switch]$PackedGraphics,
+    [switch]$Z486DebugUart,
+    [ValidateRange(1, 99)]
+    [int]$Seed = 6,
     [switch]$StartOnly,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'docker-command.ps1')
-if ($ExtendedRamMB -ne 0 -and $Cpu -ne 'ao486') { throw 'Extended RAM requires ao486.' }
+if ($Z486DebugUart -and ($Cpu -ne 'z486' -or $MidiUart)) { throw 'Z486 debug UART requires z486 and exclusive use of UART (omit MidiUart).' }
+if ($ExtendedRamMB -ne 0 -and $Cpu -eq 'Zet') { throw 'Extended RAM requires ao486 or z486.' }
+if ($RawIde -and $Cpu -eq 'Zet') { throw 'The native hard-disk boot ROM requires ao486 or z486 (386 instructions).' }
+if ($PackedGraphics -and $Cpu -eq 'Zet') { throw 'Packed graphics requires the ao486 or z486 physical-address/DDR router.' }
+if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register packing selection requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
-if ($UpperRamICache -and $Cpu -ne 'ao486') { throw 'Upper conventional RAM instruction cache requires ao486.' }
+if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
 # Avoid saturating an interactive workstation. This inventory does not use
 # Docker stats, whose dashboard polling previously accumulated hung clients.
@@ -79,11 +89,19 @@ try {
     [bool]$UpperRamICache | Set-Content -LiteralPath (Join-Path $buildRoot 'upper-ram-icache.txt')
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
+    [bool]$Z486DebugUart | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-debug-uart.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
+    [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
+    $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
+    'FullOnly' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
+    $Seed | Set-Content -LiteralPath (Join-Path $buildRoot 'fitter-seed.txt')
     $BuildCpus | Set-Content -LiteralPath (Join-Path $buildRoot 'build-cpus.txt')
     $BuildMemoryGB | Set-Content -LiteralPath (Join-Path $buildRoot 'build-memory-gb.txt')
     Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
         -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
+    if ($Z486DebugUart) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
+    }
     if ($MidiUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_MPU_UART=1"
@@ -110,11 +128,19 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_PCM86=1"
     }
+    if ($PackedGraphics) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value 'set_global_assignment -name VERILOG_MACRO ZET98_PEGC=1'
+        $packedSdc = Join-Path $sourceRoot 'Zet98/v17/Zet98MiSTer.sdc'
+        $packedConstraints = Get-Content -LiteralPath $packedSdc -Raw
+        if ($packedConstraints -notmatch '(?m)^set pegc_enabled 0\s*$') { throw 'Missing packed-graphics constraint profile marker' }
+        $packedConstraints -replace '(?m)^set pegc_enabled 0\s*$', 'set pegc_enabled 1' | Set-Content -LiteralPath $packedSdc
+    }
     if ($ExtendedRamMB -ne 0) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_EXT_RAM_MB=$ExtendedRamMB"
     }
-    if ($Cpu -eq 'ao486') {
+    if ($Cpu -in @('ao486','z486')) {
         $projectSettings = Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf'
         # The two CPU sources have incompatible headers both named defines.v.
         # Compile only the selected CPU, preserving the default Zet project.
@@ -123,14 +149,40 @@ try {
         Add-Content -LiteralPath $projectSettings -Value @(
             'set_global_assignment -name VERILOG_MACRO ZET98_AO486=1',
             'set_global_assignment -name VERILOG_MACRO ZET98_CYCLONEV_READY_MUX=1',
-            'set_global_assignment -name QIP_FILE ../../rtl/cpu/ao486_pc98.qip'
+            ("set_global_assignment -name QIP_FILE ../../rtl/cpu/" + $(if ($Cpu -eq 'z486') { 'z486_pc98.qip' } else { 'ao486_pc98.qip' }))
+        )
+    }
+    if ($Cpu -eq 'z486') {
+        Add-Content -LiteralPath $projectSettings -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486=1'
+        # Keep the qualified sparse profile as default; Normal is a controlled
+        # density experiment. The per-instance timing protections below remain.
+        $packingSetting = if ($RegisterPacking -eq 'Normal') { 'NORMAL' } else { 'SPARSE AUTO' }
+        Add-Content -LiteralPath $projectSettings -Value @(
+            'set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"',
+            ('set_global_assignment -name QII_AUTO_PACKED_REGISTERS "' + $packingSetting + '"'),
+            'set_global_assignment -name ENABLE_BENEFICIAL_SKEW_OPTIMIZATION ON',
+            "set_global_assignment -name SEED $Seed",
+            # B120 packed this opposite-edge transfer onto a 0.632 ns local
+            # ASDATA route despite a 2.097 ns hold violation. Leave these few
+            # registers unpacked so the router can repair the short data path.
+            'set_instance_assignment -name QII_AUTO_PACKED_REGISTERS OFF -to "*|vlines_pixel_source*"',
+            'set_instance_assignment -name QII_AUTO_PACKED_REGISTERS OFF -to "*|VLINESC*"',
+            # Keep FEC read capture out of packed local feedback paths so the
+            # router can meet pc98-read-transfer.sdc's minimum-delay margin.
+            'set_instance_assignment -name QII_AUTO_PACKED_REGISTERS OFF -to "*|ram|FECRDAT*"',
+            # B146 still used a 0.269 ns local route into FECRDAT[2].asdata.
+            # Disable secondary synchronous-load/enable recognition for this
+            # bank so the data mux uses ordinary logic/routing. Keep all SDC
+            # setup/hold requirements; post-fit analysis decides acceptance.
+            'set_instance_assignment -name ALLOW_SYNCH_CTRL_USAGE OFF -to "*|ram|FECRDAT*"',
+            'set_instance_assignment -name AUTO_CLOCK_ENABLE_RECOGNITION OFF -to "*|ram|FECRDAT*"'
         )
     }
     if ($SystemClockMHz -ne 20) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
             -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_TURBO$SystemClockMHz=1"
     }
-    if ($Cpu -eq 'ao486' -and $SystemClockMHz -ge 75) {
+    if ($Cpu -eq 'z486' -or ($Cpu -eq 'ao486' -and $SystemClockMHz -ge 75)) {
         # Upstream ao486 explicitly enables these physical optimization knobs.
         # Keep all-corner timing analysis and our CDC bounds intact.
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value @(
@@ -156,11 +208,23 @@ try {
     # Keep the source snapshot and export the complete database for TimeQuest.
     $containerName = 'zet98-' + $buildName
     $compileCommand = 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
-    $requireUart = if ($MidiUart) { 1 } else { 0 }
+    if ($Cpu -eq 'z486') {
+        # QSF is not parsed like a sourced Tcl script: braces can become part
+        # of the target name. Verify Quartus sees the intended exact targets.
+        $compileCommand = 'quartus_sh -t ../../scripts/check-z486-fit-assignments.tcl && ' + $compileCommand
+    }
+    $requireUart = if ($MidiUart -or $Z486DebugUart) { 1 } else { 0 }
     $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
+    # Physical FEC return buffers must survive fitting (as in the B161 flow).
+    $compileCommand += ' && quartus_cdb -t ../../scripts/check-fec-route.tcl'
+    # The watchdog stops Quartus after 25 silent minutes (exit 125) or 150 minutes
+    # in total (exit 124), keeping diagnostics under Zet98/v17/watchdog.
+    if ((Get-Content -LiteralPath (Join-Path $sourceRoot 'scripts/quartus-watchdog.sh') -Raw).Contains("`r")) {
+        throw 'scripts/quartus-watchdog.sh must use LF line endings'
+    }
     $containerId = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'create','--name',$containerName,
         '--cpus',"$BuildCpus",'--memory',"${BuildMemoryGB}g",'--memory-swap',"${BuildMemoryGB}g",
-        '--network','none','--workdir','/project/Zet98/v17',$Image,'bash','-lc',$compileCommand)
+        '--network','none','--workdir','/project/Zet98/v17',$Image,'bash','../../scripts/quartus-watchdog.sh',$compileCommand)
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
     $containerName | Set-Content -LiteralPath (Join-Path $buildRoot 'container-name.txt')
     Invoke-DockerCommand -Arguments @('--context',$DockerContext,'cp',"$sourceRoot/.","${containerName}:/project/") -TimeoutSeconds 60 | Out-Null

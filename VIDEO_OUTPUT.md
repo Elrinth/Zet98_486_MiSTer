@@ -75,7 +75,13 @@ References:
 ## Activity overlay
 
 The optional indicator remains on by default. It displays the supplied
-rotating disk above `Loading D0` or `Loading D1` and zero through three dots.
+rotating disk above `LOADING D0` or `LOADING D1` and zero through three dots.
+The caption uses the existing 8x8 boot-help font, rendered separately from the
+animation. Disk palette index zero and blank caption pixels pass the underlying
+video through. The indicator ends 20 source pixels above the active/cropped
+bottom edge, leaving the 16-pixel DOS function-key row and a four-pixel gap.
+These revised overlay settings pass RTL simulation; hardware qualification is
+pending the next build.
 FDC-selected drive activity is combined with each drive's HPS transfers.
 If both request service together, the last uniquely active drive is retained.
 It expires after 15 idle frames. It never draws into blanking; RGB, DE, sync

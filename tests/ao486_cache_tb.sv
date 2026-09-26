@@ -20,13 +20,20 @@ module ao486_cache_tb;
     wire bus_write, bus_strobe, bus_io, unmapped_access;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
+    wire [127:0] debug_snapshot;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;
     wire [7:0] ddr_byteenable, ddr_burstcount;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
-    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE),.LOWMEM_CACHE(LOWMEM_CACHE),.LOWMEM_CACHE_KB(LOWMEM_CACHE_KB)) dut (.*);
+    pc98_ao486 #(.ICACHE_ENABLE(ICACHE_ENABLE),.LOWMEM_CACHE(LOWMEM_CACHE),.LOWMEM_CACHE_KB(LOWMEM_CACHE_KB)) dut (
+        .pegc_analog16(1'b0),.pegc_display_enable(1'b0),.pegc_gdc_5mhz(1'b0),
+        .pegc_mode256(),.pegc_single_page(),.pegc_pixel_clk(clk),
+        .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
+        .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
+        .pegc_video_readdatavalid(),.pegc_video_readdata(),
+        .cpu_speed_sel(2'b0),.*);
     reg [7:0] memory [0:1048575];
     integer cycles = 0, transactions = 0, phase = 0, delay_left = 0;
     integer memory_wait = 8, dma_left = 0, dma_tests = 0;

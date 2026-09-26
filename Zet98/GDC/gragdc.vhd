@@ -78,6 +78,9 @@ signal	FIFOWR		:std_logic;
 signal	FIFORD		:std_logic;
 signal	fifoexist	:std_logic;
 signal	PARNUM		:integer range 0 to 15;
+-- PRAM is one 16-byte space, not two independently wrapping 8-byte banks.
+-- 16 is the exhausted state: excess bytes are ignored until a new command.
+signal	PRAMADDR	:integer range 0 to 16;
 signal	RDNUM		:integer range 0 to 15;
 signal	RNUMCLR		:std_logic;
 signal	DATRD		:std_logic;
@@ -272,6 +275,13 @@ begin
 	variable nwait	:integer range 0 to 2;
 	begin
 		if(rstn='0')then
+			RFIFOADDR<=(others=>'0');
+			COMMAND<=x"ff";
+			PARNUM<=0;
+			PRAMADDR<=16;
+			gdcreset<='0';
+			RNUMCLR<='0';
+			nwait:=0;
 			GRAPHEN<='0';
 			D_MODE<=(others=>'0');
 			D_DIR<=(others=>'0');
@@ -375,7 +385,7 @@ begin
 						DRAW_BEGIN<='1';
 					when x"70" | x"71" | x"72" | x"73" |
 						 x"74" | x"75" | x"76" | x"77" =>
-						PARNUM<=conv_integer(FIFORDAT(2 downto 0));
+						PRAMADDR<=conv_integer(FIFORDAT(3 downto 0));
 					when x"20" | x"21" | x"22" | x"23" |
 						x"30" | x"31" | x"32" | x"33" |
 						x"38" | x"39" | x"3a" | x"3b" =>
@@ -390,7 +400,7 @@ begin
 						DRAW_BEGIN<='1';
 					when x"78" | x"79" | x"7a" | x"7b" |
 						 x"7c" | x"7d" | x"7e" | x"7f" =>
-						PARNUM<=conv_integer(FIFORDAT(2 downto 0));
+						PRAMADDR<=conv_integer(FIFORDAT(3 downto 0));
 					when x"e0" =>
 						RDDAT(0)<=D_CURADDR(7 downto 0);
 						RDDAT(1)<=D_CURADDR(15 downto 8);
@@ -415,53 +425,53 @@ begin
 						D_OP<=DO_WRITE;
 						DRAW_BEGIN<='1';
 					when x"70" | x"71" | x"72" | x"73" |
-						 x"74" | x"75" | x"76" | x"77" =>
-						case PARNUM is
-						when 0 | 8 =>
+						 x"74" | x"75" | x"76" | x"77" |
+						 x"78" | x"79" | x"7a" | x"7b" |
+						 x"7c" | x"7d" | x"7e" | x"7f" =>
+						case PRAMADDR is
+						when 0 =>
 							BASEADDR0(7 downto 0)<=FIFORDAT(7 downto 0);
-						when 1 | 9 =>
+						when 1 =>
 							BASEADDR0(15 downto 8)<=FIFORDAT(7 downto 0);
-						when 2 | 10 =>
+						when 2 =>
 							BASEADDR0(17 downto 16)<=FIFORDAT(1 downto 0);
 							SL0(3 downto 0)<=FIFORDAT(7 downto 4);
-						when 3 | 11 =>
+						when 3 =>
 							SL0(9 downto 4)<=FIFORDAT(5 downto 0);
 							IM<=FIFORDAT(6);
-						when 4 | 12 =>
+						when 4 =>
 							BASEADDR1(7 downto 0)<=FIFORDAT(7 downto 0);
-						when 5 | 13 =>
+						when 5 =>
 							BASEADDR1(15 downto 8)<=FIFORDAT(7 downto 0);
-						when 6 | 14 =>
+						when 6 =>
 							BASEADDR1(17 downto 16)<=FIFORDAT(1 downto 0);
 							SL1(3 downto 0)<=FIFORDAT(7 downto 4);
-						when 7 | 15 =>
+						when 7 =>
 							SL1(9 downto 4)<=FIFORDAT(5 downto 0);
 							IM<=FIFORDAT(6);
+						when 8 =>
+							D_PTN(7 downto 0)<=FIFORDAT(7 downto 0);
+							D_TX0<=FIFORDAT(7 downto 0);
+						when 9 =>
+							D_PTN(15 downto 8)<=FIFORDAT(7 downto 0);
+							D_TX1<=FIFORDAT(7 downto 0);
+						when 10 =>
+							D_TX2<=FIFORDAT(7 downto 0);
+						when 11 =>
+							D_TX3<=FIFORDAT(7 downto 0);
+						when 12 =>
+							D_TX4<=FIFORDAT(7 downto 0);
+						when 13 =>
+							D_TX5<=FIFORDAT(7 downto 0);
+						when 14 =>
+							D_TX6<=FIFORDAT(7 downto 0);
+						when 15 =>
+							D_TX7<=FIFORDAT(7 downto 0);
 						when others =>
 						end case;
-					when x"78" | x"79" | x"7a" | x"7b" |
-						 x"7c" | x"7d" | x"7e" | x"7f" =>
-						case PARNUM is
-							when 0 | 8 =>
-								D_PTN(7 downto 0)<=FIFORDAT(7 downto 0);
-								D_TX0<=FIFORDAT(7 downto 0);
-							when 1 | 9 =>
-								D_PTN(15 downto 8)<=FIFORDAT(7 downto 0);
-								D_TX1<=FIFORDAT(7 downto 0);
-							when 2 | 10 =>
-								D_TX2<=FIFORDAT(7 downto 0);
-							when 3 | 11 =>
-								D_TX3<=FIFORDAT(7 downto 0);
-							when 4 | 12 =>
-								D_TX4<=FIFORDAT(7 downto 0);
-							when 5 | 13 =>
-								D_TX5<=FIFORDAT(7 downto 0);
-							when 6 | 14 =>
-								D_TX6<=FIFORDAT(7 downto 0);
-							when 7 | 15 =>
-								D_TX7<=FIFORDAT(7 downto 0);
-							when others =>
-							end case;
+						if(PRAMADDR<16)then
+							PRAMADDR<=PRAMADDR+1;
+						end if;
 					when x"4b" =>
 						case PARNUM is
 						when 0 =>
@@ -521,7 +531,8 @@ begin
 						end case;
 					when others =>
 					end case;
-					PARNUM<=PARNUM+1;
+					-- Preserve the four-bit counter used by streaming WDAT.
+					PARNUM<=(PARNUM+1) mod 16;
 				end if;
 				RFIFOADDR<=RFIFOADDR+x"1";
 				nwait:=1;

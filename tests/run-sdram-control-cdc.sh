@@ -39,7 +39,7 @@ for delay in (15,80):
             (root/('bypass-'+port+'.vhd')).write_text(wrong)
 PY
 
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/control-15.vhd" tests/sdram_request_tb.vhd tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/control-15.vhd" tests/sdram_request_tb.vhd tests/floppy_sdram_tb.vhd
 for bench in sdram_request_tb floppy_sdram_tb; do
     ghdl -e --std=08 -fsynopsys --workdir="$out" "$bench"
     for second in false true; do
@@ -53,7 +53,7 @@ for bench in sdram_request_tb floppy_sdram_tb; do
     done
 done
 
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/control-80.vhd" tests/sdram_request_tb.vhd tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/control-80.vhd" tests/sdram_request_tb.vhd tests/floppy_sdram_tb.vhd
 for bench in sdram_request_tb floppy_sdram_tb; do
     ghdl -e --std=08 -fsynopsys --workdir="$out" "$bench"
     for second in false true; do
@@ -67,7 +67,7 @@ for bench in sdram_request_tb floppy_sdram_tb; do
 done
 
 for port in CPU SUB; do
-    ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/bypass-$port.vhd" tests/sdram_request_tb.vhd
+    ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/bypass-$port.vhd" tests/sdram_request_tb.vhd
     ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
     second=false; if [ "$port" = SUB ]; then second=true; fi
     if ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb -gBUFFERED=true -gUSE_SUB="$second" -gCPU_MHZ=100 --assert-level=error > "$out/bypass.log" 2>&1; then

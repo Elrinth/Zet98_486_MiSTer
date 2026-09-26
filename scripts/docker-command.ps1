@@ -4,7 +4,7 @@
 function Invoke-DockerCommand {
     param(
         [Parameter(Mandatory)] [string[]]$Arguments,
-        [ValidateRange(1, 60)] [int]$TimeoutSeconds = 15,
+        [ValidateRange(1, 180)] [int]$TimeoutSeconds = 15,
         [string]$Executable = 'docker',
         [string]$OutputFile
     )

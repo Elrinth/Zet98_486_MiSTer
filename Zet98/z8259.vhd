@@ -81,11 +81,11 @@ signal	lDIN	:std_logic_vector(7 downto 0);
 signal	IRM		:std_logic_vector(7 downto 0);
 signal	lIRM	:std_logic_vector(7 downto 0);
 signal	IRL		:std_logic_vector(7 downto 0);
-signal	LCLR	:std_logic;
 signal	LCx		:integer range 0 to 7;
 signal	INTnum	:integer range 0 to 7;
 signal	PRI		:integer range 0 to 7;
 signal	IVECT	:std_logic_vector(7 downto 0);
+signal acknowledged_irq :integer range 0 to 7;
 signal	lINTA	:std_logic;
 signal	AROT	:std_logic;
 signal	command	:std_logic_vector(2 downto 0);
@@ -266,7 +266,9 @@ begin
 					if(RETRACTABLE_IRQS(i)='1' and IRx(i)='0' and INTA='0')then
 						IRL(i)<='0';
 					end if;
-					if(LCLR='1' and LCx=i)then
+					-- Consume only the acknowledged request. EOI must not erase
+					-- a fresh edge that arrived while this IRQ was in service.
+					if(INTAm='1' and lINTA='0' and INTnum=i)then
 						IRL(i)<='0';
 					end if;
 --					if(IMR(i)='1')then
@@ -327,6 +329,8 @@ begin
 		if(rstn='0')then
 			INTnum<=0;
 		elsif(clk' event and clk='1')then
+			-- Freeze selection through the accepted INTA phase.
+			if INTAm='0' then
 			INTnum<=0;
 			for i in 7 downto 0 loop
 				selx:=i+PRI;
@@ -339,10 +343,13 @@ begin
 					INTnum<=sel;
 				end if;
 			end loop;
+			end if;
 		end if;
 	end process;
 
-	IVECT(2 downto 0)<=conv_std_logic_vector(INTnum,3);
+	-- Hold the accepted vector for a stretched acknowledge, after IRR clears.
+	acknowledged_irq<=INTnum;
+	IVECT(2 downto 0)<=conv_std_logic_vector(acknowledged_irq,3);
 	IVECT(7 downto 3)<=VECT;
 	
 	process(clk,rstn)
@@ -351,18 +358,16 @@ begin
 	begin
 		if(rstn='0')then
 			lINTA<='0';
-			LCLR<='0';
 			LCx<=0;
 			ISR<=(others=>'0');
 			ISnum<=8;
 			lEOI<=0;
 		elsif(clk' event and clk='1')then
-			LCLR<='0';
 			lINTA<=INTAm;
 			if(lEOI>0)then
 				lEOI<=lEOI-1;
 			end if;
-			if(INTAm='1')then
+			if(INTAm='1' and lINTA='0')then
 				LCx<=INTnum;
 				ISnum<=INTnum;
 				ISR(INTnum)<='1';
@@ -377,8 +382,7 @@ begin
 --						ISR<=(others=>'0');
 --					end if;
 --					ISR(LCx)<='1';
---					LCLR<='1';
---				end if;
+--	--				end if;
 			elsif(command=cmd_NSEOI or command=cmd_SEOI or lEOI=3)then
 				if(command=cmd_NSEOI or lEOI=1)then
 					if(SMMODE='1')then
@@ -391,7 +395,6 @@ begin
 					ISR(isel)<='0';
 				end if;
 				lEOI<=2;
-				LCLR<='1';
 			elsif(lEOI=1)then
 				if(INTb='1')then
 					ISR(INTnum)<='1';
@@ -404,9 +407,9 @@ begin
 		end if;
 	end process;
 	
-	CASO<=conv_std_logic_vector(INTnum,3);
+	CASO<=conv_std_logic_vector(acknowledged_irq,3);
 	DOE<=	'1' when CS='1' and RD='1' else
-			'1' when (INTA='1' and (M_Sn='1' and TOSLAVE(INTnum)='0')) else
+			'1' when (INTA='1' and (M_Sn='1' and TOSLAVE(acknowledged_irq)='0')) else
 			'1' when (INTA='1' and (M_Sn='0' and SLID=CASI)) else
 			'0';
 	DOUT<=	IVECT when INTA='1' else

@@ -13,6 +13,14 @@ if {[get_collection_size $palette_payload] < 217 ||
     error "Expected the complete 217-bit palette snapshot and video capture"
 }
 set_max_delay -from $palette_payload -to $palette_capture 20.000
+# Capture toggles palette_ack. Two CPU synchronizer stages return that ACK
+# before palette_hold may change, so the payload stays stable for at least
+# two CPU periods after capture (20 ns at the supported 100 MHz maximum).
+# Near-coincident nominal CPU/video edges are not enabled payload transfers.
+# Exclude only this impossible payload hold check, retaining its 20 ns setup
+# bound and all ordinary/control/reset timing. run-grpal-video.sh observes
+# the actual post-capture hold interval and rejects early ACK bypass.
+set_false_path -hold -from $palette_payload -to $palette_capture
 
 # Only the input of each control synchronizer is asynchronous. Subsequent
 # stages, the request/ack comparisons and pixel lookup remain normally timed.

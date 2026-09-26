@@ -83,10 +83,49 @@ module opna_jt08_tb;
             end
         end
     endtask
+    time psg_start;
     integer c,p,i,n;
+    task psg_sample_bus_test;
+        reg [7:0] value;
+        integer sample_index;
+        begin
+            reset;
+            // Back-to-back address/data writes must preserve adjacent PSG
+            // registers even when no FM clock-enable occurs between them.
+            for(sample_index=0;sample_index<6;sample_index=sample_index+1)
+                regwrite(0,sample_index*2,8'h11+sample_index);
+            for(sample_index=0;sample_index<6;sample_index=sample_index+1) begin
+                bus(0,sample_index*2); transfer(0,1,0,value);
+                if(value!=(8'h11+sample_index))
+                    $fatal(1,"Fast PSG address change corrupted register %0d: %h",sample_index*2,value);
+            end
+            // Rusty's PDR sample ISR polls busy then writes volume register A.
+            // A stream of PSG volume writes must not start an FM busy period.
+            psg_start=$time;
+            for(sample_index=0;sample_index<32;sample_index=sample_index+1) begin
+                transfer(0,0,0,value);
+                if(value[7]) $fatal(1,"PSG sample write incorrectly asserts busy");
+                regwrite(0,8'h0a,sample_index&15);
+                transfer(0,1,0,value);
+                if(value!=(sample_index&15)) $fatal(1,"PSG sample volume write lost");
+            end
+            if($time-psg_start>50000) $fatal(1,"PSG stream stalled: %0t",$time-psg_start);
+            // The optimization must not remove the FM update interlock.
+            regwrite(0,8'h30,8'h01); transfer(0,0,0,value);
+            if(!value[7]) $fatal(1,"FM write busy protection removed");
+            regwrite(0,8'h34,8'h02); cycles(KHZ/20);
+            transfer(0,0,0,value);
+            if(value[7]) $fatal(1,"FM busy did not clear");
+            $display("PASS %0d kHz fast PSG sample writes/readback, no PSG busy, FM busy retained",KHZ);
+        end
+    endtask
     reg [7:0] status;
     initial begin
 `ifndef NEGATIVE_LFO
+        psg_sample_bus_test;
+`ifdef PSG_ONLY
+        $finish;
+`endif
         reset;
         // Mirrors the identification operation used by Rusty's ONGCHK.COM.
         bus(0,8'hff); transfer(0,1,0,status);

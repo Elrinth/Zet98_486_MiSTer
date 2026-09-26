@@ -5,3 +5,4 @@
 /tests/*.vhd text eol=lf
 /tests/Dockerfile text eol=lf
 /rtl/cpu/*.sv text eol=lf
+/scripts/*.sh text eol=lf

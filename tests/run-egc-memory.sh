@@ -9,7 +9,7 @@ make_variant() {
         Zet98/sdramc.vhd > "$2"
 }
 make_variant 15 "$out/sdram.vhd"
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram.vhd" tests/sdram_request_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/sdram.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
 # All 256 operations x 16 plane masks x four byte masks, plus ordinary/RMW
 # compatibility while the optional feature is enabled but not selected.

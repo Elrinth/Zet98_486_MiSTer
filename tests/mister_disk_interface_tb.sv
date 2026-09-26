@@ -11,13 +11,16 @@ module mister_disk_interface_tb;
     assign bus[48:38] = 0;
     assign bus[35:33] = {1'b0, enable, strobe};
     assign bus[31:16] = host_data;
-    emu dut (.CLK_50M(clk), .RESET(1'b0), .HPS_BUS(bus));
+    emu #(.NATIVE_IMAGES(0)) dut (.CLK_50M(clk), .RESET(1'b0), .HPS_BUS(bus));
     // Disable unrelated configuration ROM/keyboard logic for Icarus, whose
     // generate scope rules differ from Quartus for this upstream PS/2 block.
     defparam dut.hps_io.CONF_STR_BRAM = 0;
     defparam dut.hps_io.PS2DIV = 0;
+    defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
+    defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
     defparam dut.floppy_icon.TILE_MAP_FILE="rtl/assets/floppy-tile-map.mem";
     defparam dut.floppy_icon.TILE_PIXELS_FILE="rtl/assets/floppy-tile-pixels.mem";
+    defparam dut.floppy_icon.FONT_FILE="rtl/assets/boot-font.mem";
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;
@@ -124,7 +127,7 @@ module altddio_out #(
 endmodule
 
 // Pin-compatible machine stub. The bench acts as the serialized disk engine.
-module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWMEM_CACHE = 0, LOWMEM_CACHE_KB = 8, UPPER_RAM_ICACHE = 0, SND = 2) (
+module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWMEM_CACHE = 0, LOWMEM_CACHE_KB = 8, UPPER_RAM_ICACHE = 0, PEGC_ENABLE = 0, SND = 2, USE_JT08 = 0, USE_IDE_BOOTROM = 0) (
     input ramclk, cpuclk, vidclk, plllock,
     input [64:0] sysrtc,
     output pMemCke, pMemCs_n, pMemRas_n, pMemCas_n, pMemWe_n, pMemUdq, pMemLdq, pMemBa1, pMemBa0,
@@ -137,6 +140,9 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     input [63:0] pDdrReadData,
     input [19:0] LDR_ADDR, input [7:0] LDR_WDAT, input LDR_OE, LDR_WR, LDR_DONE,
     output LDR_ACK,
+    input pBootHold,
+    output [1:0] pFloppyPresent,
+    output [127:0] pCPUDebug,
     input pPs2Clkin, pPs2Datin, pPmsClkin, pPmsDatin,
     output pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout,
     input [5:0] pJoyA, pJoyB,
@@ -156,6 +162,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     output reg pIDERead, pIDEWrite, pIDEResetn,
     input [15:0] pIDEReadData,
     input pIDEOE, pIDEIRQ,
+    input [1:0] pCPUSpeed,
     input [7:0] pMPUReadData,
     input pMPUOE, pMPUIRQ,
     output pLed, output [1:0] pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
@@ -172,6 +179,8 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     assign mist_buffdin = mist_buffaddr[7:0] ^ 8'ha5;
     assign LDR_ACK = 0;
     assign pFloppyAccess = 0;
+    assign pFloppyPresent = 0;
+    assign pCPUDebug = 0;
     assign {pVideoR, pVideoG, pVideoB, pVideoHS, pVideoVS, pVideoEN, pVideoClk} = 0;
     assign {pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout} = 4'b1111;
 endmodule

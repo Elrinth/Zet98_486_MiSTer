@@ -9,12 +9,21 @@
 ; LBA write window; use a disposable image until the embedding BIOS is tested.
 bits 16
 cpu 386
+%ifndef BIOS_DYNAMIC_GEOMETRY
 %ifndef BIOS_HEADS
 %error Define BIOS_HEADS, BIOS_SECTORS and BIOS_CYLINDERS for the image
+%endif
 %endif
 %ifndef BIOS_POLL_LIMIT
 %define BIOS_POLL_LIMIT 1000000
 %endif
+%ifdef BIOS_DYNAMIC_GEOMETRY
+; Native boot ROM validates these DWORDs before installing the service.
+%define BIOS_HEADS dword [cs:bios_heads]
+%define BIOS_SECTORS dword [cs:bios_sectors]
+%define BIOS_CYLINDERS dword [cs:bios_cylinders]
+%define BIOS_TOTAL dword [cs:bios_capacity]
+%else
 %define BIOS_TOTAL (BIOS_HEADS * BIOS_SECTORS * BIOS_CYLINDERS)
 %ifdef BIOS_ALLOW_WRITES
 %ifndef BIOS_WRITE_FIRST_LBA
@@ -29,6 +38,8 @@ cpu 386
 %endif
 %if BIOS_HEADS < 1 || BIOS_HEADS > 255 || BIOS_SECTORS < 1 || BIOS_SECTORS > 255 || BIOS_CYLINDERS < 1 || BIOS_CYLINDERS > 65535 || BIOS_TOTAL > 0x10000000
 %error Geometry is outside the supported PC-98/LBA28 range
+%endif
+
 %endif
 
 bios_int1b:
@@ -107,10 +118,12 @@ bios_int1b:
     and dl,0fh
     cmp dl,5
     jne .buffer_range
+%ifndef BIOS_DYNAMIC_GEOMETRY
     cmp esi,BIOS_WRITE_FIRST_LBA
     jb .protected
     cmp eax,BIOS_WRITE_LAST_LBA+1
     ja .protected
+%endif
 .buffer_range:
 %endif
     movzx edi,word [ss:bp+32]
@@ -155,6 +168,17 @@ bios_int1b:
     mov cx,256
     mov dx,0640h
     rep insw
+%ifdef BIOS_PROBE_READ_WORD4
+    ; Diagnostic-only stop before the bounce buffer is copied anywhere.
+    ; The existing core UART captures this otherwise unassigned port write.
+    mov ax,[ss:bp-508]
+    mov dx,7ff0h
+    out dx,ax
+    cli
+.probe_read_halt:
+    hlt
+    jmp .probe_read_halt
+%endif
     pop edi
     pop esi
     mov dx,064eh
@@ -183,6 +207,13 @@ bios_int1b:
     jbe .copy
     mov cx,512
 .copy:
+    ; Keep the bounce buffer and status check, but avoid a string iteration
+    ; for every byte. The caller may be unaligned or request a partial sector.
+    push cx
+    shr cx,2
+    rep movsd
+    pop cx
+    and cx,3
     rep movsb
     pop edi
     pop esi
@@ -260,8 +291,16 @@ bios_int1b:
     cmp byte [ss:bp+29],84h
     jne .sense_done
     mov word [ss:bp+16],512
+%ifdef BIOS_DYNAMIC_GEOMETRY
+    mov ax,[cs:bios_cylinders]
+    mov [ss:bp+24],ax
+    mov ah,[cs:bios_heads]
+    mov al,[cs:bios_sectors]
+    mov [ss:bp+20],ax
+%else
     mov word [ss:bp+24],BIOS_CYLINDERS
     mov word [ss:bp+20],(BIOS_HEADS << 8) | BIOS_SECTORS
+%endif
 .sense_done:
     mov al,0fh
     jmp .return

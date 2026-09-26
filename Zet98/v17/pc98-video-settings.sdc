@@ -4,8 +4,8 @@
 # delayed-payload/early-capture regressions in tests/run-video-settings.sh.
 set settings_payload [get_registers {*|gdc_settings|held_data*}]
 set settings_capture [get_registers {*|gdc_settings|received_data*}]
-# GRAPHSCR98 declares LINENUM1 but never consumes it. Quartus removes that
-# field (bits 95..104) in both banks. Check every actually consumed bit;
+# Packed raster consumes both partition lengths, including bits95..104.
+# Check every consumed bit, including new packed-mode/base/page/clock fields;
 # aggregate counts alone could be satisfied by replicated registers.
 foreach bank [list $settings_payload $settings_capture] {
     set present [dict create]
@@ -15,8 +15,9 @@ foreach bank [list $settings_payload $settings_capture] {
             dict set present $bit 1
         }
     }
-    for {set bit 0} {$bit < 121} {incr bit} {
-        if {$bit >= 95 && $bit <= 104} {continue}
+    set settings_width [expr {$pegc_enabled ? 128 : 122}]
+    for {set bit 0} {$bit < $settings_width} {incr bit} {
+        if {!$pegc_enabled && $bit>=95 && $bit<=104} {continue}
         if {![dict exists $present $bit]} {
             error "Missing consumed GDC settings snapshot bit $bit"
         }

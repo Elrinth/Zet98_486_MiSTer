@@ -1,6 +1,7 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ; 8086-compatible DOS benchmark for a disposable PC-98 System disk.
 ; Replaces BOOT.COM without reallocating its original 2011-byte allocation.
+; Install as the disk's actual CONFIG.SYS SHELL (some fixtures use Z98FONT.COM).
 ; Uses DOS time with interrupts enabled. Synchronizes to a clock transition,
 ; then repeats each kernel for at least ten reported seconds. A run must finish
 ; within one hour. Reported hundredths do not imply hundredth-second resolution.
@@ -149,6 +150,7 @@ fail:
     mov si, failed
     call puts
 save:
+    mov byte [save_stage], 1
     mov dx, log_name
     xor cx, cx
     mov ah, 3ch
@@ -159,11 +161,13 @@ save:
     mov cx, [log_pos]
     sub cx, dx
     mov [write_length], cx
+    mov byte [save_stage], 2
     mov ah, 40h
     int 21h
     jc save_error
     cmp ax, [write_length]
     jne save_error
+    mov byte [save_stage], 3
     mov ah, 3eh
     int 21h
     jc save_error
@@ -176,10 +180,87 @@ halt:
     hlt
     jmp halt
 save_error:
+    push ax
     mov si, save_failed
+    call puts
+    xor ax, ax
+    mov al, [save_stage]
+    xor dx, dx
+    call decimal32
+    mov si, error_ax_text
+    call puts
+    pop ax
+    xor dx, dx
+    call decimal32
+    mov si, critical_text
+    call puts
+    mov ax, [critical_code]
+    xor dx, dx
+    call decimal32
+    mov si, error_handle_text
+    call puts
+    mov ax, bx
+    xor dx, dx
+    call decimal32
+    mov si, error_cs_text
+    call puts
+    mov ax, cs
+    xor dx, dx
+    call decimal32
+    mov si, error_ds_text
+    call puts
+    mov ax, ds
+    xor dx, dx
+    call decimal32
+    mov ah, 51h             ; DOS current process segment; failure report only
+    int 21h
+    push cs
+    pop ds
+    mov si, error_psp_text
+    call puts
+    mov ax, bx
+    xor dx, dx
+    call decimal32
+    cmp bx, 0a000h
+    jae .reported
+    mov es, bx
+    mov si, error_jft_text
+    call puts
+    mov di, 18h
+    mov bp, 20              ; default DOS process handle table
+.handles:
+    xor ax, ax
+    mov al, [es:di]
+    xor dx, dx
+    call decimal32
+    mov al, ' '
+    call putchar
+    inc di
+    dec bp
+    jnz .handles
+    mov si, error_jft_count_text
+    call puts
+    mov ax, [es:32h]
+    xor dx, dx
+    call decimal32
+    mov si, error_jft_ptr_text
+    call puts
+    mov ax, [es:36h]
+    xor dx, dx
+    call decimal32
+    mov al, ':'
+    call putchar
+    mov ax, [es:34h]
+    xor dx, dx
+    call decimal32
+.reported:
+    push ds
+    pop es
+    mov si, newline
     call puts
     jmp halt
 critical_error:
+    mov [cs:critical_code], di
     mov al, 3
     iret
 
@@ -334,8 +415,20 @@ units: db ' hundredths',13,10,0
 passed: db 'PASS: ALU, RAM and stack checksums.',13,10,0
 failed: db 'FAIL: kernel checksum.',13,10,0
 finished: db 'Saved Z98PERF.TXT. Benchmark finished.',13,10,0
-save_failed: db 'ERROR saving Z98PERF.TXT.',13,10,0
+save_failed: db 'ERROR saving Z98PERF.TXT. Stage=',0
+error_ax_text: db ' AX=',0
+critical_text: db ' INT24 DI=',0
+error_handle_text: db ' BX=',0
+error_cs_text: db ' CS=',0
+error_ds_text: db ' DS=',0
+error_psp_text: db ' PSP=',0
+error_jft_text: db ' JFT=',0
+error_jft_count_text: db ' COUNT=',0
+error_jft_ptr_text: db ' PTR=',0
+newline: db 13,10,0
 log_name: db 'Z98PERF.TXT',0
+save_stage: db 0
+critical_code: dw 0ffffh
 log_pos: dw 0
 start_lo: dw 0
 start_hi: dw 0

@@ -312,6 +312,10 @@ always @(posedge clk) begin : memory_mapped_registers
         part       <= 0;
     end else begin
         up_chreg   <= 0;
+        // JT08 PSG writes are accepted at the host clock. End the strobe
+        // before another address can change psg_addr; an FM-clock-wide pulse
+        // would overwrite the next selected PSG register on fast accesses.
+        if (use_chipid && use_ssg) psg_wr_n <= 1'b1;
         // WRITE IN REGISTERS
         if( write ) begin
             if( !addr[0] ) begin
@@ -542,6 +546,10 @@ always @(posedge clk) begin : memory_mapped_registers
 end
 
 reg  [4:0] busy_cnt; // busy lasts for 32 synthesizer clock cycles
+// YM2608 application manual, p.14: SSG $00-$0F has zero extra wait.
+// Preserve native FM/rhythm busy protection and the other JT12 variants.
+wire psg_nowait_write = use_chipid && use_ssg && !addr[1] && !part &&
+                        selected_register[7:4] == 0;
 wire [5:0] nx_busy = {1'd0,busy_cnt}+{5'd0,busy};
 
 always @(posedge clk, posedge rst) begin
@@ -549,7 +557,7 @@ always @(posedge clk, posedge rst) begin
         busy     <= 0;
         busy_cnt <= 0;
     end else begin
-        if( write&addr[0] ) begin
+        if( write && addr[0] && !psg_nowait_write ) begin
             busy     <= 1;
             busy_cnt <= 0;
         end else if(clk_en) begin

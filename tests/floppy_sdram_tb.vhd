@@ -7,7 +7,7 @@ use std.env.all;
 entity floppy_sdram_tb is
     generic (CPU_MHZ : positive := 50; BUFFERED : boolean := true;
              MEM_PHASE_PS : natural := 0; USE_FEC : boolean := false;
-             CONTINUOUS : boolean := false);
+             CONTINUOUS : boolean := false; ALL_READS : boolean := false);
 end entity;
 architecture test of floppy_sdram_tb is
     constant AW : positive := 22;
@@ -94,17 +94,18 @@ begin
     end process;
     process
         variable a, c, address_index : natural;
+        variable is_read : boolean;
     begin
         wait for 137 ns; rstn<='1'; wait until ready='1'; wait for 300 ns;
         for n in 0 to 255 loop
             wait until falling_edge(cpuclk);
-            if CONTINUOUS then address_index:=n/2; else address_index:=n; end if;
+            if CONTINUOUS and not ALL_READS then address_index:=n/2; else address_index:=n; end if;
             address_all<=std_logic_vector(to_unsigned((address_index*130071+911) mod 2**(AW+2),AW+2));
             expected_address<=std_logic_vector(to_unsigned((address_index*130071+911) mod 2**(AW+2),AW+2));
             wd(0)<=std_logic_vector(to_unsigned((n*8191+349) mod 65536,16));
             expected_data<=std_logic_vector(to_unsigned((n*8191+349) mod 65536,16));
-            reading<=n mod 2=0; active<=true; a:=activations; c:=commands;
-            if n mod 2=0 then read_req<='1'; write_req<='0';
+            is_read:=ALL_READS or n mod 2=0; reading<=is_read; active<=true; a:=activations; c:=commands;
+            if is_read then read_req<='1'; write_req<='0';
             else read_req<='0'; write_req<='1'; end if;
             wait until busy='1' for 1 us;
             assert busy='1' report "floppy request not accepted" severity failure;
@@ -118,7 +119,7 @@ begin
             assert busy='0' report "floppy request timed out" severity failure;
             wait for 1 ps;
             assert activations=a+1 and commands=c+1 report "duplicated/missing floppy command" severity failure;
-            if n mod 2=0 then
+            if is_read then
                 assert returned_data=expected_data report "floppy read data missing on WAIT completion" severity failure;
             end if;
             if not CONTINUOUS then

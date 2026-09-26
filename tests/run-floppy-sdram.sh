@@ -10,7 +10,7 @@ for delay in 15 80; do
         -e "/FEC_REQUEST_BUNDLE_ADMISSION/a\\                    assert fec_request_crossing'stable(5 ns) report \"floppy request bundle arrived too late\" severity failure;" \
         Zet98/sdramc.vhd > "$out/sdram-$delay.vhd"
 done
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-15.vhd" tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/sdram-15.vhd" tests/floppy_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb
 for port in false true; do
     for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
@@ -26,7 +26,7 @@ for port in false true; do
             -gUSE_FEC="$port" -gCPU_MHZ="$mhz" -gBUFFERED=false --assert-level=error
     done
 done
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-80.vhd" tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/sdram-80.vhd" tests/floppy_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb
 for port in false true; do
     if ghdl -r --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb -gUSE_FEC="$port" \
@@ -39,7 +39,7 @@ done
 sed -e "s/if FDEbusy='1' and FDEdone_sync(1)=FDEREQ then -- FDE_READ_COMPLETION_CAPTURE/if FDEACKb='1' then -- late read/" \
     -e "s/if FECbusy='1' and FECdone_sync(1)=FECREQ then -- FEC_READ_COMPLETION_CAPTURE/if FECACKb='1' then -- late read/" \
     Zet98/sdramc.vhd > "$out/late-read.vhd"
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/late-read.vhd" tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/late-read.vhd" tests/floppy_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb
 for port in false true; do
     if ghdl -r --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb -gUSE_FEC="$port" \
@@ -53,7 +53,7 @@ done
 # Reusing an old high completion level must not acknowledge a new request.
 sed -e "s/fdeend<=lFDEREQ(2);/fdeend<='1';/" \
     -e "s/fecend<=lFECREQ(2);/fecend<='1';/" Zet98/sdramc.vhd > "$out/stale-completion.vhd"
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/stale-completion.vhd" tests/floppy_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/stale-completion.vhd" tests/floppy_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb
 for port in false true; do
     if ghdl -r --std=08 -fsynopsys --workdir="$out" floppy_sdram_tb -gUSE_FEC="$port" \

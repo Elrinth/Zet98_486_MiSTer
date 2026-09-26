@@ -34,3 +34,25 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" grpal_video_tb --assert-level=er
 fi
 grep -q 'palette snapshot lost final update' "$out/late.log" || { cat "$out/late.log";exit 1; }
 echo 'PASS: late palette payload negative control rejected'
+# Check the actual payload remains stable for >=20 ns after video capture
+# (two CPU periods at the maximum tested 100 MHz). This is the handshake
+# condition needed to exclude unrelated nominal-edge hold checks in STA.
+python3 tests/instrument_palette_hold.py "$out/held.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/held.vhd" tests/grpal_video_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" grpal_video_tb
+for mhz in 20 40 50 60 90 100; do
+    for phase in 1300 4700 9100; do
+        ghdl -r --std=08 -fsynopsys --workdir="$out" grpal_video_tb -gCPU_MHZ="$mhz" -gVIDEO_PHASE_PS="$phase" --assert-level=error --ieee-asserts=disable
+    done
+done
+# Bypassing the return synchronizer allows the next CPU edge to change the
+# payload too soon. The temporal observer, not the final-palette comparison,
+# must reject this deliberately broken handshake.
+sed 's/palette_request=ack_sync(1)/palette_request=palette_ack/' "$out/held.vhd" > "$out/early-release.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/early-release.vhd" tests/grpal_video_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" grpal_video_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" grpal_video_tb -gCPU_MHZ=100 --assert-level=error --ieee-asserts=disable > "$out/early-release.log" 2>&1; then
+    echo 'FAIL: early palette release accepted';exit 1
+fi
+grep -q 'palette payload changed inside post-capture hold window' "$out/early-release.log" || { cat "$out/early-release.log";exit 1; }
+echo 'PASS: post-capture payload hold window and early-release negative control'

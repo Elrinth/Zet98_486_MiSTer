@@ -184,6 +184,10 @@ real_mode:
     mov es, dx
     mov byte [es:401h], 112          ; 14 MB in 128 KB units
     mov [es:594h], ax               ; mapped MB above 16 MB, skipping aperture
+    ; This initializer has just executed 386 protected-mode memory probes.
+    ; The legacy BIOS sets the V30 flag unconditionally. Preserve its other
+    ; identification bits, but do not misreport this verified 386+ CPU as V30.
+    and byte [es:501h], 0bfh
     add al, 16
     mov [detected], al
 .done:

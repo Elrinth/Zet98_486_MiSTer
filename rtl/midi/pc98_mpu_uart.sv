@@ -7,7 +7,8 @@
 module pc98_mpu_uart #(
     parameter integer CLOCK_HZ = 50000000,
     parameter integer BAUD = 31250,
-    parameter integer FIFO_BITS = 4
+    parameter integer FIFO_BITS = 4,
+    parameter integer RESET_PANIC = 0
 ) (
     input wire clk, reset, enable,
     input wire [15:0] io_address, io_writedata,
@@ -39,11 +40,22 @@ module pc98_mpu_uart #(
     wire tx_full = tx_count == FIFO_DEPTH;
     wire rx_full = rx_count == FIFO_DEPTH;
     wire tx_push = write_start && !io_address[1] && uart_mode && !tx_full;
-    reg [9:0] tx_shift;
-    reg [3:0] tx_bits;
-    reg [TIMER_BITS-1:0] tx_timer;
-    wire tx_pop = !tx_bits && tx_count != 0;
-    assign midi_tx = !enable || reset || !tx_bits ? 1'b1 : tx_shift[0];
+    reg [9:0] tx_shift = 10'h3ff;
+    reg [3:0] tx_bits = 0;
+    reg [TIMER_BITS-1:0] tx_timer = 0;
+    reg reset_seen = 0, enable_seen = 0;
+    reg panic_pending = 0, panic_lead = 1;
+    reg [3:0] panic_channel = 0, panic_phase = 0;
+    wire panic_event = RESET_PANIC && (reset_command ||
+        (reset && !reset_seen && enable) || (enable != enable_seen));
+    wire tx_pop = !clear && !tx_bits && tx_count != 0 && !panic_pending && !panic_event;
+    wire [7:0] panic_byte = panic_lead ? 8'hf7 : // End interrupted SysEx.
+        (panic_phase == 0 || panic_phase == 3 || panic_phase == 6 || panic_phase == 9) ? {4'hb,panic_channel} :
+        panic_phase == 1 ? 8'd64 :  // Sustain off.
+        panic_phase == 4 ? 8'd120 : // All Sound Off, including sustained voices.
+        panic_phase == 7 ? 8'd123 : // All Notes Off.
+        panic_phase == 10 ? 8'd121 : 8'd0; // Reset All Controllers.
+    assign midi_tx = (!RESET_PANIC && (!enable || reset)) || !tx_bits ? 1'b1 : tx_shift[0];
     assign io_oe = decoded && io_read;
     assign irq = enable && !reset && (ack_pending || rx_count != 0);
 
@@ -86,7 +98,6 @@ module pc98_mpu_uart #(
     always @(posedge clk) begin
         if (clear) begin
             tx_head <= 0; tx_tail <= 0; tx_count <= 0;
-            tx_shift <= 10'h3ff; tx_bits <= 0; tx_timer <= 0;
             tx_overrun <= 0;
         end else begin
             if (write_start && !io_address[1] && uart_mode && tx_full)
@@ -95,24 +106,48 @@ module pc98_mpu_uart #(
                 tx_fifo[tx_tail] <= io_writedata[7:0];
                 tx_tail <= tx_tail + 1'b1;
             end
-            if (tx_pop) begin
-                tx_head <= tx_head + 1'b1;
-                tx_shift <= {1'b1, tx_fifo[tx_head], 1'b0};
-                tx_bits <= 10;
-                tx_timer <= BIT_TICKS-1;
-            end else if (tx_bits != 0) begin
-                if (tx_timer != 0) tx_timer <= tx_timer - 1'b1;
-                else begin
-                    tx_shift <= {1'b1, tx_shift[9:1]};
-                    tx_bits <= tx_bits - 1'b1;
-                    tx_timer <= BIT_TICKS-1;
-                end
-            end
+            if (tx_pop) tx_head <= tx_head + 1'b1;
             case ({tx_push, tx_pop})
                 2'b10: tx_count <= tx_count + 1'b1;
                 2'b01: tx_count <= tx_count - 1'b1;
                 default: ;
             endcase
+        end
+    end
+
+    // The serializer survives guest reset long enough to finish its current
+    // byte and send panic. Queued game bytes are discarded by clear above.
+    // New game traffic queues behind panic with ordinary FIFO backpressure.
+    always @(posedge clk) begin
+        reset_seen <= reset;
+        enable_seen <= enable;
+        if (!RESET_PANIC && clear) begin
+            tx_shift <= 10'h3ff; tx_bits <= 0; tx_timer <= 0;
+        end else begin
+            if (!tx_bits) begin
+                if (panic_pending && !panic_event) begin
+                    tx_shift <= {1'b1,panic_byte,1'b0};
+                    tx_bits <= 10; tx_timer <= BIT_TICKS-1;
+                    if (panic_lead) panic_lead <= 0;
+                    else if (panic_phase == 11) begin
+                        panic_phase <= 0;
+                        panic_channel <= panic_channel + 1'b1;
+                        if (panic_channel == 15) panic_pending <= 0;
+                    end else panic_phase <= panic_phase + 1'b1;
+                end else if (tx_pop) begin
+                    tx_shift <= {1'b1,tx_fifo[tx_head],1'b0};
+                    tx_bits <= 10; tx_timer <= BIT_TICKS-1;
+                end
+            end else if (tx_timer != 0) tx_timer <= tx_timer - 1'b1;
+            else begin
+                tx_shift <= {1'b1,tx_shift[9:1]};
+                tx_bits <= tx_bits - 1'b1;
+                tx_timer <= BIT_TICKS-1;
+            end
+            if (panic_event) begin
+                panic_pending <= 1; panic_lead <= 1;
+                panic_channel <= 0; panic_phase <= 0;
+            end
         end
     end
 

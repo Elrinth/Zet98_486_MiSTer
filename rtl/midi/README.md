@@ -5,15 +5,14 @@ the core menu. The option is off by default. This prototype has passed
 simulation, guest IRQ tests and exact HPS serial capture on a fitted 50 MHz
 core. The first hardware test exposed an incorrect HPS UART placement; the
 corrected build delivers the complete 134-byte diagnostic packet to ttyS1.
-Audible playback remains unverified. It is not a complete intelligent-mode
+Game MIDI reception and FluidSynth activity were later verified on MidiPollFix50; TV audio quality remains unverified. It is not a complete intelligent-mode
 MPU-401.
 
 The first Nightslave hardware test with MPU enabled stalled in its MIDI driver;
-the same RBF reaches the title with MPU disabled. Keep the option off for
-ordinary play until this is fixed. A silent polling diagnostic reads FEh under
+the same RBF reaches the title with MPU disabled. This was corrected by the IRQ6 withdrawal change described below. A silent polling diagnostic reads FEh under
 CLI, then observes a stale pending IRQ6 and an empty-input interrupt handler.
 The driver compatibility issue is not covered by the earlier serial replay.
-The correction described below still requires a new fitted hardware test.
+MidiPollFix50 subsequently passed the correction on hardware; see HARDWARE_TESTING.md, "MIDI withdrawal fix on hardware". The new 90 MHz z486 candidate still needs its own game trial.
 
 The guest interface is the PC-98 default: low-byte data at **E0D0h**,
 command/status at **E0D2h**, and **master PIC IRQ6**, normally vector 0Eh.
@@ -125,3 +124,32 @@ settings are restored afterwards. Captured packet SHA-256:
 This verifies physical transport, not synthesis, external modules, intelligent
 mode or music quality. The location guard has since been expanded to
 `scripts/check-hps-peripherals.tcl`, also covering the shared SPI/HDMI routes.
+
+
+The current #138/#139 debug builds do **not** enable this MPU interface.
+Their 115200-baud CPU telemetry can become random notes if routed into
+FluidSynth. Keep UART connection disabled on debug builds. The forthcoming
+combined candidate uses `-MidiUart` without `-Z486DebugUart`.
+
+For a MIDI-enabled build, set the core's **MPU MIDI: UART**, then MiSTer's UART
+connection to **MIDI**, **Local**, **FSYNTH**, at **31250 baud**. The user's
+MiSTer already has FluidSynth and GeneralUser-GS.sf2 installed. In Night Slave,
+choose **MIDI (MPU/RS-232C)**. On build #142, the user confirmed both NightSlave music and its music-test
+menu sound correct with this configuration. The independent 134-byte wire
+diagnostic and 200 IRQ acknowledgements also passed. MUNT can emulate MT-32/CM-32 with owner-supplied
+ROMs, but General MIDI music should use a suitable FluidSynth soundfont.
+
+
+Reset handling: the MiSTer wrapper enables `RESET_PANIC`. A guest MPU reset,
+core reset, or MIDI enable transition finishes any byte in flight, drops old
+queued bytes, ends SysEx and sends CC64/120/123/121 zero on all16 channels.
+New traffic follows this sequence using the existing FIFO backpressure.
+This change is simulation-tested; the installed #142 RBF does not include it.
+
+`scripts/mister_midi_guard.py` watches host core transitions and silences the
+local FluidSynth through its control socket. It does not consume UART data
+and only reacts when the previous core was Zet98. This also covers unloading
+the FPGA, when the outgoing core can no longer transmit. The owner MiSTer
+runs it via its new linux/user-startup.sh; a held note test went from1 voice
+to0 on core exit. It requires FluidSynth's local port9800; it does not reset
+external hardware modules or MUNT.

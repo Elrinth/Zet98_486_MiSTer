@@ -1643,3 +1643,1310 @@ Speech just after C-LAB still plays strangely; the user explicitly deferred
 investigation of that remaining issue. Its cause has not been isolated, and
 the listening result is not a calibrated comparison with a physical 86 card.
 Sustained gameplay FPS has not been measured.
+
+### September 23: user-supplied CPUBENCH on JT08 build #115
+
+The user's `CPUBENCH.EXE` (20,388 bytes, SHA-256
+`042cca5249c391f5714a6e1a168da650dbd71c04f2922ff86344ba7b64c6a825`) runs
+on the actual 100 MHz / 64 MB JT08 #115 core. Version 0.980 (1992, ZOBplus
+Hayami) reports **55.72 relative to the first PC9801**, completing 30,000
+Dhrystone loops in **1.24 seconds** with its default arguments. Its legacy
+CPU detector prints `Cx486DLC Not FPU Real mode`; the actual FPGA CPU remains
+ao486. This is one run of this benchmark, not an overall Pentium-equivalence
+or gameplay-performance measurement.
+
+The executable was installed as `A:\CPUBENCH.EXE` on the separate
+`Zet98_CPUBENCH_JT08_B115.vhd`; AUTOEXEC runs it at startup and then leaves
+the DOS prompt so it can be rerun. The VHD was created on MiSTer from the
+verified inactive RustyGDC test image. Both FAT copies and the saved executable
+were checked, and a whole-image comparison confirmed only 40 sectors changed
+for the benchmark and its startup batch file. Original game disks are intact.
+
+Evidence: `build/hardware/cpubench-jt08-b115/manifest.json` and
+`build/monitor/captures/b115c0b000004c8ea68e202609230001/screenshot.png`.
+The result is left displayed on MiSTer. Its launcher is
+`/media/fat/_Computer/_Zet98_Test/Zet98_CPUBENCH_JT08_B115.mgl`.
+
+
+## z486 bring-up, build #116 (2026-09-23)
+
+The first z486/100 MHz/64 MB/JT08 build fits at 90% ALMs and M10Ks.
+RBF SHA256: `562f1406f99702ad7fbf318bb5b3b1e91d408fedfb71c853a795f53d4180c464`.
+Worst slack is -7.695 ns; seven reported timing violations remain. Pixel
+clock and HPS peripheral guards pass, but this does not establish operation.
+
+The CPU diagnostic stayed black and its downloaded D88 had no Z98PERF.TXT.
+Repeated CPUBENCH boots also stayed black, including more than three minutes
+of settling on the final attempt. The trial is NOT hardware qualified and
+has no benchmark score. Restoring the unmodified B115 launcher reproduced
+55.72 / 1.24 s, with its original DOS/RAM configuration intact.
+
+Evidence: `build/hardware/z486-jt08-100/manifest.json`, B116 captures ending
+`230002` (CPU) and `230004` (CPUBENCH), and the B115 recovery capture
+`build/monitor/captures/b115a0b000004c8ea68e202609230002/screenshot.png`.
+Post-fit reports are retained in the full build #116 snapshot. See
+`rtl/Z486_PC98.md` for the separate reduced-clock diagnostic work.
+
+## z486 50 MHz bring-up, build #119 (2026-09-23)
+
+The reduced-clock diagnostic boots DOS on the actual MiSTer. It retains
+64 MB RAM and JT08 OPNA, and uses the UART for startup telemetry instead
+of MIDI. RBF SHA-256:
+`57a37ac5aac2effa8d65bcbecc6ccc0f9c72e96c91734ad83118e1238e473e93`.
+CPU timing passes; the remaining two failures are HDMI setup checks,
+worst -1.561 ns. The complete Quartus database is retained.
+
+Actual hardware results:
+
+- CPU benchmark v3: ALU 10, RAM-copy 228, stack 214 blocks per 10 seconds;
+  all three checksums pass.
+- 64 MB physical map: sentinels at both ends of each mapped MB,
+  byte/word/unaligned DWORD access and return to real mode pass. This
+  checks the map rather than exhaustively stress-testing every byte.
+- 100 FM timer B IRQ12 deliveries, status clear and cascaded PIC EOI pass.
+- Rusty's original ONGCHK detects code 3, PC-9801-86 / OPNA.
+- The user's CPUBENCH v0.980: **60.08**, **1.15 seconds**, 30,000 Dhrystone
+  loops, reproduced twice. DOS 6.20 reports the 64 MB map / 62 MB extended
+  RAM. Its CPU detector prints i486SX without FPU.
+
+This is the 50 MHz diagnostic, not a validated 100 MHz result. Evidence and
+downloaded result files are in `build/hardware/z486-jt08-50-routed/manifest.json`;
+the repeated score is visible in
+`build/monitor/captures/b119c0b000004c8ea68e202609230002/screenshot.png`.
+
+## z486 100 MHz retry, build #120 (2026-09-23)
+
+The registered shift-selector build compiles at 37,279 ALMs, 496 M10Ks and
+45 DSPs, with worst slack -8.681 ns. It does not pass the hardware trial:
+the CPU test stalls after the DOS 3.3 banner without producing Z98PERF.TXT,
+and the isolated CPUBENCH disk does not boot to DOS. No score was obtained.
+RBF SHA-256:
+`fbcf954c927548d3a90c090b6b60a0e18b3eab19109c1e04cf5bfd5eadd4257d`.
+
+Evidence is saved in `build/hardware/z486-jt08-100-routed/manifest.json`,
+including UART traces, diagnostic disk and screenshots. Restoring the
+unchanged build #119 launcher reproduced **60.08 / 1.15 seconds** again;
+the recovery screenshot is
+`build/monitor/captures/b119a0b000004c8ea68e202609230003/screenshot.png`.
+The full #120 database and post-fit timing reports are retained.
+
+## z486 registered memory requests, build #121 (2026-09-23)
+
+Build #121 fits in 37,494 ALMs, 496 M10Ks and 45 DSPs. Worst setup slack
+improves to -7.167 ns. All reported hold checks pass: the targeted video
+line-counter paths now have 2.259–2.690 ns of added routing delay. CPU
+setup, HDMI setup and CPU reset-recovery failures remain. The complete
+database and all-corner post-fit reports are retained.
+
+The CPU diagnostic remains at the DOS 3.3 banner after more than four
+minutes. Its archived D88 matches the pristine input and contains no
+Z98PERF.TXT. The separate CPUBENCH DOS 6.20 image reaches a HIMEMX error
+(extended memory unavailable), followed by a divide-by-zero message.
+It produces no score. RBF SHA-256:
+`236c9d195b2b65f5f4f4fac0c335c1f97d8e6435790434fac0e19e527800b8f8`.
+
+Evidence: `build/hardware/z486-jt08-100-pipeline/manifest.json` and captures
+`b121c0a000004c8ea68e202609230003` / `b121c0b000004c8ea68e202609230002`.
+Restoring #119 again reproduces 60.08 / 1.15 seconds, recorded in
+`build/monitor/captures/b119a0b000004c8ea68e202609230004/screenshot.png`.
+Build #122 targets the remaining register-forwarding/shifter timing path.
+
+## z486 shifter operand preread, build #122 (2026-09-23)
+
+Build #122 fits in 37,227 ALMs, 496 M10Ks and 45 DSPs. All reported hold
+checks pass; worst setup slack is -8.285 ns. The worst CPU path now runs
+through segment-size fault checking and instruction-chain address selection
+into the microcode ROM, with 17.398 ns data delay. The full database and
+post-fit timing reports are retained.
+
+Both the CPU diagnostic (over four minutes) and CPUBENCH (over two minutes)
+remain black on the actual MiSTer. UART reports EIP 0000007D and physical
+addresses around FD870–FD890. The archived CPU disk matches the pristine
+input and contains no Z98PERF.TXT. No score was obtained. RBF SHA-256:
+`8e04c311b7d5cbbe023d86b5a806213b11ff69ed97dfe96086ca00676d547fdf`.
+
+Evidence: `build/hardware/z486-jt08-100-shift-preread/manifest.json`, CPU
+captures `b122c0a000004c8ea68e202609230001` / `b122c0a000004c8ea68e202609230002`,
+and CPUBENCH capture `6d83697111194c3aae0b2e89ea94db05`.
+Restoring #119 again reproduces 60.08 / 1.15 seconds, recorded in
+`build/monitor/captures/9afdbcbb7a0f4e2e964ed65a2bfa7c43/screenshot.png`.
+The owner's boot ROM maps EIP 007D at this location to the checksum-failure
+self-loop. A synthetic, firmware-free simulation test now covers the same
+uncached LODSW, independent byte sums, LOOP and flag-dependent indirect-jump
+decision, including both zero and nonzero checksums.
+
+## z486 clock-only comparison, build #123 (2026-09-23)
+
+The same RTL as #122, compiled at 50 MHz, fits in 35,277 ALMs, 496 M10Ks and
+45 DSPs. CPU setup margin is at least +2.583 ns. All hold checks pass; the
+only two remaining negative checks are HDMI setup, worst -1.195 ns. The
+full database is retained. RBF SHA-256:
+`f235f1935d0e19f313e39dcdcdaac15600346abee70ae59dfd2cab8a5ad6ecfa`.
+
+Actual MiSTer results:
+
+- CPU benchmark v3: ALU 10, RAM-copy 232, stack 203 blocks per 10 seconds;
+  all checksums pass.
+- 64 MB physical map / 62 MB extended: mapped-MB sentinels, byte/word/
+  unaligned DWORD accesses and real-mode return pass.
+- 100 FM timer B IRQ12 deliveries, status clear and cascaded EOI pass.
+- Rusty ONGCHK returns 3, PC-9801-86 / OPNA.
+- CPUBENCH v0.980, 30,000 loops: **59.05 / 1.17 seconds**. This is slightly
+  below the earlier #119 score of 60.08 / 1.15 seconds at the same 50 MHz.
+  The score was reproduced twice.
+- Rusty reaches its opening, intact title menu, story and first-stage
+  rendering on the isolated benchmark VHD. Player control remains unverified:
+  the capture after right-arrow/Z inputs showed a story scene. Audio quality
+  and gameplay FPS were not measured.
+
+Evidence, returned disks, text results and screenshot IDs are saved in
+`build/hardware/z486-jt08-50-pipeline/manifest.json`. This comparison supports
+a timing failure at 100 MHz, rather than a general functional regression.
+The baseline expanded simulation `simulation-20260923-093948-fba2e7` also
+passes the synthetic ROM-checksum test and 482,244 segment-limit cases.
+
+## z486 segment comparison, build #125 (2026-09-23)
+
+The segment-limit checker uses parallel byte magnitude comparisons plus
+short low-bit subtraction and upper-bit equality. Segment-register writes
+are unchanged. Regression `simulation-20260923-095122-3d1fd0` passes the
+482,244 segment cases and the full CPU/cache/64 MB integration tests.
+Quartus 17 required an explicit generate block; #124 failed synthesis on
+that syntax, and #125 includes the correction. No #124 RBF was produced.
+
+#125 at 100 MHz / 64 MB / JT08 fits in 37,417 ALMs (89%), 496 M10Ks (90%)
+and 45 DSPs. Worst slack is -7.296 ns. All hold checks pass; nine negative
+setup/recovery checks remain. The full database and targeted post-fit
+reports are preserved under `build/quartus-20260923-095830-bbd858`.
+RBF SHA-256:
+`ca8b95583a835fc8e359c6530ef08cfa021ff46c2e0a97831530981610411cac`.
+
+Actual hardware observations, with unresolved failures retained:
+
+- Original CPU diagnostic: ALU 14, RAM-copy 299, stack 397 blocks per ten
+  seconds; checksums PASS, but saving Z98PERF.TXT failed.
+- 64 MB map / 62 MB extended-memory and FM IRQ12 tests passed onscreen;
+  their output files were absent. All three archived disks were unchanged.
+- Rusty ONGCHK detected PC-9801-86 / OPNA and saved Z98SND.TXT successfully.
+- New CPU diagnostics report DOS create/write/close stage, AX and INT24 DI
+  on failure. Both variants passed and saved logs: ordinary-RAM arithmetic
+  577 blocks, or 90000h arithmetic 14 blocks; RAM-copy 299 and stack 397 in
+  both. The instrumented binary changed code layout, so this does not
+  establish that the original save problem is fixed.
+- The DOS 6.20 CPUBENCH VHD stalls before AUTOEXEC. UART snapshots show
+  activity in the owner's BIOS floppy-completion wait, not benchmark code.
+- Direct-floppy DOS 3.30D CPUBENCH v0.980 produces **90.92 / 0.76 seconds**
+  and **89.74 / 0.77 seconds**, 30,000 Dhrystone loops. The unchanged user
+  executable runs at `3000:0000 -> 3000:1C28`. Screenshots are
+  `42f1d1c4428c481bac4b43c7a37ad6d2` and `a81341b86698498b99b385c5d4016d48`.
+  A third boot failed to load the program while a VHD copy was active on
+  MiSTer's storage; it is retained as a failed trial, not another score.
+
+Evidence lives in `build/hardware/z486-jt08-100-segment-compare`,
+`z486-jt08-100-save-diagnostic-v2`, `z486-jt08-100-save-diagnostic-upper`,
+and `z486-jt08-100-floppy-cpubench`. These disposable DOS fixtures select
+`Z98FONT.COM` through CONFIG.SYS; changing their unused BOOT.COM does not
+replace the diagnostic. Direct CPUBENCH is temporarily the DOS shell, so
+DOS asks for a command interpreter after the benchmark exits normally.
+After the MiSTer storage copy finished, a fourth boot reproduced 90.92 /
+0.76 seconds (capture `b0f610a325c04c648449f13f6e6372c0`). These three
+successful scores do not qualify #125 as stable.
+
+Removing Z98MEM/HIMEMX and DOS=HIGH from an isolated VHD did not resolve
+the 100 MHz boot problem. A traced loader advanced through 72 BIOS disk
+requests before progress stopped; the last read was root-directory LBA 410.
+It had progressed past DBLSPACE.BIN, so the trace does not establish that
+DBLSPACE is the cause. The exact same VHD and traced loader boot promptly
+with the hash-verified #123 **50 MHz** RBF and score **59.56 / 1.16 seconds**
+(capture `67193963a345475d82159b4752b6efe6`). The copied AUTOEXEC banner still
+says 100 MHz; that banner is not the actual clock for this control run.
+
+## z486 fault/address timing candidate, build #126 (2026-09-23)
+
+Segment-size checking now compares the offset to combinational limit,
+limit-1 and limit-2 endpoints. No segment-state registers or update paths
+change. Instruction-chain address selection is independent of the final
+fault gate; actual issue, chain start and commit retain fault qualification.
+Assertions compare both transformations with the prior behavior.
+
+`simulation-20260923-112656-9c4c4d` passes all 482,244 segment cases and the
+CPU/cache/64 MB suite. `simulation-20260923-113100-91c7d7` additionally passes
+256-word REP INSW/OUTSW transfers through an upper-memory buffer, checking
+word ordering, exact transaction counts and preservation of the high halves
+of 16-bit address/count registers. Kernel cycles remain 5,348 / 4,433 / 2,277.
+#126 fits at 38,031 ALMs (91%), 496 M10Ks (90%) and 45 DSPs. Worst slack
+is -7.173 ns; four CPU/HDMI setup checks fail, with all hold and recovery
+checks passing. Full database retained in `build/quartus-20260923-113337-def3f5`.
+RBF SHA-256: `4632b7c568a004542f1346b2bbeb8b0583aa73a53a66f35fb32fa3a9319961e5`.
+On actual MiSTer hardware, all four original CPU/RAM/FM/OPNA diagnostics
+pass and save their result files. CPU kernel counts are 14 / 299 / 397.
+The 70,001-byte file-persistence test also passes: both FAT copies match,
+all 69 new clusters contain the expected pattern, and every unrelated
+image byte is unchanged. This fixes the observed #125 file-corruption
+case, but does not establish general stability.
+
+Direct-floppy CPUBENCH scores **87.46 / 0.79 seconds**, 30,000 loops
+(capture `48ce5a0582c54edfaec1b4e0e1484415`). The full DOS 6.20 VHD remains
+at HIMEMX initialization; a minimal VHD without the memory drivers instead
+reports an unexpected interrupt 01h. Neither VHD produces a score.
+A separate HIMEMX floppy also stalls at 100 MHz. The identical fixture
+with the #123 50 MHz core passes allocation above 16 MB, data verification,
+freeing and recovery, and saves Z98XMS.TXT. These clock controls continue
+to support a timing-sensitive CPU failure.
+
+The new flags probe passes on #126: 4,096 FLAGS/POPFD/SAHF round trips,
+followed by one intentional single-step trap with the exact expected
+return IP 01B1. It saves `Z98FLAGS.TXT`, reporting stage 4 and one trap.
+Capture: `759167f261c94de8a5765cbc1e7749e0`.
+This narrows the interrupt investigation; it does not rule out failures
+in other sequences. Evidence is retained in the main #126 bundle and
+the `-file`, `-floppy`, `-minimal`, `-xms` companion bundles, plus
+`z486-jt08-100-flags-probe` and `z486-jt08-50-xms-control`.
+
+While #126 compiled, the existing 485-byte FTEST.COM diagnostic was run on
+identical disposable DOS 3.30D floppy copies (initial SHA-256
+`9ba030a09c5343168bc93f3ba455ce9e7852881655557149e0a00d58627e2962`).
+Its screen text says HDD, but these trials used floppy media. On #125 at
+100 MHz it reported FAIL. Host readback found the complete correct 70,001
+byte payload, but **both FAT copies** changed an unrelated allocated link:
+cluster 368 changed from 369 to 881, a single bit (`0x200`). This redirects
+ENEMY10.COM into another file; its original data sectors were unchanged.
+Capture: `7aff4e4cd3b94088a18fb1a4e49f17f0`.
+
+The identical test on #123 at 50 MHz reported PASS. Independent host
+verification confirmed all 70,001 payload bytes, matching FAT copies, and
+unchanged contents and directory entries for every existing file. Capture:
+`342598824ae34ac8842362f5e1451e83`. Returned image SHA-256:
+`da85edc796180a7c85d83c47389e78277a25e59557599bee5fcd66e9b227a366`.
+Evidence is in `build/hardware/z486-jt08-100-file-persistence` and
+`build/hardware/z486-jt08-50-file-persistence`. This makes large-file
+persistence and unrelated-file integrity required checks for the next core.
+A fresh second #125 trial reproduced the same FAT link change (368:
+369 to 881), with the complete correct payload and an onscreen FAIL. Capture:
+`2b1b7db33ecf4d20b694574d2c5a596b`; evidence folder:
+`build/hardware/z486-jt08-100-file-persistence-repeat`.
+`tests/verify_floppy_file.py` accepts the 50 MHz returned image and rejects
+both 100 MHz results. It permits changes only to the new file's allocation,
+directory entry and clusters, checking all other image bytes unchanged.
+
+## z486 prefetch selection candidate, build #128 (2026-09-23)
+
+Prefetch now computes normal and redirected queue contents and aligned
+instruction windows independently, then selects them with the late flush
+signal. This removes flush from the input to byte alignment without adding
+cycles. The prior state equations and optimized window selector remain as
+simulation oracles. Regression `simulation-20260923-123026-9608c5` passes
+200,000 arbitrary prefetch states (100,318 redirects, 14,044 speculative
+target hits, 6,428 simultaneous fill/flush cases and all 16 target offsets),
+482,244 segment cases, and the full CPU/cache/64 MB/PIO suite. Kernel cycle
+counts remain 5,348 / 4,433 / 2,277.
+
+#128 compiles at 100 MHz / 64 MB with PC-9801-86, JT08 and raw IDE:
+37,977 ALMs (91%), 496 M10Ks (90%), 45 DSPs, worst setup -7.367 ns.
+Seven setup/recovery checks fail; all hold checks pass. The full database
+and 91 post-fit reports are retained. RBF SHA-256:
+`e2dc367bb37b8f641158050b3465ace6fba2348b7d157b36fec2ebb959cd1878`.
+#127 was stopped before fitting because its invocation omitted the explicit
+PC-9801-86 selection; its partial database was preserved and no RBF deployed.
+The flags-inclusive regression `simulation-20260923-130514-eaaa88` passes.
+
+Hardware results are mixed. The isolated HIMEMX/XMS fixture now passes and
+saves its result, including allocation at physical 01000000h, verification
+at both ends, and recovery of free RAM (capture
+`d459b9f04b9a489c9db2283d13806e4a`). However, the original CPU diagnostic
+fails twice on fresh identical images: one run shows an invalid/missing
+command interpreter message after the test header; the repeat remains at
+the header without results. Both returned images are unchanged and have
+no Z98PERF.TXT. Captures: `6d2a5da5cda6461e959bd96f50b3851d` and
+`7409c2bb47a24ce4b179ab3284dd867e`.
+
+The full DOS 6.20 VHD stops after the HIMEMX banner, then shows black by
+4.5 minutes. It produces no CPUBENCH score. The UART still shows CPU/bus
+activity. Both captures and separate UART traces are retained in
+`build/hardware/z486-jt08-100-prefetch-select`. This candidate remains
+unsuitable for normal use.
+
+## z486 GPR source selection candidate, build #129 (2026-09-23)
+
+#128's worst path is now operand-width selection through generic source
+selection and memory write data into the cache request register. #129
+selects a compact source-register/width token before the shared GPR
+forwarding and formatting logic. The previous implementation formatted
+five alternatives before selecting a 32-bit value. No cycles are added.
+Simulation assertions compare all five source forms against the previous
+exact reader on every active clock, including stalled/forwarded states.
+
+`simulation-20260923-131522-582574` passes the full prefetch, segmentation,
+CPU/FLAGS/PIO, cache and 64 MB suite. Kernel cycles remain 5,348 / 4,433 /
+2,277. #129 uses the same 100 MHz / 64 MB / PC-9801-86 / JT08 configuration;
+its final hardware results are recorded below.
+
+The user has prioritized diagnostic correctness and reliable DOS boot over
+further benchmark gains. Additional #128 hardware checks pass and save their
+results: RAM64, FM IRQ12, OPNA detection, FLAGS, and the 70,001-byte file test.
+The file image audit confirms matching FAT copies and every unrelated byte
+unchanged. A fixed-count probe passes arithmetic at 90000h with interrupts
+both disabled and enabled, valid DOS time calls and a bounded clock transition.
+Capture: `573a5903c9144ac091b2639b8d0d7ee5`.
+
+New `tests/z486_integer_cases.inc` covers 8/16/32-bit unsigned/signed
+multiply/divide, defined overflow flags, preservation of high register halves,
+and 64 vectors through the original CPU diagnostic's exact clock-conversion
+arithmetic. Its DOS wrapper passes an independent Unicorn check, including
+intentional result corruption rejection. On #128 it passes stage 5 and saves
+`Z98INT.TXT` (capture `d3410d03a6544e33b894d14263d35331`). These isolated
+passes do not explain or override the original diagnostic and VHD failures.
+
+#129 compiles at 38,070 ALMs (91%), 496 M10Ks (90%), 45 DSPs, worst
+slack -7.704 ns with seven setup/recovery failures; all hold checks pass.
+RBF SHA-256:
+`46e275e61787468e4700d05c4641ce39802fabab18ac5078b21573fe595969f0`.
+The expanded RTL regression `simulation-20260923-134906-25e3a4` passes,
+including the new integer vectors. However, the original CPU fixture remains
+black before DOS at over two minutes, with EIP 99h/BIOS read activity on UART.
+The returned disk has no result file and is preserved. Capture:
+`233fdde742514d60b7fb64760bc32ba0`. This is a hardware regression, not a
+qualified release.
+
+The full VHD also remains black with the same BIOS EIP 99h loop (the early
+timer readback check, identified from the owner's private ROM). Both trials
+are archived, and #129 is rejected. Its full database and 91 fitted reports
+are retained; containers were removed only after successful export. Restoring
+#119 at 50 MHz boots DOS 6.20 successfully again (capture
+`6b3cb6521ccd4e25945fb507d91e42f8`).
+
+## Forwarded register bank candidate, build #132 (2026-09-23)
+
+This candidate returns to #128's source selection and resolves pending load
+forwarding and partial-register merging independently for all eight GPRs
+before the read selects its register. Read semantics and execution latency
+are unchanged. The original reader is retained as a simulation oracle; all
+32 register/width choices are compared every active CPU cycle.
+
+`simulation-20260923-135934-cdbc0e` passes 640,000 arbitrary-state forwarding
+comparisons and the complete CPU/integer/FLAGS/PIO/cache/64 MB suite. Kernel
+cycles remain 5,348 / 4,433 / 2,277. #130 and #131 stopped during parsing:
+Quartus 17 requires explicit generate delimiters and a separately declared
+genvar. Their partial databases and logs are preserved. #132 includes those
+syntax corrections and is compiling at 100 MHz / 64 MB / PC-9801-86 / JT08.
+
+After the #132 snapshot, tests were expanded with the exact elapsed-time
+SUB/SBB/JNC/ADD/ADC sequence, including hour rollover and preservation of high
+register halves, and a randomized 0..15-cycle memory/I/O acknowledgement run.
+The elapsed-time DOS probe passes Unicorn and rejects both corrupted multiply
+results and an injected borrow error. The expanded RTL run must pass after
+the FPGA compile and before hardware qualification. No RTL changed after
+the #132 snapshot. The expanded regression subsequently passed as
+`simulation-20260923-143506-46c7a8`, including both bus-stall patterns.
+
+The extended arithmetic/elapsed probe also passes stage 6 on actual #128
+hardware and saves its result. Capture: `a107f3d0bfe3485cbc720ecf6f24626d`;
+evidence: `build/hardware/z486-jt08-100-prefetch-select-integer-elapsed`.
+The original combined CPU diagnostic remains the unchanged acceptance test.
+
+#132 fits in 37,636 ALMs, 496 M10Ks and 45 DSPs, with worst setup slack
+-7.742 ns and five negative setup checks. All hold/recovery checks pass.
+The complete database (937 entries) and 91 detailed timing reports are
+retained. Hardware rejects this build: both the original CPU diagnostic
+floppy and the full DOS VHD remain black before DOS starts. UART samples
+cycle through BIOS/low-RAM activity rather than reaching the tests. The CPU
+result disk is unchanged and has no result log. Final captures:
+`30d305fb31fa429484f1b9ed138a8b3e` (CPU),
+`33465101a350478d9caa09e76d057fb7` (VHD). The working #119 50 MHz core was
+restored at 14:43:33 CEST. Evidence: `build/hardware/z486-jt08-100-forward-bank`.
+
+## Registered D1 launch candidate, build #133 (2026-09-23)
+
+#132's worst fitted path runs from `prefetch_inst|win_d1_r` through direct
+instruction decode into the microcode ROM address. In PC98 mode, #133 waits
+for the registered decode queue before an empty-pipeline launch and uses
+the registered entry/EA selection. Upstream non-PC98 direct launch remains
+unchanged. A simulation assertion prevents an empty-queue PC98 launch.
+
+`simulation-20260923-144244-fe1b6f` passes the full regression, including
+640,000 forwarding comparisons, 200,000 prefetch cases, 482,244 segmentation
+cases, integer/elapsed arithmetic, FLAGS, PIO, 64 MB, caches, UART, and both
+normal and randomized bus stalls. Kernel cycles are 5,348 / 4,560 / 2,410
+(previously 5,348 / 4,433 / 2,277). Correctness takes priority over these small
+cycle increases. The 100 MHz / 64 MB / JT08 FPGA fit and hardware acceptance
+tests remain pending. Build: `quartus-20260923-144446-36d900`.
+
+After that snapshot, `tests/z486_string_cases.inc` adds REP STOSW/REPE SCASW
+coverage at cached 4000h and uncached 8000h segments, all four 5555h-spaced
+patterns, 16-bit index/count wrap with nonzero high halves, mismatch stop
+positions, and flags consumed after indirect JMP. The independent Unicorn
+probe passes and rejects injected CF/ZF errors. It also passes stage 25 on
+actual #128 100 MHz hardware and saves `Z98STR.TXT` (capture
+`a74a04c62ba64388bd1898fa4f569f2c`). The expanded RTL regression is pending;
+this isolated pass does not supersede the original diagnostic/boot failures.
+The saved string-probe disk also passes the complete image audit: exactly
+28 expected payload bytes, one newly allocated cluster, matching FAT copies,
+and every unrelated image byte unchanged. `verify_floppy_file.py` now accepts
+an explicit expected payload/name for small diagnostic logs while retaining
+the original 70,001-byte default. It still rejects the retained #125 FAT
+corruption at cluster 368 and accepts the known-good #128 large-file result.
+
+#133 subsequently compiled in 37,772 ALMs / 496 M10Ks / 45 DSPs. Worst
+setup slack is -7.195 ns; hold checks pass, but recovery reaches -0.561 ns
+from loader completion into the multiplier reset. Full database and all 91
+post-fit reports are retained. RBF SHA-256:
+`5de8aa4f95b628bd982d847ce43dc8f395e14da9183429418863fdfe5ac57777`.
+Expanded regression `simulation-20260923-151352-6325c2` passes both ordinary
+and randomized bus delays, including the new REP diagnostic.
+
+Actual #133 hardware does not qualify. The unchanged CPU test now finishes
+ALU/RAM/stack checks (14 / 299 / 378 blocks) but reports a result-save error.
+The result disk contains a zero-length `Z98PERF.TXT` with first cluster zero;
+FAT bytes and existing directory entries remain unchanged. Capture:
+`5b1fea038b9a4477b3d87644629e42ac`. The independent 70,001-byte file-write test
+also fails and leaves an empty new file, with unchanged FAT bytes (capture
+`9c34cd5d98c949638a74f418bddba821`). Full DOS VHD boot remains black after
+three minutes, with static UART EIP 1B8h / physical D81D0h / IRQ pending;
+capture `a6c2d9bd6fe14f9fa83e5c8290023b6d`. These empty-file failures are
+distinct from #125's corruption of an existing FAT chain.
+
+The B133 collector initially let an empty PowerShell result bypass its text
+test; its separate allocation audit still rejected the disk. B133/B134
+collectors now cast to string and explicitly reject empty/whitespace results
+before checking PASS or auditing the disk. The generic disk audit requires
+a nonempty expected diagnostic payload. Retained empty-file evidence verifies
+the rejection. No failed result was accepted as a passing hardware trial.
+
+## Registered entry-ROM candidate, build #134 (2026-09-23)
+
+#133's remaining active critical path is registered D1 -> structural length
+decode -> speculative next-window selection -> decoder entry ROM, -7.022 ns
+at the hot corner. #134 reads the ROM directly from the registered opcode and
+prefix map. A matching registered tag is required before structural handoff;
+otherwise D1 waits. Both generated-ROM/PLA equivalence and handoff ownership
+are asserted. Non-PC98 mode retains the original speculative lookup.
+
+The forwarding/prefetch/segmentation checks pass in
+`simulation-20260923-152337-a00ee9`. Its original ROM assertion rejected the
+intentional wait; the assertion now checks only a current ROM result, while
+every accepted handoff must still own that result. The complete CPU suite
+then passes in `simulation-20260923-152540-6ca49e`, including normal/random
+stalls, REP, arithmetic, FLAGS, PIO, 64 MB, caches, and UART. Kernel cycles are
+6,884 / 4,560 / 2,657, versus #133's 5,348 / 4,560 / 2,410. This throughput
+cost is accepted for the correctness experiment. FPGA fit and hardware
+qualification are pending: `quartus-20260923-152800-24960d`.
+
+Further #133 isolation: the small integer/elapsed probe passes stage 6 and
+saves its 27-byte result; the full disk audit passes (capture
+`bc2402f5d8df45e081311d0b2e75d73e`). Four instrumented long CPU runs instead
+finish their arithmetic but fail the DOS write at stage 2 with AX=6 (invalid
+handle), BX=5, and no INT 24 callback. CS, DS and DOS's current PSP all equal
+120Eh. The actual JFT has count 20 and pointer 120E:0018; its entry 5 remains
+FFh (unused). The last capture is `78f2e7ddf45b4bb9adef9a57233d6744`, with
+the empty result disk and exact program archived in
+`build/hardware/z486-jt08-100-registered-d1-cpu-save-jft`. This is evidence of
+incorrect handle state, not proof of a specific failing CPU instruction.
+
+The full-VHD EIP 1B8h maps to the bootstrap's explicit error halt, which
+previously combined initialization/read/checksum/handoff failures. Optional
+`BOOT_STAGE_TRAPS` instrumentation now assigns distinct halt addresses to
+invalid ROM vector, BIOS initialization, BIOS read, and checksum failures.
+The emitted `Z98STAGE` table records the post-HLT EIPs for the debug UART.
+The independent emulator checks normal handoff and injected failures for
+both read-only and writable BIOS variants. Default assembly is unchanged;
+the ordinary acceptance disk remains separate from this diagnostic image.
+
+#134 is rejected on hardware. It fits in 38,450 ALMs, 496 M10Ks and 45 DSPs;
+worst setup is -7.275 ns, recovery -0.447 ns, and hold checks pass. Its original
+CPU floppy loops through BIOS startup without reaching DOS after more than
+three minutes; the disk is unchanged and has no result log (capture
+`e880b3763ac04a93a456a389cf906782`). The full VHD reaches the same explicit
+bootstrap error halt at EIP 1B8h (capture `49167b7144254738aaacf88314286452`).
+The full database and 91 detailed timing reports are retained. RBF SHA-256:
+`3c0fb3a78bf101e56cd9b4e9271ef6752fbdadc35814d7ae4322784357e51388`.
+
+Additional read-only bootstrap probes on #134 isolate the stop to the
+checksum stage. The computed checksum is 7181h instead of F270h. Comparing
+against the owner's exact first 1,024 disk bytes reports the first mismatch
+at byte offset 4; that word reads 0000h instead of 5049h through both indexed
+and absolute addressing. The expected bytes remain private in ignored
+diagnostic images. Evidence is archived in the `-boot-stages`,
+`-boot-checksum`, `-boot-compare`, `-boot-word`, and `-boot-absolute` bundles
+under `build/hardware/z486-jt08-100-entry-rom`.
+
+The identical comparison image and VHD boot DOS 6.20, detect 64 MB, and
+complete CPUBENCH on the verified #119 50 MHz control (capture
+`1ce059bf1b92437d9b2768dc713bc8e7`). Its unchanged VHD banner still identifies
+#134/100 MHz; the verified loaded RBF, not that banner, identifies the control.
+These observations narrow the failure to data transfer/access rather than
+merely DOS failing to launch; they do not yet identify the faulty RTL path.
+
+## Registered effective address and reset release, build #135 (2026-09-23)
+
+#134's worst active path runs from a loaded operand through GPR selection,
+effective-address addition, and segment relocation into the VIPT TLB address
+register (-7.275 ns). In PC98 mode, all memory ModR/M operands now use the
+existing split-EA capture/interlock, including simple addresses. Address
+formation always uses that registered partial sum before displacement and
+relocation. An assertion checks every accepted memory EA against the live
+architectural reference. Other CPU modes retain their original selection.
+
+The adapter now asserts reset immediately and releases it through two local
+clocked stages after loader/control/triple-fault reset. This removes the
+counter and external-reset decode from the core's direct reset source;
+#134 had negative reset recovery and long reset-to-cache paths. Timing is
+still checked normally, without adding false paths for these core paths.
+
+`simulation-20260923-160855-e758d5` passes normal/randomized bus delays,
+software reset, interrupt/IRET, REP disk I/O, FLAGS, arithmetic, string tests,
+cache invalidation, and 64 MB RAM. Kernel cycle counts remain
+6,884 / 4,560 / 2,657. Build `quartus-20260923-161125-b50d36` fits at
+100 MHz / 64 MB / PC-9801-86 JT08 in 37,481 ALMs, 496 M10Ks and 45 DSPs.
+Worst setup is -7.342 ns; all hold and recovery checks pass. The full database
+and 91 detailed timing reports are retained. RBF SHA-256:
+`7db467163b697150a27cf9a2bc9a03f803c4c8a80e7d11c9f735f79c6eabbdf6`.
+
+After the FPGA snapshot, `run-z486-ide-bios.sh` adds coverage using the real
+read/write BIOS with cached and D800h uncached bounce-buffer stacks, each
+with ordinary and randomized 0..15-cycle bus stalls. All eight scenarios pass
+in `simulation-20260923-164008-4f57e9`. They exercise the actual z486 and BIOS
+against a modeled ATA register interface, not the complete physical HPS/ATA
+path. No RTL changed after the #135 snapshot.
+
+#135 boots the full DOS 6.20 VHD with 64 MB, HIMEMX and CPUBENCH completing
+(capture `688f4217134e4317b96f7fcc21135eae`). It also passes the independent
+70,001-byte file test and complete D88 integrity audit (capture
+`2c36c7bd699f46af82fea26f7bdb6cbc`). However, the original long CPU test's
+onscreen PASS and saved 251-byte log are misleading: DOS places Z98PERF.TXT
+in cluster 101, already owned by MSDOS.SYS. FAT entry 101 changes from 102
+to FFFh, truncating that existing file. The complete result disk and
+`cpu-integrity-failure.json` are retained in the #135 hardware bundle.
+This build is rejected despite the successful boot and separate file test.
+
+Applying the stricter whole-disk audit retrospectively confirms that the
+original CPU results from #119/50 MHz, #123/50 MHz and #126/100 MHz preserve
+all unrelated bytes. #133's empty result and #135's allocated-cluster reuse
+fail. The audit summary is `build/cpu-disk-retrospective.json`.
+
+#136 (`quartus-20260923-164711-e92207`) builds the same #135 RTL at 75 MHz
+as a timing-margin control, retaining 64 MB, JT08, RawIde and debug UART.
+Its qualification results are below. This comparison takes priority over performance
+tuning; passing a benchmark or staying within the experimental -12 ns setup
+allowance does not override a disk-integrity failure.
+
+Further #135 checks pass their functional assertions but fail saved-file
+integrity: RAM64 reuses occupied cluster 377, FM timer/IRQ12 reuses 69, and
+Rusty's OPNA detection reuses 289. Their original FAT values are 378, 70 and
+290 respectively. Each is replaced by FFFh for the new short result file.
+The disks, screenshots and per-test integrity reports are retained beside
+the CPU result. Retrospective full-image audits confirm the archived
+CPU/RAM/FM/OPNA results from #119, #123 and #126 preserved unrelated data.
+
+Read-only FAT12 isolation (`fat12_decode_probe.asm`) passes 32 scans of
+1,198 synthetic entries on #135, including odd/even loads, free-cluster
+branches and preserved upper register halves (capture
+`acefd7a53cb64f43b720e5bb56a7fad5`). Independent emulation verifies the table
+and rejects injected false-free results at 69, 101, 289 and 377, plus an
+incorrect occupied result at 1090. The failure path reports its index after
+DOS output so subsequent display I/O cannot overwrite the UART marker.
+This does not identify or exclude every DOS allocation instruction path.
+
+The 70,001-byte test still passes complete disk audits when changed to DOS
+3C00h, when changed to a partial AH=3Ch write immediately before INT 21h,
+and after a 32 KB read sweep displaces cached data. These diagnostic copies
+preserve the original instruction/data locations; acceptance images remain
+unchanged. Thus the create API, that immediate partial-register sequence,
+and simple cache displacement alone do not reproduce the failed saves.
+
+## 75 MHz correctness control, build #136 (2026-09-23)
+
+`quartus-20260923-164711-e92207` uses byte-identical z486 RTL, adapter and
+PC-98 wrapper to #135 at 75 MHz. It fits in 38,324 ALMs, 496 M10Ks and
+45 DSPs. Worst setup is -3.672 ns; all hold/recovery checks pass. The full
+database (935 entries) and 91 detailed timing reports are retained.
+RBF: `Zet98_Z486_JT08_75_Debug_B136_20260923.rbf`, SHA-256
+`4c21713da74fc808a9bf2b1b71cd2a76053826c5dbb18277ab83203b3a32b32c`.
+
+On the physical MiSTer, the original CPU, RAM64, FM timer/IRQ12 and Rusty
+OPNA-detection diagnostics all pass, including a full audit of each saved
+result disk. Each result uses a previously free cluster and preserves every
+unrelated disk byte. This resolves the four reproduced save failures in
+this 75 MHz control. The CPU run reports 14/287/287 blocks; no performance
+tuning was performed. Captures and result images are recorded in
+`build/hardware/z486-jt08-75-registered-ea-reset/manifest.json`.
+
+The 70,001-byte file test passes with 69 newly allocated clusters, matching
+FAT copies and unchanged unrelated bytes. HIMEMX(98) also passes discovery,
+allocation/lock, copying/checking both ends of a 17 MB block above 16 MB,
+unlock/free and restored free-memory count. Its saved result passes the
+same disk audit. FLAGS restoration and precise single-step return pass,
+as do integer arithmetic/time conversion and all 25 string-operation stages.
+Their three saved reports also pass full-image integrity checks.
+
+A second original CPU test after reloading the FPGA, using a fresh identical
+disk, passes again (14/282/287 blocks) with a clean full-image audit. Capture:
+`30906e4ae30d41faa667bed03f2d613a`. Full DOS 6.20 VHD boot detects 64 MB,
+loads HIMEMX and completes CPUBENCH at 77.64 / 0.89 seconds (capture
+`3c015815df1745f98a5bef6726760022`). The core is left at the DOS prompt.
+VHD boot is verified; this qualification did not run a new HDD write test.
+
+`simulation-20260923-173322-0d664f` passes OPNA/PIT/VFO rate checks at
+40/50/60/75/90/100 MHz, rejects the old incorrect 75 MHz FM divider, and
+passes PCM86 formats, FIFO/IRQ behavior and all eight fractional sample
+rates at 20/40/50/60/75/90/100 MHz. The initial attempt in the z486 simulation
+image could not start because GHDL was absent; its log is retained separately
+as `simulation-20260923-173109-512b14`. The successful run used the installed
+mixed simulation image. Both containers were removed after archiving logs.
+
+The comparison supports timing sensitivity but does not identify a single
+failing circuit path: changing the requested clock also changes placement
+and routing. The worst #136 setup path is I/O-bridge address bit 15 to
+instruction-cache data RAM; EAX and forwarded FLAGS paths still miss setup
+by -2.387 ns and -2.729 ns respectively. This remains an experimental build
+with timing failures, even when its tested hardware workloads pass.
+
+## Native hard-disk boot, build #137R3 (2026-09-23)
+
+The 75 MHz / 64 MB / JT08 build `quartus-20260923-194430-7bf310`
+adds a D0000h disk option ROM and an empty-media prompt. It uses identical
+CPU/adapter/wrapper sources to #136. The fit uses 37,495 ALMs, 506 M10Ks
+and 45 DSPs. Worst setup is -4.088 ns; all hold/recovery checks pass.
+The full database and 59 detailed timing reports are retained. R3 changes
+ROM contents through Quartus MIF update and assembly; placement/routing
+are unchanged. Its complete database is also archived.
+
+RBF: `Zet98_Z486_JT08_75_NativeHDD_B137R3_20260923.rbf`, SHA-256
+`d5ab31ad832f0bd047a3ba19735f6bcc1fe4d3860483150f2556252636192a16`.
+The open-source option ROM SHA-256 is
+`760ebc1765c950886cff23c63c4644caaed0d32afef71f5932b2ee41afa297e1`.
+
+The owner's system boot.rom remains external. Hardware probing identified
+A000:3FF2 as protected NVRAM, not an ordinary writable BIOS mirror. R3
+handles a valid HDD on the first automatic boot pass directly and leaves
+explicit BIOS priorities and NVRAM unchanged. Firmware tests reject any
+NVRAM write and execute the owner's real discovery/boot dispatch routines.
+
+On hardware, DOS 6.20 boots from both a raw `.vhd` and a raw `.img` with
+no floppy open in MiSTer's process. DOS detects 64 MB / 62 MB extended RAM.
+Both images pass independent audits of all 568,336,384 bytes: the new
+70,001-byte file uses five previously free clusters, both FAT copies match,
+and every unrelated FAT entry, directory entry and data sector is unchanged.
+Only 140 sectors change. IMG capture `b1b0d9bee00c44fcb9b02c6625e8e57f`
+shows the guest create/flush/reopen/byte/EOF checks passing.
+
+The first VHD launcher had a delayed reset and re-ran the create-new test;
+its second execution refused the already-existing output file.
+The full VHD disk audit passes. Removing that redundant reset produces the
+single successful run shown by the IMG test. Native MGL launchers need no
+reset after mounting media because the boot gate already waits for it.
+
+Base #137 CPU and 64 MB diagnostics pass, each with a full saved-floppy
+integrity audit. R3 passes 100 FM timer-B IRQ12 deliveries, status clear
+and cascaded PIC EOI, and Rusty's ONGCHK detects PC-9801-86 / OPNA (3).
+Both saved reports also pass full-floppy audits.
+The final R3 empty-media capture `fc9002d96ea84c568c8d00c34eaffd0f`
+shows PLEASE INSERT DISK with no disk mounted. Captures, hashes, launchers and full disk audit
+results are retained in `build/hardware/z486-jt08-75-native-bootrom`.
+These are tested workloads on a build that still misses setup timing,
+not a claim of complete hardware/software compatibility.
+
+The final user launcher `Zet98_Rusty_NativeHDD_B137R3.mgl` boots the normal
+DOS 6.20 game menu directly from the existing game VHD, with no floppy
+mounted (capture `12291d3b911942b5960994e782c60c28`). The core is left there.
+
+
+## Upper instruction cache and PSG sample writes, build #138 (2026-09-23)
+
+The 90 MHz / 64 MB z486 candidate enables bank-aware instruction caching
+at 80000h-9FFFFh and removes the JT08 PSG write's unnecessary FM busy period.
+The PSG write strobe also ends on the host clock to prevent rapid address
+changes from modifying adjacent registers. FM busy protection is retained.
+The native HDD boot ROM is unchanged from #137R3.
+
+Build `quartus-20260923-221209-70eba6` fits in 38,018 ALMs, 506 M10Ks and
+45 DSPs. Worst setup slack is -6.750 ns, within the owner's explicitly
+approved experimental -12 ns limit. Minimum hold/recovery/removal slack
+is +0.075/+1.485/+0.258 ns. The complete database was exported before the
+compiler container was removed. This remains a build with setup violations.
+
+RBF: `Zet98_Z486_JT08_90_UpperCache_PSG_B138_20260923.rbf`, SHA-256
+`ba02dea4e539a97bf07713cd8ae800ef8f9513ea680d74ccfdb7e93ed7693841`.
+
+On the owner's MiSTer, the upper-address CPU benchmark passes its ALU,
+RAM-copy and stack checksums: 455/299/342 blocks per 10 seconds, respectively.
+The identical #137 fixture recorded 14/282/287. Both clock and cache policy
+changed; these focused kernels do not measure Rusty frame rate.
+The 64 MB physical-map test passes sentinels at both ends of every mapped
+MB, byte/word/unaligned DWORD accesses and real-mode return. The sound tests
+pass 100 FM timer-B IRQ12 deliveries, status clearing and cascaded PIC EOI,
+and Rusty's unchanged ONGCHK reports 3 (PC-9801-86 / OPNA).
+
+All four saved diagnostic disks pass full-image audits: the intended result
+files are present, both FAT copies match, and unrelated image bytes are
+unchanged. Evidence is retained in `build/hardware/z486-jt08-90-upper-psg`.
+The C-LAB speech pitch still requires a listening comparison; OPNA detection
+and timer tests do not establish audio fidelity.
+
+After playing #138, the owner reports Rusty in-game runs at the desired speed
+and attributes the improvement to the cache change. The C-LAB speech remains
+very low pitched with no audible improvement, so the PSG interface correction
+did not resolve that symptom. Keep #138 as the gameplay baseline while tracing
+the sample timer; no further CPU-performance tuning is needed for this target.
+
+
+### Build #139: PIT correction and Rusty listening, 2026-09-23
+
+90 MHz z486 / 64 MB / upper-conventional I-cache / JT08 / native IDE boot.
+RBF SHA-256: `742c46d6c4a87244e156ec19fb9fbb05f3863860167eef6c85b0f895ec5cea33`.
+Worst setup slack -6.434 ns; hold/recovery/removal nonnegative. The complete
+Quartus database was archived before container removal. CPU checksums,
+64 MB physical-memory sentinels, 100 FM IRQ12 events and original Rusty OPNA
+identification all passed. All four result-disk audits preserve unrelated bytes.
+The user confirms that the speech immediately after C-LAB now has the right
+pitch. Gameplay speed had been accepted on #138 and has not yet been separately
+reconfirmed after this PIT change. CPU/DOS benchmark counts are not a controlled
+performance comparison across timer changes.
+
+The debug build sends 115200-baud CPU telemetry, not MIDI. Routing this into
+FluidSynth produced unwanted menu-time notes; MidiLink was disconnected with
+`uartmode 0`. The next MIDI candidate must use `-MidiUart` without debug UART.
+
+Build #142 palette timing review (2026-09-24): the original -0.298 ns hold
+report was the held palette payload bit 19 to PAL_VIDEO(1)(7), between the
+90 MHz CPU and 75 MHz video domains. The existing request/acknowledge
+protocol captures only after a two-stage request synchronizer and prevents
+payload reuse until ACK returns through two CPU stages. Added a narrowly
+scoped payload-only hold exception, retaining the 20 ns maximum data delay.
+The actual grpal RTL and reset helper match the fitted snapshot byte-for-byte.
+Simulation checks six CPU speeds and three clock phases, including 20 ns
+payload delay, late-payload/live-bank negative controls, and a temporal
+post-capture stability assertion that rejects a deliberately bypassed return
+ACK synchronizer. All pass (simulation-20260924-011719-1cf2f4).
+Read-only four-corner analysis of the unchanged #142 placement gives setup
+-7.150 ns, hold +0.098 ns, recovery +1.571 ns and removal +0.271 ns; palette
+payload setup margin is at least +13.367 ns. Original and reviewed reports
+are preserved under build/quartus-20260924-001806-776acf. This is experimental
+setup acceptance, not timing closure or hardware qualification. RBF SHA256
+is debb5923dae465fdd559327b7c88cb863ce4fe2d68705ec2e29616cbc930f182.
+
+
+### Build142 qualification and MIDI reset follow-up (2026-09-24)
+
+Full90MHz passes CPU455/299/342 checksums, physical64MB, FM100IRQ12,
+OPNA ONGCHK3 and MPU200IRQ6 with an exact134-byte UART packet. The user
+confirms NightSlave MIDI and its music-test menu sound correct using
+GeneralUserGS/FluidSynth31250. Core-exit stuck notes were reproduced and
+a host guard now silences local FluidSynth; a controlled held voice goes
+from1 before actual core exit to0 after it. Guard installation and logs are
+in the private build142 bundle. Core/MPU-reset panic is being compiled as143;
+it is not present in142 and has not yet been hardware-qualified.
+
+The60/30MHz-equivalent options stall DOS3.30 boot; the same disk passes at
+Full90.15MHz and runtime switching are unqualified. Longer randomized bus
+stalls(0..255cycles) pass at all four speeds in simulation. The4095cycle
+case times out even atFull under the100ms harness limit; this is inconclusive.
+
+Native game trials: HDM MetalForce boots MEGDOS/OPNA but reports a parameter
+error. MiSTer Main intercepts PC98FDI as SpectrumFDI; byte-identical renamed
+.hdm copies boot PopfulMail, whose intro has severe vertical stripes/wrong
+colours confirmed by the user. NFD BurningDragon reaches DOS then black;
+its equivalent D88 also remains black/loading in the bounded trial. Xanadu
+HDI reports disk-read error; rawIMG control also fails with I/O error. None
+of these games is qualified. All uploaded native images remain hash-identical.
+
+
+### HDI geometry correction and build143 (2026-09-24)
+
+Build143 completes with setup -6.971 ns, hold +0.102 ns, recovery
++1.091 ns and removal +0.266 ns. Complete Quartus database exported before
+container removal. MIDI-reset RTL is compiled but awaits hardware testing.
+
+Xanadu and Lemmings HDIs contain 512-byte physical sectors and 1024-byte
+DOS logical sectors; Lemmings also uses an older NEC BPB. The previous ROM
+rejects both with geometry state4. Revised logical-to-physical size checks
+and legacy BPB validation accept both (state1). The six geometry tests, six
+logical-sector/legacy combinations, four invalid-layout cases and previous
+BIOS regression all pass. No firmware/game data is included in the tests.
+
+On B142 Full90, a disposable pre-DOS loader running this exact resident ROM
+boots Lemmings into its animated intro and Xanadu into its title menu. The
+user confirms Xanadu reaches gameplay. A black capture after Start was a
+cutscene transition, not a demonstrated hang. The R2 loader keeps its call
+stack outside the resident initializer's D800 stack; initial helper attempt
+used overlapping stacks and was discarded.
+
+Build143R2 updates only the boot ROM contents of the fitted143 database.
+Fit and timing reports plus every other MIF are byte-identical. Full database
+exported before container removal. The integrated RBF and MIDI-reset behavior
+still need hardware qualification. Private evidence: build/rompatch143-hdi
+and build/hardware/compatibility-b142/results.json.
+
+Metal Force has the same parameter error on HDM and D88. A private error-path
+probe finds game text where its parser expects a PSP command tail; a small
+independent segment save/load probe passes, so no CPU cause is established.
+An isolated DOS6.20 launch of the original executables is prepared. Popful
+Mail's header-stripped opening disk still has the same intro stripes; a full
+raw two-disk control and GRCG alias/compare hardware probes are prepared.
+Doom and Burning Dragon remain unresolved.
+
+### Overnight B143R2 hardware checks (2026-09-24)
+
+B143R2 passes CPU ALU/RAM-copy/stack checks (455/299/342 blocks), RAM64
+physical-map checks, 100 FM IRQ12 events, OPNA sound detection and 200 MPU
+IRQ6 acknowledgements. All five saved-result D88 images pass full unrelated
+byte/FAT integrity audits. Physical HPS UART capture contains one complete
+193-byte all-channel panic before the exact 134-byte diagnostic SysEx
+(packet offset1195, total1329 bytes); termios settings were restored.
+This verifies guest MPU FF reset transport, not audible recovery, core-reset
+or enable-toggle coverage. Direct integrated HDI/gameplay checks remain due.
+An initial trial coincided with a host reboot and an unresponsive FPGA
+interface. Loading the existing menu with the installed FPGA utility recovered
+it; the repeat candidate boot and diagnostics passed. Cause remains unknown.
+Retain user-tested B142 Full90 as the stable baseline.
+
+The user confirms Metal Force gameplay works on B142 when its original
+executables run under DOS6.20 with the proper Data floppy. This bypasses the
+MEGDOS parameter error; it does not establish a fix to the original loader.
+The complete HDD installation initially omitted MF_SYS/MF_OPEN/MF_DATA disk
+identification files. A separate corrected image is under hardware test.
+Private test assets and their purpose/status are recorded in the owner's
+TEST_GAMES directory; no game or firmware assets are added to source control.
+
+Metal Force HDD-only revision2 reaches actual stage graphics on B142 Full90
+with no floppy mounted (capture ab24bc76b7924fffbb5053fdae63f54f). The omitted
+original MF_SYS/MF_OPEN/MF_DATA marker files caused the first install's prompt.
+The clean Metal_Force_90MHz launcher now selects this verified installation.
+
+
+B143R2 direct HDI tests now reach the Lemmings main menu and Xanadu title
+without the temporary resident-loader floppy. A second core-switch attempt
+coincided with a host reboot and stalled FPGA interface; menu reconfiguration
+recovered the system and the retry booted. Keep B142 as the stable baseline
+until this loading reliability issue is understood.
+
+B142 Full90 passes fresh GRCG plane-alias (512 records), comparison (2048)
+and color-generation (1024) hardware cases with zero mismatches and full
+result-disk integrity checks. The color probe exercises the SHR/SBB/OUT
+sequence found in the supplied Popful opening program across every color,
+plane mask and addressed plane. Popful still has severe intro stripes with
+both disks supplied as raw HDM; these tests do not establish a graphics fix.
+
+
+Burning Dragon Plus HDI control (2026-09-24): B142 Full90 plus corrected resident helper boots the supplied DOS5/1024-byte-logical-sector HDI to an animated intro and title. The main game executable matches the floppy version. Gameplay/start input remains unconfirmed; native NFD boot is not qualified by this HDD result. Private evidence: build/hardware/compatibility-b142/results.json.
+
+Burning Dragon follow-up: Start on the original DOS5 HDI reports insufficient conventional memory (~600 KB). Isolated DOS620 control reaches ship selection. Its initial stock HIMEM setup left only 556 KB free; restoring the established Z98MEM/HIMEMX setup and keeping smaller DOS buffers yields 611 KB (largest executable block 625344 bytes). Stage entry remains unconfirmed, so this is a diagnostic configuration, not a gameplay pass. Both memory reports are saved under build/hardware/compatibility-b142/dragon-dos620.
+
+B142 Full90 also passes the bulk VRAM transfer probe: plain REP MOVSB/MOVSW
+and GRCG RMW REP MOVSW/STOSW across both pages and all four planes.
+It writes full 32 KiB planes and compares 128 KiB of spatial samples, with
+zero mismatches. The captured payload exactly matches the Unicorn reference
+(SHA256 414dcd824cc7b5eb57003520947978c177872c7dde2d423ddd3285c70e6ce1bb),
+and the complete result disk passes its unrelated-byte/FAT integrity audit.
+This narrows the Popful Mail investigation; it does not resolve its stripes.
+
+Popful compressed-file integrity control also passes on B142 Full90: DOS
+reads all 45 `*.?ZH` graphics files (508118 bytes) from the unchanged native
+HDM in drive B, and every CRC32 matches the original host data. The separate
+result D88 passes its full filesystem/unrelated-byte audit. This qualifies
+these source reads, not the subsequent decompression or rendered picture.
+Private report: compatibility-b142/popful-crc-r3-verification.json.
+
+Popful decompression controls (B142 Full90, private fixtures): the original
+BZH routine's first stream from each of 30 files produces matching CRCs for
+245434 bytes against both an independent decoder and original-code Unicorn
+execution. Trailing concatenated BZH streams are outside this test's scope.
+The original GZH routine decodes all 15 images directly into cleared video
+RAM; checksums over all four 32 KiB planes per image match Unicorn, covering
+1966080 bytes. Both result disks pass full integrity audits. These tests use
+GRCG off, page 0 and controlled state; the game's own display remains corrupt.
+No game code or graphics assets are published with these private diagnostics.
+
+Popful stripe isolation (2026-09-24): the original BIOS graphics initialization
+and a known decoded image reproduce a white line every eight pixels even
+though all video-plane CRCs are correct. A second disposable control clears
+only text attribute bit 4 and removes those lines. Both result disks pass full
+integrity audits; 4034 saved text attributes were F1. This is diagnostic
+isolation, not a patched-game or replacement-RBF qualification.
+
+The core currently leaves TXTGDC's ATRSEL output disconnected and always
+renders attribute bit 4 as a vertical line. Popful requests BIOS mode AL=04h,
+which selects semigraphics interpretation in the
+[DOSBox-X BIOS implementation](https://dosbox-x.com/doxygen/html/bios_8cpp_source.html).
+[MAME's PC-98 text renderer](https://github.com/mamedev/mame/blob/master/src/mame/nec/pc9801_v.cpp)
+distinguishes vertical-line and semigraphics meanings using ATTRSEL, with
+Kanji glyphs taking precedence. The mode must reach our renderer through the
+existing coherent settings transfer before a replacement build is qualified.
+
+
+### Semigraphics candidate B144 (hardware qualification pending)
+
+The renderer now receives TXTGDC ATRSEL through snapshot bit 121 and the
+existing CRTC parent rising/falling and pixel registers. Attribute bit 4
+selects ANK 2x4 blocks in semigraphics mode; ordinary vertical lines and
+Kanji font precedence remain. The snapshot is now 122 bits and the timing
+endpoint guards include its added bit, retaining the existing setup bound.
+
+Production VHDL regression passed all 256 patterns at 8/16 scanlines,
+40/80 columns and synchronous RAM delays 0/12/25 ns, including blank code
+0 with F1, ordinary lines, font mode, Kanji, secret/blink/reverse/underline,
+cursor and mode changes. Restoring the old mode fails the blank/F1 test.
+Existing text/font-memory and snapshot-transport regressions also pass.
+The full CRTC path passes six reset phases, including a stopped clock,
+with alternating semigraphics and ordinary mode. SDC mocks reject a
+missing ATRSEL endpoint. Private evidence is retained with the B144 bundle.
+The candidate is compiling; no claim of a hardware Popful fix yet.
+
+
+B144 was rejected before upload: its build invocation omitted the
+PC9801_86 selection, removing the PCM86 section. Its full Quartus database
+was archived. B145 rebuilds the same tested semigraphics change with the
+complete working sound profile restored. Saved profile values match B143;
+finish/upload helpers now enforce those values. No hardware session was
+changed, and B145 remains unqualified pending compilation and testing.
+
+
+B145 compiled with the correct sound profile but failed hold: the FEC
+return bit2 had 0.746ns data delay against 1.066ns clock skew, giving
+-0.389ns slack. All four corners identify the same transfer. The complete
+database and detailed reports were archived; nothing was deployed.
+
+B146 requests a physical routing repair: a positive 0.500ns minimum-delay
+relationship on the FEC return bundle, retaining its 5ns maximum, and
+unpacked FECRDAT capture registers. No hold path is excluded. Eight SDC
+scope tests pass, covering exact endpoints, replicas and missing bits.
+Quartus minimum-delay semantics include clock latency; see the
+[Quartus17.0 command reference](https://resources.altera.com/quartushelp/17.0/tafs/tafs/tcl_pkg_sdc_ver_1.5_cmd_set_min_delay.htm).
+The candidate must still pass all timing gates and hardware qualification.
+
+### September 24: ineffective FEC fit settings identified
+
+Build147 compiled with setup -7.466 ns and hold -1.083 ns, so it was
+rejected before upload. Its complete database and all-corner reports are
+retained. Synthesis reported Critical Warning136021 for five intended fit
+assignments: QSF retained the Tcl-style braces as part of each target name.
+The FEC repair settings had therefore been ignored.
+
+Build148 corrects these target strings to double-quoted QSF names. It also
+runs a preflight using Quartus's real project parser to require all five
+expected settings. Unit tests reject the former braced spelling and a
+missing parsed setting. The new report guard also rejects147's actual
+synthesis report. No timing exception was introduced; FEC minimum0.500ns,
+maximum5ns and all hold checks remain. Hardware qualification is pending.
+
+### September 24: B148 passes the experimental timing gate
+
+B148 compiled with setup -6.490 ns, hold +0.108 ns, recovery +1.261 ns
+and removal +0.228 ns. The corrected QSF assignments were accepted;
+no hold exception was used. Setup remains outside closure but within the
+user's -12 ns experimental allowance. The complete Quartus database was
+archived before container removal. The required PC9801_86/JT08 profile
+passed verification, and the unique RBF and diagnostic media were uploaded
+with SHA-256 verification.
+
+On MiSTer, the CPU checksum test passed (455 ALU, 306 RAM-copy and 342
+stack blocks per 10 seconds). The 64 MB physical-memory map passed,
+including sentinels at both ends of each mapped megabyte and unaligned
+accesses. Both result disks passed full integrity audits. Sound and game
+qualification remain in progress; this is not yet a Doom compatibility claim.
+
+B148 also passed 100 FM timer-B IRQ12 deliveries and Rusty's original
+ONGCHK procedure (3 = PC-9801-86 / OPNA); both saved results passed full
+D88 audits. The first sound-test load stalled before DOS while Main's
+image file offset exceeded its size. The image still matched its pristine
+SHA-256; a single menu-first reload completed successfully. This leaves
+an intermittent loading problem unresolved, so the candidate is not yet
+promoted as the stable default. Doom1 hardware testing began at12:08:49CEST.
+
+### September 24: Popful Mail palette resolved by the display switch
+
+B148's unmodified Popful intro advances without the white vertical stripes.
+Its initial palette was still cyan/magenta/white because the saved test
+configuration reported a plasma display. The wrapper's status bit14 is
+DIP1-3, returned as bit4 at port42h. Popful checks this bit during startup
+and selects its alternate palette routine when clear. NP2kai's printer-port
+and display initialization code independently use the same DIP bit.
+
+A controlled hardware comparison changed only status bit14 from Plasma to
+Normal, preserving all core settings, RBF and disk files. The old 16-byte
+configuration was backed up first. The resulting unmodified opening frame
+now has the expected sepia/brown palette, matching the user's reference.
+Evidence: capture1cacf7b08ce540f5ab4e55915af4ac8a at12:24:25CEST.
+This qualifies the displayed intro, not the complete game. Existing RBFs
+need Display: Normal; the legacy default remains Plasma in their menus.
+
+The separate B148 Doom1 trial has not reached gameplay. A private loader
+probe preserves near-call machine state in52 reference cases and narrows
+progress to the DX386 program-load routine after its earlier setup stages.
+A finer probe is being prepared; no speculative CPU change has been made.
+
+
+B148 Doom audio-control follow-up used the original SETUP executable on
+a disposable disk. It initially showed General MIDI music and PC-9801-86
+effects. Selecting built-in FM changed both displayed devices to PC-9801-86
+(config values 3/3); Save and Start still reached only the DX386 loaded-range
+screen. A second Save and Start with both devices explicitly disabled (0/0)
+showed the same screen. Both saved configurations were read back from FAT.
+These trials do not depend on the -nosound command-line option. They make
+a wrong saved audio-device selection an unlikely explanation for this
+earlier loader failure; they do not qualify Doom audio or gameplay.
+
+Private staged probes narrowed the last observed activity to the page
+allocation loop. R3 records repeated calls from 3EFF to 495C and then 39E3.
+The next useful evidence is the remaining allocation count, page-table
+pointer and returned physical page, not a speculative CPU patch. The
+private probes and game code remain excluded from the public tree.
+
+
+The B148 loader state probe reaches 112 low-memory pages plus four XMS pages,
+then stops on the next block-growth request. An independent program also
+fails to return from XMS resize (19 to 35 KB), while separate allocations
+and a 19 KB extended-to-extended copy pass, including a control where that
+is the first copy. This reproduces the issue without Doom code.
+
+Instruction-breakpoint probes also disturb the passing copy control, so
+their last instruction is not reliable evidence of the original failure
+location. The initialized resident XMS driver was saved from hardware for
+a noninvasive z486 simulation. The same resident image passes both copy and
+resize in Unicorn with copied-data and handle checks. The subsequent CPU
+diagnosis and hardware results follow; Doom has not reached gameplay.
+
+
+The noninvasive RTL reproduction identifies visible CS corruption on
+CR0.PE entry: 058Dh becomes058Ch. HIMEMX later executes PUSH CS / POP DS
+and uses a base16bytes too low when exchanging its handle records, damaging
+its resident code. The new CPU keeps entry CPL0 separate from visible CS
+until a CS reload or privilege transition. A four-low-bit regression fails
+on the old RTL and passes on the fix; original resident HIMEMX copy and
+resize both pass with19456bytes compared and unchanged driver code.
+Broad CPU/cache/64MB/interrupt/segmentation regression also passes.
+Evidence: simulation-20260924-133000-22e08d and134407-2e5f4f.
+B149 hardware results follow; Doom gameplay is still pending.
+
+B149 hardware qualification (2026-09-24): setup -6.674 ns, hold +0.090 ns, recovery +1.521 ns, removal +0.261 ns; complete Quartus database retained. CPU checksum/benchmark, 64 MB physical memory, FM IRQ and OPNA detection diagnostics pass, each with a full result-disk audit. The untraced HIMEMX test now passes seven resizes (35 through 131 KB), lock/unlock, and a 512-byte copy round trip on actual MiSTer, where B148 stalled at the first 19-to-35 KB resize. Screenshot: build/monitor/captures/3b43de091cae40568fc6b4d011d84f3b/screenshot.png. Original Doom now passes DX386 and reaches its own V_Init/Z_Init startup messages (d2213ec1fe294efab01652aea6ef4b3c); gameplay remains unconfirmed.
+
+The original Doom run subsequently completed zone allocation and returned
+to DOS with `R_GenerateLookup: alloca failure` (capture
+e1d4e575d6894eb0a6969e28db645b25). Thus the earlier Z_Init screen was not
+evidence of a permanent stall. The unmodified game/source disks remain
+preserved. Do not equate this later failure with missing graphics support
+without further evidence.
+
+Private instrumentation has not yet produced valid allocation-state data.
+R1 showed unreadable horizontal bands. R2 returned a graphics-lump lookup
+error because its logger overwrote the normal `PNAMES` string; that result
+is a probe defect, not evidence about the original game's failure.
+R3 uses a smaller 99-byte logger within a 124-byte error-message span,
+preserving `PNAMES`, all later data and the original first page. It stops
+before the original allocation comparison to report texture index, width,
+requested bytes, stack pointer and lower bound. Its 48 argument cases and
+an overlap negative control pass; only five disk sectors differ and all
+unrelated bytes are audited. Actual B149 output (capture
+f33c835668be4e62bdd3baa124eef441) reports texture zero, width/request 24,
+ESP 0008B5A0h, lower bound 0007BD13h and available 0000F88Dh (63629 bytes).
+These first-texture values are valid. This terminal probe replaces the
+original helper call, so it does not measure that helper's return or later
+texture allocations. A standalone production-CPU regression passes 80
+stack-availability, alignment and unsigned-comparison cases across low and
+extended RAM (simulation-20260924-152142-21711c). No further RTL change is
+justified by these results. A direct DOS launch of the unmodified executable
+was then compared with the earlier launch through SETUP.
+
+The unmodified direct launch reached orange horizontal bands (capture
+0b3cc83439e040cbb99d978de646edc2). Thus that appearance is not specific to
+the R1 logger. A bounded F10/Y response check produced no visible change;
+neither a running game loop nor a CPU hang is established by these images.
+There is still no demonstrated Doom gameplay.
+
+Private extraction of the supplied `pc9821.drv` matches its recorded 10303
+uncompressed bytes. Its code initializes 256 palette entries, maps physical
+00F00000h, and accesses extended video registers including E0100h/E0102h.
+B149's `grpal.vhd` has sixteen palette entries and a four-bit index,
+while its `pc98_extmem_bridge.sv` excludes the 15–16 MB aperture and
+its CPU wrapper has no alternate framebuffer mapping there. This is a
+concrete missing display capability required by this driver, independent
+of whether further runtime faults remain. It does not explain the earlier
+SETUP-launched allocation error by itself. Private extraction metadata and
+disassembly remain under the B149 bundle's `doom-zone-analysis` directory.
+
+2026-09-24 PEGC development: `rtl/graphics/PEGC.md` records the new isolated
+control/address and RGB888 palette modules. Both simulation suites and a real
+Quartus RAM-inference preflight passed; neither module is wired into B149 or a
+new candidate. Full framebuffer/scanout integration and Doom gameplay remain
+pending. No new hardware test or promotion occurred.
+
+2026-09-24 PEGC CPU/memory work: the optional CPU route now implements the
+framebuffer aperture via shared DDR, with palette/register access and byte masks.
+Actual z486 instructions passed palette, bank/linear alias and ordinary-RAM
+isolation tests (`163451-f84dfb`), including the existing 80-case stack regression
+through the enabled arbiter. Independent line-fetch tests pass the 160-pixel
+blanking deadline under modeled competing traffic. Quartus inferred the line
+buffer in 16,384 bits of M10K storage; its complete standalone database is saved.
+These are simulation/synthesis results. GDC scanout, coherent controls and RGB
+compositing are still pending; the production top keeps PEGC disabled. B149's
+hardware behavior and unresolved Doom observations remain unchanged.
+
+2026-09-24 PEGC display integration: B150 is compiling with the full90MHz/64MB/
+PC9801_86/JT08 profile plus the opt-in packed framebuffer. Production raster,
+line buffer, RGB888 compositing, text overlay and128-bit coherent settings pass
+simulation (`170151-e7b5b2`). Combined CPU bus writes through DDR/line/palette
+pass3,840 pixels per clock/phase case (`170615-0dd44d`), including wraps and
+concurrent writes. B150 has not been uploaded or hardware-tested. Current
+hardware remains MENU; B149 and prior fallbacks are preserved. The candidate
+must pass full fit/timing gates and diagnostics before original Doom testing.
+
+2026-09-24 B150 was rejected before upload. Full Quartus database (1015 entries),
+logs and 59 all-corner path reports are archived; build and TimeQuest containers
+removed. Setup -13.659 ns, hold +0.089, recovery -10.414, removal +0.266.
+The worst setup launches at VID/pixel_reset/stages[1] and reaches CPU line-fetch
+and HPS memory controls. Worst recovery is CPU status[6] reset reaching pixel
+packed_fetch/display_bank clear. CPU-only setup is -7.285 ns. No FEC exception.
+The replacement adds CPU-local and pixel-local two-stage reset release to the
+line fetcher; raw reset asserts both chains asynchronously. Internal chain
+stages, functional fanout and all payload timing remain checked. Simulation
+181918-553017 passes six line clock/phase cases and integrated 3840-pixel display
+at two clock combinations; old direct reset release fails the negative control.
+Quartus17 standalone synthesis confirms exactly two CLRN endpoints per reset
+chain; full database archived in pegc-development/reset-synthesis. Five scope
+tests reject missing reset stages or live payload endpoints. Full fitting and
+hardware qualification of the correction are still pending. MiSTer remains MENU.
+
+2026-09-24 B151 compiled with setup -7.052 ns, hold +0.101, recovery +1.095 and
+removal +0.254, within the user's experimental limits. The reset-domain fix
+removed B150's negative recovery. Full 1015-entry Quartus database archived;
+container removed. Profile and pixel-clock/assignment guards passed. Fit uses
+41,274/41,910 ALMs (98%), 515/553 M10Ks (93%) and 61 DSPs. Unique B151 RBF SHA256
+d98e13b10ad92f9881d8a5f049b990f85c0db6bc55fbbde51ae0862cdacde9eb and seven
+launchers/four pristine diagnostics uploaded and verified; not default-promoted.
+Hardware CPU455/299/342 and 64 MB physical RAM checks pass, with complete result
+disk audits; sound checks and original Doom qualification remain in progress.
+
+2026-09-24 B151 FM/OPNA checks also passed with complete result disk audits.
+Original direct Doom reached red vertical stripes; all 400 rows were identical.
+ESC and F10/Y caused no visible change. Gameplay is not established. The
+unmodified Popful intro remains visually correct on the same core.
+Self-authored PEGC display probe R1 passes 262,144-byte banked framebuffer
+readback. With explicit GDC geometry and an independent RGB888 test pattern,
+153,600 unobscured screenshot pixels match exactly (x=0..639, y=144..383).
+Other pixels contain DOS text and were not included in this comparison.
+The 120-byte Z98PGC.TXT result and complete D88 unrelated-byte/FAT audit pass.
+This distinguishes a functioning controlled display path from the unresolved
+Doom initialization problem; no new CPU or timing change is inferred.
+
+2026-09-24 B153 Full90/Normal packing qualification: setup -7.166 ns,
+hold +0.095, recovery +1.260, removal +0.257. Final 38,572/41,910 ALMs
+(92.03%), 2,702 fewer than B151. Complete 1,015-entry database archived;
+container removed. CPU, RAM64, FM and OPNA diagnostics and full D88 audits
+passed. The unmodified Popful intro remains visually correct.
+The original directly launched Doom reaches a recognizable but vertically
+cropped title; Escape, Enter and F10 gave no visible menu response. No gameplay
+success is claimed. BIOS-only PEGC pattern readback passes all 262,144 bytes,
+but each row is displayed twice. Packed scanout had incorrectly inherited
+legacy CSRFORM repetition; both NP2kai and MAME packed renderers advance on
+every output row. B154 retains all B153 settings and changes only that packed
+raster behavior. Baseline production VHDL fails the independent reference;
+fixed 12,800-row/all-32-count tests, actual GDC integration, reset, semigraphics
+and snapshot transport pass. Hardware qualification is still pending.
+
+2026-09-24 B154 packed-row qualification: the build passed the experimental
+setup allowance at -7.010 ns, with hold +0.077 ns, recovery +1.596 ns and
+removal +0.217 ns. All original constraints and required feature checks remain.
+The complete 1015-entry Quartus database was archived before removing its
+container. Final fit is 39,420 / 41,910 ALMs (94.06%). This is not full setup
+closure and the core has not been promoted to the default.
+
+CPU (455 ALU / 299 copy / 342 stack blocks), the physical 64 MB RAM checks,
+100 FM IRQ12 deliveries and Rusty ONGCHK detection (3, PC-9801-86/OPNA) all
+passed on B154. Each result disk passed its complete unrelated-byte/FAT audit.
+The BIOS-only PEGC test read all 262,144 bytes correctly. Its screenshot
+467af6c045ee4d299b2f9ee91c805f4a exactly matches 157,696 unobscured RGB pixels
+of the independent reference. Exclusions are documented in the bundle's
+comparison.json. Thus ignoring legacy CSRFORM repetition in packed scanout
+is now hardware-proven; original Doom gameplay is still a separate test.
+Original Doom was launched directly at 22:27:32 UTC after observing SETUP
+and DOS, with unchanged original EXE, pc9821.drv and saved silent settings.
+
+B154 original Doom now shows its complete title, but guarded Escape/Enter/F10
+produced no visible response. Startup reached the title between 3:15 and 4:57
+after the direct launch. This is not a gameplay pass or proof of CPU hang.
+The unmodified Popful intro remains correct. The user's real PC-9821 starts
+Doom in about 5–10 seconds, so memory allocation/copy performance remains an
+explicit investigation. Current extended memory is DDR-backed, while the
+original low-memory/ROM/legacy-video/floppy SDRAM map remains intact.
+
+B155 is compiling the requested overlay revision. Production overlay tests
+pass all59frames, every boot-font caption pixel, transparent passthrough,
+16-pixel upward placement, crop/hold/drive behavior and56576streamedpixel/sync
+checks. Restoring the old position, black background or wrong font bit order
+fails. The actual HPS disk/IDE/HDI/MPU integration regression also passes.
+Only rtl/floppy_overlay.sv differs from the B154 hardware source snapshot;
+constraints, firmware, CPU, memory and sound are unchanged. Fit/hardware
+qualification remains pending.
+
+
+Stock HIMEM control, September 25: the original BIOS sets the V30 identity bit
+at 0000:0501. A read-only guest probe measured FLAGS=0002 after POPF(0),
+but this V30 bit was set. The narrow Z98MEM correction clears it only after
+successful 386 protected-mode memory detection. Actual CPU tests cover
+0/16/64 MB and preservation of other BIOS fields; stock HIMEM now loads on
+hardware. This does not implement a PC-9821 BIOS boot memory count.
+
+With stock HIMEM, the self-authored XMS benchmark verifies allocation and
+resize data plus a complete 1 MB copy. Single 1043 KB/8192 KB allocations
+and 64 small resizes each take less than the whole-second RTC resolution;
+8 MB of copying measures one RTC second. The first full Doom title capture
+is about 15 seconds after launch, compared with minutes under HIMEMX.
+The exact first appearance and the user's 10-second target remain unproven.
+
+Doom still gives no visible menu response. Both original timedemo and direct
+level-start controls under stock HIMEM exit with resource index 19781 out of
+range. Basic real-mode and protected32 timer/IRQ/IRETD hardware probes pass.
+Actual CPU LSS stack-switch tests pass GDT/LDT, low/extended RAM and all four
+alignments. A private local original-lookup test passes with a constructed
+known WAD table; this does not verify Doom's actual runtime table or guest
+file reads. No production CPU change follows from these controls.
+
+B155 has compiled within the experimental timing gate: setup -7.813 ns,
+hold +0.045 ns, recovery +1.618 ns, removal +0.253 ns. Its complete database
+is archived. Overlay upload and hardware qualification remain pending.
+
+
+### 2026-09-25: Doom directory and LDT controls
+
+The self-authored DOS WAD directory probe passed on B154 with stock HIMEM: all 32,720 directory bytes (2,045 entries) exactly matched the preserved original, CRC32 `142a5bc3`; DEMO1=3, DEMO3=5, TITLEPIC=466, E1M1=6, E1M2=17. The disposable disk passed a full unrelated-byte audit. This verifies DOS header/directory reads, not Doom’s protected runtime table or all lump payloads. The original runtime error `W_CacheLumpNum:19781>=numlumps` remains unexplained.
+
+The self-authored actual-CPU LDT interrupt variant passed four injected IRQs, IRETD and real-mode restoration (simulation-20260925-023514-7f5264). The default hardware PITPM2 binary remained byte-identical. No production CPU change resulted from these passing controls.
+
+
+### 2026-09-25: Original Doom II comparison on B154
+
+A separate stock-HIMEM test disk passed a full-byte installation audit with original Doom II files. Normal startup reached its title by the first title capture about18seconds after the command (exact first appearance and10second target unproven). The attract demo advanced, Escape opened the menu, and New Game reached skill selection and a rendered level. Subsequent bounded movement/fire/Escape controls gave no visible useful response; ammunition remained50. Responsive player gameplay is therefore not qualified. No Doom I-style W_CacheLumpNum error was observed. This different behavior narrows investigation but does not prove a CPU hang or resolve Doom I. Private evidence is retained in doom2-hardware-results.json; source files and saves were unchanged.
+
+Frame comparison refines the Doom II result: the initial forward input changed the viewpoint, and later frames continue animating enemies/decorations and the HUD face. This is not evidence of a whole-game freeze. Sustained turning/fire and Escape remain unresponsive in the captured tests; gameplay input delivery is the narrower unresolved issue.
+
+
+### 2026-09-25: Doom II PC-9801-86 music/effects control
+
+Original SETUP and a guest-created byte-identical renamed copy return a DISK1 prompt before the sound UI; cause remains unresolved. The disposable CFG was backed up and only music/SFX device values changed from0/0 to3/3, with a full unrelated-byte audit. Sound-enabled Doom II reaches its title, responsive menus and a fresh level. Firing as the first gameplay input reduced ammunition50→46 and an enemy fell. Later turning changed the view, but Escape again failed to show a menu while simulation continued. The input sequence differs from the silent trial, so this does not establish that enabling sound caused the improvement. Full input reliability, audible output and the10second startup target remain unqualified. No game executable or original asset was changed.
+
+### 2026-09-25: Doom II music confirmation and keyboard buffering candidate
+The user confirms music sounds good at the TV and physical keyboard input stops responding while the game continues. B154 gameplay had already shown enemies/HUD continuing. This is not evidence of a whole CPU/game freeze; SFX were not separately confirmed by listening.
+Actual production KBCONV regression `simulation-20260925-031532-5df442` reproduced dropped Escape release while RXRDY remained unread. The final candidate adds a bounded 16-byte queue with clock inhibit and fixes the separately reproduced KS_REP/RXRDY publication race. Final simulation `032841-c76190` passes normal/delayed/extended/modifier/repeat/reset/queue-wrap cases and framed PS/2 receiver integration; restoring either fault fails with the intended missing/wrong event. Tests use representative synchronous key-table and accelerated SFT models. The receiver integration test guards only a pre-existing dead TIMECNT decrement at zero in a temporary KBIF copy; production KBIF is unchanged. This limitation is documented in the test script.
+B156 `quartus-20260925-032931-3fbb3c` is compiling with unchanged B155 profile/timing/ROMs. Only KBCONV production RTL differs. Hardware input causation and fix remain unproven pending timing qualification and sustained gameplay testing; no speculative CPU fix or hold exception. B155 overlay is included but still needs hardware qualification. Current game is B154 Doom II, original user files, stock HIMEM, saved PC9801-86 3/3.
+
+
+B157 (2026-09-25): setup -7.350 ns, hold +0.092, recovery +1.504, removal +0.213; 39,759 ALMs. CPU/RAM64/FM/OPNA and BIOS packed framebuffer diagnostics passed with full disk audits. Raised transparent overlay matched all 7,560 pixels over a coloured pattern, including 5,132 transparent pixels; Popful intro remained correct. Sustained Doom II input still failed after a right turn, so the candidate is not default-promoted. B158 tests a separately reproduced PIC EOI request-loss correction; hardware results pending.
+
+### 2026-09-25: Doom I W_CacheLumpNum 19781 root cause (B161 probes)
+
+Both supplied Doom I copies use the same DOOM.EXE (SHA-256 `09e9ecbe...`, DX386 1.20, Watcom C 9.x); Doom II uses Watcom C/C++32 10.x. Private disk clones of `FIX_ONLY_R4` (Z98FIX + stock HIMEM) patched only DOOM.EXE error paths, with full unrelated-byte audits.
+R1 (`doom1-caller-probe-r1`) printed the W_CacheLumpNum caller: image 14993h, R_PrecacheLevel's sprite loop; lump 19781 = 820 (firstspritelump) + 4A11h, the low word of ZONEID.
+R3 (`doom1-zone-probe-r3`, probe in the unused M_ScreenShot code) reported sprite 36, frame j=2, numframes=2. Its frame table block (5F2120h, size 50h, PU_STATIC, valid ZONEID) ends exactly at the next valid block header 5F2170h, so the zone heap is intact and the loop ran past its own table. (R2 placed its probe at image offset 10h, which is overwritten at runtime; that GP fault is a probe defect.)
+The loop tail is `inc [ebp-0Ch] / mov eax,[sprites] / add eax,[ebp-20h] / mov edx,[ebp-0Ch] / cmp edx,[eax]`. The new actual-CPU regression `run-z486-rmw-reload.sh` fails on B161 RTL at the first pass; Unicorn passes the identical binary. The data-path trace shows the ADD result 7E808h and the older MOV's still-valid memory token 7E800h committing EAX in the same cycle, with the token assigned last. Doom therefore compared j with sprites[0].numframes.
+The fix commits/forwards the younger VIPT load WB after that token. With it, the new regression, GPR forwarding (bank vs reference), run-z486, PM payload, PIT PM/LDT, LSS, stack allocation, unreal CS, upper cache (all five configurations), prefetch, owner-ROM boot, memory init, IDE copy, segment and flat regressions all pass. REPNE STOS (F2, emitted by Watcom 9) was also checked and is architecturally correct; two REPNE STOSW/STOSD cases were added to the string regression.
+B163 differs from B161 only by moving the `load_wb` GPR write below the two memory-token writes in `data_unit.sv` (the read-forwarding priority change was reverted to keep the netlist near B161). With seed 7 it never left routing (like B162); seed 8 `quartus-20260926-004554-fc6858` compiled in 36 min: setup -6.675 ns, hold +0.105, recovery +1.419, removal +0.261; 39,839 ALMs (95%); profile, seed, pixel-clock and FEC route (64 atoms) guards pass. RBF SHA-256 `3e0fbefa...0700`, uploaded as `Zet98_Z486_JT08_90_WB_Order_B163_20260925.rbf`.
+
+B163 hardware (2026-09-26): unmodified DOOM.EXE on a byte-identical clone of `FIX_ONLY_R4` (Z98FIX + stock HIMEM), plain `DOOM` from A:\DOOM. Title shown by the 15 s capture; the attract demo was playing at 35 s (the point where B161 froze/exited). Escape opened the main menu, New Game reached episode and skill selection, E1M1 started, and held forward/right input moved and turned the player. This is the first demonstrated Doom I gameplay on the 90 MHz z486 core. Sound, longer play and Doom II regression on B163 are not yet checked; B163 is not default-promoted.
+
+### 2026-09-26: Doom I floors/ceilings, differential fuzzing and B164
+
+On B163 the user saw Doom I floors and ceilings not drawn (title-screen art remained in those areas); walls, sprites and HUD were correct and Doom II was fine. A new differential fuzzer (`tests/run-z486-fuzz.sh`, Watcom-style dependent integer blocks compared with Unicorn over all GPRs and 384 KB RAM) caught the B161 bug in all six calibration seeds and found two remaining z486 bugs in all ten B163 seeds, minimized to `mov eax,[uncached]; and eax,[ebp-12]`:
+1. An optimistic ROM read releases DLY in the dcache lookup cycle; on a miss/uncached read `mem_opt_wait` stalls the sequencer but a VIPT successor issued in that cycle captured stale OPR_R from the memory token. Such EX ops now take the slow path.
+2. Deferred memory/shift tokens recommit every stalled cycle; they now stop after a younger load WB wrote their register or a younger RMW-fast step replaced OPR_R. (A commit-once variant broke a lone POP, whose OPR_R data arrives late, and was discarded.)
+With both, fuzz seeds 1-30 (360,000 instructions) match Unicorn; gpr-forward, rmw-reload, run-z486, PM payload, PIT PM/LDT, LSS, stack allocation, unreal CS, prefetch, memory init, IDE copy and segment regressions pass. The flat-admission candidate script refuses the changed `z486.sv` base by design.
+B164 `quartus-20260926-022224-df6b81` (B161 profile, seed 8, watchdog, FEC guard in flow): 34 min, setup -6.686 ns, hold +0.096, recovery +1.441, removal +0.309. RBF SHA-256 `3ee1d72c...9e90`, uploaded as `Zet98_Z486_JT08_90_Token_Fixes_B164_20260926.rbf`.
+B164 hardware: unmodified Doom I on a fresh byte-identical clone of `FIX_ONLY_R4`: title, attract demo with textured floors, ceilings and nukage, menu, E1M1 start room with correct floor/ceiling/water, turning, walking and a health-bonus pickup. Doom II (B154 stock-memory disk) reaches its title and attract demo with sky and floors. Sound, long play and the other diagnostics are not yet re-run on B164; not default-promoted.

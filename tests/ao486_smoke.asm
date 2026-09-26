@@ -106,6 +106,16 @@ start:
     jne fail
 %endif
 
+%ifdef Z486_SHIFT_TESTS
+%include "tests/z486_shift_cases.inc"
+%include "tests/z486_boot_cases.inc"
+%include "tests/z486_pio_cases.inc"
+%include "tests/z486_integer_cases.inc"
+%include "tests/z486_elapsed_cases.inc"
+%include "tests/z486_string_cases.inc"
+%include "tests/z486_flags_cases.inc"
+%endif
+
     ; A20 disabled at reset; enabling it must not wrap unavailable high RAM.
     mov byte [1], 0xa5
     mov ax, 0xffff

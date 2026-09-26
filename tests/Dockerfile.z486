@@ -1,0 +1,2 @@
+FROM zet98-video-sim:latest
+COPY --from=zet98-mixed-sim:latest /usr/bin/nasm /usr/local/bin/nasm

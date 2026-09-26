@@ -193,6 +193,15 @@ signal fec_request_source, fec_request_crossing, fec_request_memory : std_logic_
 signal fde_address, fec_address : std_logic_vector(ADRWIDTH+1 downto 0);
 signal fde_read_data, fec_read_data : std_logic_vector(15 downto 0);
 signal fde_read_crossing, fec_read_crossing : std_logic_vector(15 downto 0);
+-- Explicit combinational cells prevent a direct local-register shortcut on
+-- this held FEC return word. They add no clocked state or protocol latency.
+-- The existing 0.5 ns minimum / 5 ns maximum and all hold checks still apply;
+-- cell count is not a timing guarantee. Every fit must qualify all corners.
+component LCELL is
+    port (a_in : in std_logic; a_out : out std_logic);
+end component;
+type fec_hold_route_t is array (0 to 4) of std_logic_vector(15 downto 0);
+signal fec_hold_route : fec_hold_route_t;
 signal fde_write_data, fec_write_data : std_logic_vector(15 downto 0);
 signal	lFDEADR		:std_logic_vector(ADRWIDTH+1 downto 0);
 signal	lFECADR		:std_logic_vector(ADRWIDTH+1 downto 0);
@@ -267,7 +276,20 @@ begin
     fde_request_crossing <= fde_request_source; -- FDE_REQUEST_BUNDLE_TRANSPORT
     fec_request_crossing <= fec_request_source; -- FEC_REQUEST_BUNDLE_TRANSPORT
     fde_read_crossing <= fde_read_data; -- FDE_READ_BUNDLE_TRANSPORT
-    fec_read_crossing <= fec_read_data; -- FEC_READ_BUNDLE_TRANSPORT
+    fec_hold_route(0) <= fec_read_data;
+    fec_hold_stages : for stage in 0 to 3 generate
+        fec_hold_bits : for bitnum in 0 to 15 generate
+            signal routed : std_logic;
+            attribute keep : boolean;
+            attribute keep of routed : signal is true;
+        begin
+            route_cell : LCELL port map (
+                a_in => fec_hold_route(stage)(bitnum),
+                a_out => routed);
+            fec_hold_route(stage+1)(bitnum) <= routed;
+        end generate;
+    end generate;
+    fec_read_crossing <= fec_hold_route(4); -- FEC_READ_BUNDLE_TRANSPORT
     floppy_bundle : if FLOPPY_REQUEST_BUNDLE generate
         -- These are the same acceptance conditions as FDEREQ/FECREQ.
         -- The held address/data reach memory with the corresponding JOB.

@@ -14,7 +14,7 @@ using System.Globalization;
 
 class Job {
  public string Id, Kind, Status, Log="", Config=""; public DateTime Start, End;
- public bool Running; public double Seconds; public int Number;
+ public bool Running; public double Seconds; public int Number; public DateTime LastOutput;
 }
 class Snapshot { public List<Job> Jobs=new List<Job>(); public string Activity="No MiSTer activity recorded yet.", Health="", Estimate=""; public bool LiveStateKnown; }
 class MonitorForm : Form {
@@ -30,6 +30,8 @@ class MonitorForm : Form {
  readonly SelectableText screenshotTime=new SelectableText();
  readonly Button capture=new Button(), showBuilds=new Button(), lastScreenshot=new Button();
  bool capturing;
+ readonly NotifyIcon tray=new NotifyIcon();
+ readonly HashSet<string> notified=new HashSet<string>();
  bool busy; DateTime retryAfter=DateTime.MinValue; int failures;
  readonly Color ink=Color.FromArgb(225,232,244);
  public MonitorForm(string path) {
@@ -52,6 +54,9 @@ class MonitorForm : Form {
   screenshotTime.SetBounds(20,98,670,28);screenshotTime.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;screenshotTime.BackColor=BackColor;screenshotTime.ForeColor=ink;screenshotTime.Visible=false;Controls.Add(screenshotTime);
   lastScreenshot.Text="Last screenshot";lastScreenshot.SetBounds(450,679,130,28);lastScreenshot.Anchor=AnchorStyles.Left|AnchorStyles.Bottom;lastScreenshot.Click+=(s,e)=>ShowLastScreenshot();Controls.Add(lastScreenshot);
   note.Visible=false;
+  tray.Icon=SystemIcons.Information;tray.Text="Zet98 Monitor";tray.Visible=true;
+  tray.BalloonTipClicked+=(s,e)=>{WindowState=FormWindowState.Normal;Activate();};
+  FormClosed+=(s,e)=>{tray.Visible=false;tray.Dispose();};
   timer.Interval=10000;timer.Tick+=async(s,e)=>await RefreshAsync();
   Shown+=async(s,e)=>{timer.Start();await RefreshAsync();}; FormClosing+=(s,e)=>{timer.Stop();cancel.Cancel();};
  }
@@ -96,6 +101,8 @@ class MonitorForm : Form {
  void State(Job j,Dictionary<string,object>d){
   j.Start=Date(Val(d,"StartedAt"));j.End=Date(Val(d,"FinishedAt"));j.Running=Val(d,"Running").Equals("True",StringComparison.OrdinalIgnoreCase);
   j.Status=j.Running?(Val(d,"Paused")=="True"?"Paused":"Running"):Val(d,"ExitCode")=="0"?(j.Kind=="FPGA build"?"Compiled · awaiting timing review":"Completed"):"Failed · exit "+Val(d,"ExitCode");
+  if(!j.Running&&Val(d,"ExitCode")=="125")j.Status="Failed · STALLED (watchdog stopped Quartus)";
+  if(!j.Running&&Val(d,"ExitCode")=="124")j.Status="Failed · time limit reached";
   if(Val(d,"OOMKilled")=="True")j.Status="Failed · memory limit";
   if(Val(d,"Status")=="created")j.Status="Waiting to start";
   j.Seconds=j.Start==DateTime.MinValue?0:((j.Running?DateTime.UtcNow:j.End)-j.Start).TotalSeconds;
@@ -118,6 +125,28 @@ class MonitorForm : Form {
 
   }
  }
+ // docker logs --timestamps prefixes RFC3339Nano times; .NET parses at most 7 fraction digits.
+ static string StripStamps(string raw,out DateTime newest){
+  newest=DateTime.MinValue;var lines=new List<string>();
+  foreach(string line in raw.Replace("\r","").Split('\n')){
+   var m=Regex.Match(line,@"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z (.*)$");
+   if(!m.Success){lines.Add(line);continue;}
+   string frac=m.Groups[2].Value;if(frac.Length>8)frac=frac.Substring(0,8);
+   DateTime t;if(DateTime.TryParse(m.Groups[1].Value+frac+"Z",null,DateTimeStyles.RoundtripKind,out t)){t=t.ToUniversalTime();if(t>newest)newest=t;}
+   lines.Add(m.Groups[3].Value);
+  }
+  return string.Join("\n",lines.ToArray());
+ }
+ // B161's longest silent Quartus phase (routing) was 10 minutes. Warn at 15;
+ // scripts/quartus-watchdog.sh stops the build at 25 silent minutes.
+ public static readonly double StallWarnMinutes=WarnMinutes();
+ static double WarnMinutes(){double v;return double.TryParse(Environment.GetEnvironmentVariable("Z98_STALL_WARN_MINUTES"),NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&v>0?v:15;}
+ public static double SilentMinutes(Job j){return j.Running&&j.LastOutput!=DateTime.MinValue?(DateTime.UtcNow-j.LastOutput).TotalMinutes:0;}
+ public static string StallText(Job j){
+  if(j.Log.Contains("Z98_WATCHDOG")||j.Status.Contains("STALLED"))return "WATCHDOG: Quartus stalled and was stopped. Diagnostics: build folder source/Zet98/v17/watchdog/diagnostics.txt";
+  double m=SilentMinutes(j);
+  return m>=StallWarnMinutes?"WARNING: no output for "+Math.Floor(m*10)/10+" min - possible Quartus hang (watchdog stops it at 25 min)":"";
+ }
  static string Tail(string text){return string.Join("\n",text.Replace("\r","").Split('\n').Where(l=>!string.IsNullOrWhiteSpace(l)).Reverse().Take(3).Reverse().Select(l=>l.Trim()).ToArray());}
  string Activity(){
   var dir=Path.Combine(root,"build","monitor-events");if(!Directory.Exists(dir))return "No MiSTer activity recorded yet.";
@@ -138,8 +167,22 @@ class MonitorForm : Form {
     if(cards[i].Job!=null){var j=cards[i].Job;var times=history.Values.Where(x=>!x.Running&&x.Kind==j.Kind&&x.Seconds>30&&x.Status.StartsWith(j.Kind=="FPGA build"?"Compiled":"Completed")).Select(x=>x.Seconds).OrderBy(x=>x).ToArray();
      if(j.Running&&shot.LiveStateKnown)cards[i].Estimate=times.Length>=3?"Typical total "+Duration(times[times.Length/2])+" · "+times.Length+" successful runs (estimate)":"Learning duration · needs 3 successful runs";
     }cards[i].Render();}
+   foreach(var j in history.Values.Where(x=>x.Kind=="FPGA build"))NotifyStall(j);
   }catch(OperationCanceledException){}catch(Exception ex){health.Text="Monitor error: "+ex.Message;}finally{busy=false;}
  }
+ // One notification per build and condition. A watchdog stop is announced
+ // only when it happened within the last hour, not for old history.
+ void NotifyStall(Job j){
+  string text=StallText(j);if(text=="")return;
+  bool stopped=!j.Running;string key=j.Id+(stopped?"|stopped":"|warning");
+  if(notified.Contains(key))return;notified.Add(key);
+  if(stopped&&(j.End==DateTime.MinValue||(DateTime.UtcNow-j.End).TotalMinutes>60))return;
+  string title=stopped?"Build #"+j.Number+" stalled - watchdog stopped Quartus":"Build #"+j.Number+" may be hung";
+  tray.ShowBalloonTip(30000,title,text,stopped?ToolTipIcon.Error:ToolTipIcon.Warning);
+  System.Media.SystemSounds.Exclamation.Play();
+  FlashWindow(Handle,true);
+ }
+ [DllImport("user32.dll")] static extern bool FlashWindow(IntPtr window,bool invert);
  public static Dictionary<string,object> ParseTiming(string summary,string source){
   var matches=Regex.Matches(summary,@"(?m)^Type\s*:\s*(.+)\r?\nSlack\s*:\s*(-?[0-9]+(?:\.[0-9]+)?)");
   if(matches.Count==0)throw new Exception("Timing summary has no recognized checks");
@@ -197,7 +240,7 @@ class MonitorForm : Form {
      if(!history.TryGetValue(name,out j)){j=new Job{Id=name,Kind=Kind(name)};history[name]=j;}
      State(j,(Dictionary<string,object>)d["State"]);
     }
-    foreach(var j in history.Values.Where(j=>names.Contains(j.Id)).OrderByDescending(j=>j.Running).ThenByDescending(j=>j.Start).Take(3)) j.Log=Tail(RunDocker("logs --tail 3 "+Quote(j.Id),cancel.Token));
+    foreach(var j in history.Values.Where(j=>names.Contains(j.Id)).OrderByDescending(j=>j.Running).ThenByDescending(j=>j.Start).Take(3)) {string logText=RunDocker("logs --timestamps --tail 3 "+Quote(j.Id),cancel.Token);DateTime last;j.Log=Tail(StripStamps(logText,out last));if(last!=DateTime.MinValue)j.LastOutput=last;}
    }
    foreach(var j in history.Values.Where(j=>j.Kind=="FPGA build"&&!j.Running).OrderByDescending(j=>j.Start).Take(3))ReviewTiming(j,names.Contains(j.Id));
    foreach(var j in history.Values.Where(j=>j.Running&&!names.Contains(j.Id))){j.Running=false;j.Status="Container removed · result unavailable";}
@@ -249,11 +292,13 @@ class JobCard:Panel{
   var j=Job;var elapsed=TimeSpan.FromSeconds(Math.Max(0,j.Seconds));string time=((int)elapsed.TotalHours).ToString("00")+elapsed.ToString(@"\:mm\:ss");
   bool stale=j.Running&&!LiveStateKnown;
   string title=j.Kind+(j.Number>0?" #"+j.Number:"")+" · "+(stale?"Status unknown · last seen ":"")+j.Status;
-  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+j.Id+"\n"+j.Log;
+  string stall=MonitorForm.StallText(j);
+  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+j.Id+"\n"+(stall!=""?stall+"\n":"")+j.Log;
   if(!text.SetLiveText(content))return;
   text.SelectAll();text.SelectionFont=normal;text.SelectionColor=Color.Gainsboro;
   text.Select(0,title.Length);text.SelectionFont=bold;
   text.SelectionColor=stale?Color.FromArgb(238,193,111):j.Status.Contains("Failed")||j.Status.Contains("FAILED")?Color.FromArgb(255,129,133):j.Running?Color.FromArgb(93,204,246):Color.FromArgb(141,213,170);
+  if(stall!=""){int at=content.IndexOf(stall);text.Select(at,stall.Length);text.SelectionFont=bold;text.SelectionColor=stall.StartsWith("WATCHDOG")?Color.FromArgb(255,129,133):Color.FromArgb(238,193,111);}
   text.Select(0,0);
  }
  protected override void Dispose(bool disposing){if(disposing){normal.Dispose();bold.Dispose();}base.Dispose(disposing);}

@@ -14,7 +14,7 @@ for delay in 5 80; do
         -e "/SUB_READ_COMPLETION_CAPTURE/a\\                    assert sub_read_crossing'stable(5 ns) report \"SUB return bundle arrived too late\" severity failure;" \
         Zet98/sdramc.vhd > "$out/sdram-$delay.vhd"
 done
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-5.vhd" tests/sdram_request_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/sdram-5.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
 for sub in false true; do
     for mhz in ${CPU_RATES:-20 40 50 60 90 100}; do
@@ -24,7 +24,7 @@ for sub in false true; do
         done
     done
 done
-ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/sdram-80.vhd" tests/sdram_request_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd "$out/sdram-80.vhd" tests/sdram_request_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" sdram_request_tb
 for sub in false true; do
     if ghdl -r --std=08 -fsynopsys --workdir="$out" sdram_request_tb \

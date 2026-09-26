@@ -11,7 +11,7 @@ from unicorn import Uc, UC_ARCH_X86, UC_MODE_16, UC_HOOK_INTR, UC_HOOK_INSN, UC_
 from unicorn.x86_const import *
 
 
-def check(binary, image, corrupt=False, vector_segment=0xf800, vector_offset=0x1234, wrapper=False, bootsector=None):
+def check(binary, image, corrupt=False, vector_segment=0xf800, vector_offset=0x1234, wrapper=False, bootsector=None, failure=None, checksum_error=False):
     cpu = Uc(UC_ARCH_X86, UC_MODE_16)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0x10100 if bootsector is None else 0x1fc00, binary if bootsector is None else bootsector)
@@ -25,6 +25,11 @@ def check(binary, image, corrupt=False, vector_segment=0xf800, vector_offset=0x1
     cpu.mem_write(0x584, b'\x90')
     ports = {}
     state = dict(status=0x50, word=0, data=b'', reads=0, handoff=False)
+    traps = struct.unpack('<4H', binary[-8:]) if binary[-16:-8] == b'Z98STAGE' else None
+    reference_compare = binary[-29:-23] in (b'Z98CMP', b'Z98VAL', b'Z98ABS')
+    buffer_marker = binary.rfind(b'Z98BUFR')
+    buffer_probe = buffer_marker >= 0
+    buffer_eip = struct.unpack_from('<H', binary, buffer_marker+7)[0] if buffer_probe else None
 
     def output(cpu, port, size, value, _):
         ports[port] = value
@@ -60,6 +65,10 @@ def check(binary, image, corrupt=False, vector_segment=0xf800, vector_offset=0x1
                 assert ax >> 8 in (2, 9), hex(ax)
             return
         assert vector == 0x1b
+        if (failure == 'initialize' and ax == 0x0380) or (failure == 'read' and ax == 0x0680):
+            cpu.reg_write(UC_X86_REG_AX, 0xd000)
+            cpu.reg_write(UC_X86_REG_EFLAGS, cpu.reg_read(UC_X86_REG_EFLAGS) | 1)
+            return
         if bootsector is not None and ax == 0xd690:
             assert state['reads'] == 0
             assert cpu.reg_read(UC_X86_REG_BX) == 4096
@@ -100,13 +109,40 @@ def check(binary, image, corrupt=False, vector_segment=0xf800, vector_offset=0x1
     cpu.hook_add(UC_HOOK_INSN, input_, None, 1, 0, UC_X86_INS_IN)
     cpu.hook_add(UC_HOOK_INSN, output, None, 1, 0, UC_X86_INS_OUT)
     cpu.hook_add(UC_HOOK_CODE, handoff, None, 0x1fc00, 0x1fc00)
+    if checksum_error:
+        location = 0xd8100 + binary.index(bytes.fromhex('3d70f2'))
+        def corrupt_checksum(cpu, address, size, _):
+            cpu.reg_write(UC_X86_REG_AX, cpu.reg_read(UC_X86_REG_AX) ^ 1)
+        cpu.hook_add(UC_HOOK_CODE, corrupt_checksum, None, location, location)
     cpu.emu_start(0x10100 if bootsector is None else 0x1fc00, 0x100000, count=1000000)
-    expected = not corrupt and valid_vector
+    expected = not corrupt and valid_vector and failure is None and not checksum_error and not buffer_probe
     assert state['handoff'] == expected
-    assert state['reads'] == (2 if valid_vector else 0)
+    assert state['reads'] == ((1 if buffer_probe else 2) if valid_vector and failure is None else 0)
+    if buffer_probe and valid_vector and failure is None:
+        assert cpu.reg_read(UC_X86_REG_CS) == 0xd800
+        assert cpu.reg_read(UC_X86_REG_IP) == buffer_eip
+        assert ports.get(0x7ff0) == struct.unpack_from('<H', image, 4)[0]
+    elif traps and not expected:
+        stage = 0 if not valid_vector else 1 if failure == 'initialize' else 2 if failure == 'read' else 3
+        assert cpu.reg_read(UC_X86_REG_IP) == traps[stage], (stage, hex(cpu.reg_read(UC_X86_REG_IP)), traps)
+        assert cpu.reg_read(UC_X86_REG_CS) == 0xd800
+        if binary[-23:-16] == b'Z98PORT':
+            assert 0x7ff0 in ports, 'Missing diagnostic AX write'
+            if failure:
+                assert ports[0x7ff0] == 0xd000
+            elif reference_compare and valid_vector:
+                first_bad = (struct.unpack('<H', image[:2])[0] ^ 1) if binary[-29:-23] == b'Z98VAL' else 0
+                if binary[-29:-23] == b'Z98ABS': first_bad = struct.unpack('<H', image[4:6])[0]
+                assert ports[0x7ff0] == (first_bad if corrupt else 0xffff)
+            elif corrupt and valid_vector:
+                checksum = 0
+                damaged = bytes([image[0] ^ 1])+image[1:]
+                for word in struct.unpack('<512H', damaged):
+                    checksum = (((checksum << 1) | (checksum >> 15)) & 0xffff) ^ word
+                assert ports[0x7ff0] == checksum, (hex(ports[0x7ff0]), hex(checksum))
     if not valid_vector:
         assert bytes(cpu.mem_read(0x1b * 4, 4)) == original_vector
-    elif corrupt:
+    elif corrupt and not traps:
         text = bytes(cpu.mem_read(0xa0000, 112))[::2]
         assert text.startswith(b'Zet98 VHD bootstrap stopped:')
     if expected:
@@ -160,4 +196,14 @@ if __name__ == '__main__':
     check(binary, image, vector_segment=0xffff, vector_offset=0xf000, bootsector=bootsector)
     if bootsector is None:
         check(binary, image, vector_segment=0x60, vector_offset=0x7b56, wrapper=True)
+    if binary[-16:-8] == b'Z98STAGE':
+        assert bootsector is not None, 'Stage traps require the BIOS-first fixture'
+        check(binary, image, failure='initialize', bootsector=bootsector)
+        check(binary, image, failure='read', bootsector=bootsector)
+        print('PASS: distinct vector/init/read/checksum stop addresses and injected BIOS errors')
+    if binary[-29:-23] in (b'Z98CMP', b'Z98VAL', b'Z98ABS'):
+        check(binary, image, checksum_error=True, bootsector=bootsector)
+        print('PASS: distinguish changed boot data from an incorrect checksum computation')
+    if b'Z98BUFR' in binary:
+        print('PASS: first-sector bounce buffer word captured before the destination copy')
     print('PASS: resident BIOS, read-only IPL handoff, tiny boot stack/IVT protection, carry/IF/DF, DOS wrapper, noncanonical ROM pointer, corrupt-image and unsafe-vector rejection')

@@ -93,5 +93,40 @@
     "LOWBL",
     1,
     "GLOWBLK"
+  ],
+  [
+    "ATRSEL",
+    1,
+    "tGDC_ATRSEL"
+  ],
+  [
+    "PC_B0HI",
+    1,
+    "gGDC_BASEADDR0(14)"
+  ],
+  [
+    "PC_B1HI",
+    1,
+    "gGDC_BASEADDR1(14)"
+  ],
+  [
+    "PC_MODE",
+    1,
+    "pc_mode"
+  ],
+  [
+    "PC_SINGLE",
+    1,
+    "pc_single"
+  ],
+  [
+    "PC_PAGE",
+    1,
+    "gGDC_VGRAMSEL"
+  ],
+  [
+    "PC_FAST",
+    1,
+    "pc_fast"
   ]
 ]

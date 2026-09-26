@@ -470,6 +470,7 @@ set_global_assignment -name VHDL_FILE ../../LIB/intchk.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/digifilter.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/sftgen.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/opna_clock_enable.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/pc98_pit_clock.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/signext.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/CRCGENN.vhd
 set_global_assignment -name VHDL_FILE ../../LIB/div.vhd
@@ -491,12 +492,20 @@ set_global_assignment -name VHDL_FILE ../../VIDEO/VTIMING.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/synccont2.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/text_row_counter.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/video_output.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/boot_media_control.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/floppy_overlay.sv
 set_global_assignment -name VHDL_FILE ../../rtl/startup_mute.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_retrace_cdc.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pcm86.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
+set_global_assignment -name VHDL_FILE ../../VIDEO/pegc_raster.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_control.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_palette.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_memory.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_bus.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_ddr_arbiter.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_line_fetch.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/CRTC98.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/GRAPHSCR98.vhd
 set_global_assignment -name VHDL_FILE ../grcg.vhd
@@ -542,6 +551,7 @@ set_global_assignment -name VHDL_FILE ../../rtl/reset_release.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_settings_transfer.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/display_page_address.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide_bootrom.sv
 
 # The fabric divide-by-three pixel clock must use a clock network.
 # General routing adds skew and excessive hold-delay compensation.
@@ -553,3 +563,7 @@ set_global_assignment -name VHDL_FILE ../../rtl/ascal_line_address.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/hdmi_tune_gate.sv
 
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/midi/pc98_mpu_uart.sv
+
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_image_bridge.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_floppy_image.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_hdi_image.sv

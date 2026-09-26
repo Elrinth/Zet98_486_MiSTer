@@ -39,7 +39,8 @@ port(
 	VCOMP	:in std_logic;
 
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+    ATRSEL :in std_logic := '0'
 );
 end KNJSCR;
 
@@ -74,6 +75,7 @@ signal pitch_pixel :std_logic_vector(7 downto 0);
 signal cursor_addr_pixel :std_logic_vector(12 downto 0);
 signal cursor_enable_pixel, cursor_blink_pixel :std_logic;
 signal cursor_upper_pixel, cursor_lower_pixel :integer range 0 to 19;
+signal attribute_mode_pixel :std_logic;
 signal cursor_rate_pixel :std_logic_vector(4 downto 0);
 
 component delayer
@@ -113,13 +115,13 @@ begin
 			cursor_addr_pixel<=(others=>'0');
 			cursor_enable_pixel<='0'; cursor_blink_pixel<='0';
 			cursor_upper_pixel<=0; cursor_lower_pixel<=0;
-			cursor_rate_pixel<="01000";
+			cursor_rate_pixel<="01000"; attribute_mode_pixel<='0';
 		elsif rising_edge(clk) then
 			base_addr_pixel<=BASEADDR; pitch_pixel<=PITCH;
 			cursor_addr_pixel<=CURADDR;
 			cursor_enable_pixel<=CURE; cursor_blink_pixel<=CBLINK;
 			cursor_upper_pixel<=CURUPPER; cursor_lower_pixel<=CURLOWER;
-			cursor_rate_pixel<=BLINKRATE;
+			cursor_rate_pixel<=BLINKRATE; attribute_mode_pixel<=ATRSEL;
 		end if;
 	end process;
 
@@ -246,6 +248,7 @@ begin
 
 	process (clk,rstn)
 	variable BNXTDOT	:std_logic_vector(7 downto 0);
+    variable block_row :integer range 0 to 3;
 	begin
 		if(rstn='0')then
 			NXTDOT<=(others=>'0');
@@ -279,7 +282,21 @@ begin
 						BNXTDOT:=(others=>'0');
 					else
 						if(C_LIN<16)then
-							BNXTDOT:=FONTBYTE;
+							-- ATRSEL gives ANK attribute bit 4 its 2x4 semigraphics
+                            -- meaning. Kanji (including the retained right half)
+                            -- still comes from the font ROM. Left bits 0..3,
+                            -- right bits 4..7, top to bottom.
+                            if attribute_mode_pixel='1' and TRAMATR(bit_VL)='1' and tramdatm(15 downto 8)=x"00" then
+                                if CHRLINES<=8 then
+                                    block_row:=(C_LIN/2) mod 4;
+                                else
+                                    block_row:=C_LIN/4;
+                                end if;
+                                BNXTDOT(7 downto 4):=(others=>tramdatm(block_row));
+                                BNXTDOT(3 downto 0):=(others=>tramdatm(block_row+4));
+                            else
+                                BNXTDOT:=FONTBYTE;
+                            end if;
 						else
 							BNXTDOT:=(others=>'0');
 						end if;
@@ -287,7 +304,7 @@ begin
 					if(C_LIN=15 and TRAMATR(bit_UL)='1')then
 						BNXTDOT:=(others=>'1');
 					end if;
-					if(TRAMATR(bit_VL)='1')then
+					if(TRAMATR(bit_VL)='1' and attribute_mode_pixel='0')then
 						BNXTDOT:=BNXTDOT;
 						BNXTDOT(3):='1';
 					end if;

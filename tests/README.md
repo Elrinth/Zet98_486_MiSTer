@@ -137,7 +137,7 @@ machine and Intel clock primitives are stubs; the bench does not exercise the
 VHDL floppy controller or real disks. Unrelated PS/2 and configuration-ROM
 logic is disabled in the bench. A temporary `hps_io` copy supplies parameter
 defaults required by Icarus; both values are overridden by the actual instances.
-This catches the previous scalar ACK connection, which discarded slots 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“3.
+This catches the previous scalar ACK connection, which discarded slots 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3.
 
 `run-data-bus.sh` compiles the marked data-bus expressions directly from the
 machine top level. Its reference is the historical mux before DMA feedback
@@ -175,7 +175,7 @@ the registered count predicates against the actual register update logic
 and all outputs of the original string unit; see
 [the timing change and evidence](../rtl/cpu/STRING_COUNTS.md).
 
-`run-upper-cache.sh` tests optional instruction caching at 80000hÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“9FFFFh
+`run-upper-cache.sh` tests optional instruction caching at 80000hÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ9FFFFh
 with actual ao486 execution and the synthesized VHDL cache policy. It covers
 native self-modification, bank aliases, DMA, remapping/restoration and ROM
 bypass, with negative controls for each external invalidation source and a
@@ -185,7 +185,7 @@ compares the policy against the real PC-98 memory mapper with the option off
 and on. See [the cache design and hardware benchmark](../rtl/cpu/UPPER_RAM_CACHE.md).
 
 `run-extmem.sh` uses the actual CPU in protected mode with the optional 16 MB
-and 64 MB DDR maps. It checks boundaries, the reserved 15ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“16 MB aperture,
+and 64 MB DDR maps. It checks boundaries, the reserved 15ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ16 MB aperture,
 partial/unaligned writes, copies between conventional and extended RAM,
 instruction execution from DDR, and persistence through CPU-only reset.
 The standalone bridge test also checks all byte masks/64-bit word lanes,
@@ -207,6 +207,10 @@ and unsupported device commands. `hardware/xms_probe.asm` then exercises the
 real HIMEMX(98) API on a DOS boot disk: detection, free-space query, allocation,
 lock/address/unlock, patterned round trips at both ends and release. The 64 MB
 test requires a 17 MB block above the PC-98 aperture. It writes `Z98XMS.TXT`.
+The separate [XMS timing probe](hardware/XMS_BENCH.md) compares single allocation,
+16 KB growth, and checked XMS-to-XMS copies using hardware-calendar seconds.
+Its source/protocol tests are prepared but not yet qualified; keep that status
+distinct from the completed XMS correctness tests above.
 `python tests/test_d88_raw.py` checks preservation of D88 headers and original
 data, rejects boot-sector/size changes, and verifies no-overwrite CLI behavior.
 
@@ -417,3 +421,191 @@ payloads at every enabled update and arbitrary global mux priority/hold state,
 with wrong-data and wrong-substep negative controls. Use the formal image
 with `-AdaptersOnly` for the parameter proof; the decoder proof needs the
 actual Intel atom models and therefore omits that switch.
+
+`hardware/fat12_decode_probe.asm` is a read-only DOS shell for isolating CPU
+errors in FAT12 cluster decoding. Assemble with NASM `-f bin`, then run
+`python tests/fat12_decode_probe_unicorn.py <binary>` using Unicorn. The
+preflight checks the synthetic table and six positive/injected-error cases.
+On hardware it scans 1,198 entries 32 times and prints PASS or FAIL without
+saving a file. A failure leaves its cluster index on debug I/O port 7FF0h.
+This is an isolation probe, not a replacement for DOS save tests or the
+whole-image audit in `verify_floppy_file.py`.
+
+
+`run-boot-media.sh` checks media-triggered BIOS release, mount/load ordering,
+reset, eject behavior and the empty-boot override. It renders all four prompt
+pages through `video_output.sv`; `verify_boot_prompt.py` compares every pixel
+against the expected text and placement, then checks handoff to native video.
+`ide_bootrom_unicorn.py` exercises the actual assembled option ROM and resident
+service, including optional owner-BIOS discovery and a private image IPL.
+See `software/DISK_BIOS.md` for invocation and supported image layouts.
+
+
+`run-z486-upper-policy.sh` uses the mixed simulator image to check all bank
+mappings and synthesize the actual VHDL policy. Export `build/z486-upper-policy`
+and copy it to the same path in a z486 simulator snapshot before running
+`run-z486-upper-cache.sh`. The latter exercises the actual CPU with upper
+instruction caching off/on, self-modification, bank aliases/remaps, DMA,
+ROM bypass and a loop checksum; three disconnected-flush negative controls
+must fail. `run-z486.sh` also covers upper data bypass and in-flight fills.
+
+`run-opna-jt08.sh` covers 75, 90 and 100 MHz host clocks. Its PSG sample-bus
+check performs rapid adjacent-register writes and volume readback, rejects
+PSG-triggered FM busy periods, and verifies that FM busy protection remains.
+This models the busy-poll/register-0A write sequence used by Rusty's PDR
+sample driver; full-game pitch still needs a hardware comparison.
+
+`run-opna-psg-negative.sh` restores the old PSG busy and stretched-strobe
+behaviours independently; the rapid sample/readback checks must reject both.
+
+`run-pit-clock.sh` checks the actual PIT clock generator plus PTC8253 mode 3
+using Rusty's PDR divisor 154. Across 20/50/75/90/100 MHz hosts it requires
+24,576 input strobes and 159-160 sample interrupts per 10 ms. It also checks
+reset and rejects the old SFTCLK sel=1 configuration (12,500 strobes and 81
+interrupts at 90 MHz). The fractional generator targets 2.4576 MHz, matching
+the machine's port-42h timer-family indication.
+
+`hardware/grcg_bulk_probe.asm` writes patterned full video planes with plain
+and GRCG bulk string operations, then saves spatial samples from both pages
+to a fresh diagnostic floppy. Assemble with NASM `-f bin`; run
+`grcg_bulk_unicorn.py <probe.com>` for the reference and corrupted-output
+negative control. `scripts/verify_grcg_bulk_probe.py <Z98BLK.BIN>` checks a
+hardware capture. Audit the entire result disk before accepting a pass.
+
+`hardware/dos_file_crc_probe.asm` computes CRC32 for `*.?ZH` through DOS file
+reads from B: and writes a new `A:\Z98FCRC.BIN`. Use private disposable media
+and a separate writable boot/result floppy. `dos_file_crc_unicorn.py <probe.com>` tests
+empty, odd-length, non-ASCII-name and larger-than-64-KiB inputs against zlib,
+including a corrupted-output negative control. Verify hardware output with
+`scripts/verify_dos_file_crc_probe.py <capture> <expected.json>`; the expected
+manifest contains raw DOS names as `name_hex`, `size`, and `crc32`.
+
+
+`run-text-semigraphics.sh` exercises production KNJSCR with all 256 2x4
+patterns, 8/16-line cells, 40/80 columns and synchronous memory delays.
+It covers ordinary line/font and Kanji precedence, decorations, blink,
+cursor and live mode changes. Forcing the old attribute interpretation
+must fail blank code 0 / F1. `run-crtc-reset.sh` also checks the ATRSEL
+parent/pixel stages across reset phases. Snapshot mapping, transport and
+SDC endpoint guard tests include the 122nd bit carrying this mode.
+
+`run-z486-unreal-cs.sh` runs the actual z486 through PC98 bridges and checks
+all four visible CS low-bit values across CR0 mode changes, CPL0 privileged
+instructions before CS reload, and a protected far transfer from an odd
+real-mode segment. It needs no firmware or game assets.
+`run-z486-xms-resident.sh` additionally accepts the private initialized
+HIMEMX fixture at test-assets/himemx-resident.bin and checks copy/resize,
+19KB data integrity and unchanged driver code. Do not publish that snapshot.
+
+`run-z486-rmw-reload.sh` runs Watcom C 9.x loop tails (`inc dword [ebp-0Ch]`,
+`mov eax,[abs]`, `add eax,[ebp-20h]`, `mov edx,[ebp-0Ch]`, `cmp edx,[eax]`)
+3,600 times through the actual z486 and PC98 bridges, with frames in cached
+low RAM and in DDR and with calls, stack stores and DDR misses in the body.
+A register count must match both the memory count and the table limit. Before
+the load-WB ordering fix it failed on the first pass: the older MOV's pending
+memory token overwrote the ADD result in the same cycle (the cause of original
+PC-98 Doom's `W_CacheLumpNum: 19781`). Unicorn passes the same binary.
+`run-z486-rmw-trace.sh` builds the same test with a 512-cycle data-path ring
+buffer printed on failure. Both need no firmware or game assets.
+
+`run-z486-fuzz.sh` is a differential integer fuzzer. `z486_fuzz_gen.py`
+generates Watcom C 9.x-style blocks (dependent register chains, EAX bias,
+absolute/frame/indexed memory in cached low RAM, uncached upper RAM and DDR,
+frame read-modify-writes, shifts, IMUL, MOVSX/MOVZX, SETcc/ADC after flag
+definitions) and logs all GPRs after each block. The testbench dumps
+40000h-9FFFFh (`+dump=`); `z486_fuzz_compare.py` runs the same binary on
+Unicorn and reports the first differing block. `SEEDS`, `BLOCKS`, `BLOCK_LEN`
+and `FUZZ_OUT` select the run. It caught the B161 write-order bug in all six
+calibration seeds, then two further bugs that B163 still had. With the B164
+data-unit/VIPT fixes, seeds 1-30 (360,000 instructions) match Unicorn.
+`z486_fuzz_minimize.py` delta-debugs a failing block pair against a compiled
+testbench in a running container; `+trace_lo=`/`+trace_hi=` with `RMW_TRACE`
+print a data-path ring buffer for that EIP window. Unicorn runs on the host.
+
+`run-z486-regression-batch.sh` runs the retained z486 suites and reports
+every result instead of stopping at the first failure.
+`run-z486-flat-regression.sh` belongs to the unfinished flat-admission
+candidate: it refuses to run once `z486.sv` no longer matches its pinned base.
+
+`run-z486-stack-allocation.sh` checks 80 protected-mode stack-availability
+and allocation comparisons through the actual z486 and PC98 bridges. Cases
+cover signed widths, four-byte alignment, both sides of the unsigned size
+comparison, the measured B149 stack values, and low/extended RAM. It uses
+no firmware or game assets. Use the Verilator-equipped CPU simulation image.
+
+`tests/run-pegc-control.sh` checks the standalone PEGC mode/MMIO/banked/linear
+address front end and 8-bit palette write events, including a truncated-index
+negative. `tests/run-pegc-palette.sh` checks RGB888 dual-clock RAM across CPU
+rates/phases, concurrent independent accesses and a truncated-lookup negative.
+`tests/pegc_palette_synthesis.qsf` checks actual Cyclone V RAM inference. These
+modules are now part of the opt-in packed display path; see `rtl/graphics/PEGC.md`.
+
+`run-pegc-ddr.sh` checks CPU framebuffer halfwords/byte masks and three-client
+arbitration, gapped read bursts, fairness, command stability and reset draining.
+`run-pegc-line.sh` uses the production arbiter with continuous CPU traffic and
+the actual 160-pixel leading blank at 90/100 MHz. It checks all 640 pixels, wrap,
+late completion, underruns, reset with stopped pixel clock, two-edge local reset
+release and held-payload delay. Three negative controls reject stale publication,
+late payload and direct unsynchronized reset release.
+`pegc_line_synthesis.qsf` checks real RAM inference.
+
+`run-pegc-bus.sh` joins control, palette and framebuffer with full physical
+address and memory/I/O qualifiers. It checks both linear aliases/all banks,
+palette read/write, byte masks, reset and repeated ACK side effects. Its negative
+must reject repeated palette writes. `run-z486-pegc.sh` runs the independently
+authored `hardware/pegc_cpu_probe.asm` through the actual z486, CPU wrapper,
+bridges, PEGC target and DDR arbiter, then repeats the protected-stack regression
+through the same enabled path. No firmware/game assets are used. PEGC remains
+disabled by default; the full candidate uses the `-PackedGraphics` build switch.
+
+`run-pegc-raster.sh` tests12,800 rows of production GDC packed addressing, both
+page sizes, partition/repeat behavior and wrong-SAD-units rejection, then the
+actual line reader. `run-crtc-pegc.sh` tests the production CRTC's exact640-pixel
+RGB888 alignment, text overlay and reset; an intentional one-pixel RGB shift
+must fail. It also runs existing text/reset and128-bit settings transport tests.
+`run-pegc-display.sh` connects actual CPU bus writes, DDR arbitration, line RAM
+and palette, checks both linear aliases, byte masks, wraps and concurrent writes,
+and rejects a truncated palette. `test_pegc_constraints.py` checks the new held
+command's bounded setup/hold scope, exact reset-chain asynchronous-input scope
+and missing-endpoint guards; only the proven SAD/pitch alignment constants may
+disappear during synthesis. Functional reset fanout retains timing checks.
+
+`hardware/pegc_display_probe.asm` is a self-authored DOS hardware diagnostic:
+262,144 banked framebuffer bytes, independent two-dimensional pattern, RGB888
+palette and explicit 640x400 GDC geometry. Assemble with NASM `-f bin`.
+`-DBIOS9821` instead requests extended BIOS mode BH=11h and leaves GDC geometry
+untouched, to separate initialization from scanout. It is a deliberate BIOS
+control, not proof of a game's exact protected-mode BIOS parameters.
+`verify_pegc_display_probe.py program.com [--bios9821]` executes the program in
+Unicorn, verifies every byte against an independent formula, checks palette and
+port/BIOS sequences, and rejects injected readback corruption. BIOS services are
+modeled in this verifier; their actual implementation needs hardware testing.
+Hardware runs use new disposable disks and a saved `Z98PGC.TXT` with a full disk
+integrity audit. The private DOS disk and any firmware are not part of the test
+source and must not be published.
+
+For hardware isolation, `-DBIOS9821 -DPITCH_ONLY` adds only PITCH40 after the
+BIOS setup. `-DBIOS9821 -DSTAGED` waits for a key between BIOS-only, pitch,
+repetition, partition, clock and enable controls, printing GDC status at each
+stage. Use matching verifier flags `--bios9821 --pitch-only` or
+`--bios9821 --staged`. These are diagnostics, not game fixes.
+
+### Graphics GDC parameter RAM
+
+`tests/run-gdc-pram.sh` exercises the production GRAGDC command FIFO and decoder
+with a registered-read-address model of its M9K FIFO. It checks all16 PRAM start
+addresses and bounded writes (no display alias or wrap after address15), actual
+line-drawing pattern bits on the VRAM bus, a moved-pointer hardware reset and
+400 decoded PEGC raster addresses. Six write/ACK latency combinations and an
+old-alias negative control are required to pass. Production RTL has explicit
+reset initialization; the positive test needs no power-up source transformation.
+The historical baseline reproduction used only a model-side RFIFOADDR zero
+initializer to match FPGA power-up, without modifying its decoder.
+
+The revised floppy overlay also verifies all boot-font caption pixels, the
+16-pixel upward offset and background passthrough. Negative controls restore
+the old position, black background or reversed font bits and must fail.
+
+### Keyboard request during interrupt service
+
+`run-kbconv-pic-eoi.sh` connects production KBCONV and z8259 using the byte adapter and mapping models from the keyboard transport test. Across five EOI delays and one/four-cycle acknowledgement, it checks queued make/break, extended arrows, modifiers and typematic, IRR clearing at acknowledge and stable vectors. The baseline loses the next keyboard edge at EOI; the corrected PIC preserves it. Production wire receiver coverage remains in `run-kbconv-backpressure.sh`. This integration regression does not by itself establish the cause of a particular game failure.

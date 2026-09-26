@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/grcg.vhd Zet98/sdramc.vhd tests/grcg_sdram_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" tests/lcell_model.vhd Zet98/grcg.vhd Zet98/sdramc.vhd tests/grcg_sdram_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" grcg_sdram_tb
 for mhz in 20 50 60 90 100; do
     for phase in 0 4700; do

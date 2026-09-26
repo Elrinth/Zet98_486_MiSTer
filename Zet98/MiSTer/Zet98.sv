@@ -20,7 +20,7 @@
 //  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //============================================================================
 
-module emu
+module emu #(parameter NATIVE_IMAGES=1)
 (
 	//Master input clock
 	input         CLK_50M,
@@ -154,7 +154,9 @@ wire [11:0] aspect_y = status[2] ? 12'd0 : (status[1] ? 12'd9 : 12'd3);
 
 `include "build_id.v" 
 parameter CONF_STR = {
-`ifdef ZET98_MPU_UART
+`ifdef ZET98_Z486_DEBUG
+    "Zet98;UART115200;",
+`elsif ZET98_MPU_UART
 	"Zet98;UART31250,MIDI31250;",
 `else
 	"Zet98;;",
@@ -170,11 +172,12 @@ parameter CONF_STR = {
 `endif
 	"-;",
 	"R6,Reset;",
+	"OR,Empty boot,Wait for disk,Start BIOS;",
 	"-;",
-	"S0,D88,FDD0;",
-	"S1,D88,FDD1;",
+	"S0,D88HDMFDINFD,FDD0;",
+	"S1,D88HDMFDINFD,FDD1;",
 `ifdef ZET98_RAW_IDE
-	"S2,VHDIMG,IDE hard disk;",
+	"S2,VHDIMGHDI,IDE hard disk;",
 `else
 	"S2,HDF,SASI;",
 `endif
@@ -339,6 +342,25 @@ wire [15:0] sd_req_type = 0;
 wire  [3:0] img_mounted;
 wire        img_readonly;
 wire [63:0] img_size;
+wire [3:0] core_img_mounted, core_sd_ack, core_buff_wr;
+wire core_img_readonly;
+wire [63:0] core_img_size;
+wire [8:0] core_buff_addr[4];
+wire [7:0] core_buff_dout[4];
+wire [31:0] host_slot_lba[4];
+wire [7:0] host_slot_buff_din[4];
+wire [3:0] host_rd,host_wr;
+wire [2:0] invalid_image;
+pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE)) images (
+    .clk(clk_sys),.image_mounted(img_mounted),.image_readonly(img_readonly),.image_size(img_size),
+    .core_mounted(core_img_mounted),.core_readonly(core_img_readonly),.core_size(core_img_size),
+    .disk_lba(sd_slot_lba),.disk_rd(sd_rd),.disk_wr(sd_wr),.disk_buff_din(sd_slot_buff_din),
+    .disk_ack(core_sd_ack),.disk_buff_wr(core_buff_wr),.disk_buff_addr(core_buff_addr),.disk_buff_dout(core_buff_dout),
+    .host_lba(host_slot_lba),.host_rd(host_rd),.host_wr(host_wr),.host_buff_din(host_slot_buff_din),
+    .host_ack(sd_ack),.host_buff_wr(sd_buff_wr),.host_buff_addr(sd_buff_addr),.host_buff_dout(sd_buff_dout),
+    .invalid(invalid_image)
+);
+wire [1:0] legacy_buffer_slot = core_sd_ack[0] ? 0 : core_sd_ack[1] ? 1 : core_sd_ack[3] ? 3 : 2;
 
 generate if(RAW_IDE) begin : raw_ide
 	pc98_ide controller (
@@ -346,10 +368,10 @@ generate if(RAW_IDE) begin : raw_ide
 		.io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
 		.io_read(ide_read), .io_write(ide_write), .io_readdata(ide_readdata),
 		.io_oe(ide_oe), .irq(ide_irq),
-		.image_mounted(img_mounted[2]), .image_readonly(img_readonly), .image_size(img_size),
-		.sd_lba(ide_lba), .sd_rd(ide_rd), .sd_wr(ide_wr), .sd_ack(sd_ack[2]),
-		.sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout),
-		.sd_buff_din(ide_buff_din), .sd_buff_wr(sd_buff_wr)
+		.image_mounted(core_img_mounted[2]), .image_readonly(core_img_readonly), .image_size(core_img_size),
+		.sd_lba(ide_lba), .sd_rd(ide_rd), .sd_wr(ide_wr), .sd_ack(core_sd_ack[2]),
+		.sd_buff_addr(core_buff_addr[2]), .sd_buff_dout(core_buff_dout[2]),
+		.sd_buff_din(ide_buff_din), .sd_buff_wr(core_buff_wr[2])
 	);
 end else begin : no_raw_ide
 	assign {ide_lba,ide_rd,ide_wr,ide_buff_din,ide_oe,ide_irq}=0;
@@ -360,8 +382,9 @@ end endgenerate
 // master PIC IRQ6. Reuse the exported CPU I/O request, not IDE's decode.
 wire [7:0] mpu_readdata;
 wire mpu_oe, mpu_irq;
+wire [127:0] cpu_debug_snapshot;
 `ifdef ZET98_MPU_UART
-pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000)) mpu (
+pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000), .RESET_PANIC(1)) mpu (
     .clk(clk_sys), .reset(!ide_resetn), .enable(status[26]),
     .io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
     .io_read(ide_read), .io_write(ide_write), .io_readdata(mpu_readdata),
@@ -371,7 +394,13 @@ pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000)) mpu (
 `else
 assign mpu_readdata=8'hff;
 assign {mpu_oe,mpu_irq}=0;
+`ifdef ZET98_Z486_DEBUG
+pc98_debug_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000)) boot_debug (
+    .clk(clk_sys), .reset(!pll_locked), .snapshot(cpu_debug_snapshot), .tx(UART_TXD)
+);
+`else
 assign UART_TXD=1'b1;
+`endif
 `endif
 
 wire [65:0] ps2_key;
@@ -387,14 +416,14 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .V
 	
 	.TIMESTAMP(TIMESTAMP),
 
-	.sd_lba(sd_slot_lba),
+	.sd_lba(host_slot_lba),
 	.sd_blk_cnt(sd_slot_blk_cnt),
-	.sd_rd(sd_rd),
-	.sd_wr(sd_wr),
+	.sd_rd(host_rd),
+	.sd_wr(host_wr),
 	.sd_ack(sd_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_slot_buff_din),
+	.sd_buff_din(host_slot_buff_din),
 	.sd_buff_wr(sd_buff_wr),
 
 	.img_mounted(img_mounted),
@@ -451,6 +480,20 @@ assign AUDIO_S = 1;
 
 wire disk_led;
 wire [1:0] floppy_access;
+wire [1:0] floppy_present;
+wire boot_hold;
+wire [2:0] boot_prompt;
+wire [2:0] boot_prompt_video;
+video_config_snapshot #(.WIDTH(3)) boot_prompt_cdc (
+    .source_clk(clk_sys), .video_clk(clk_vid),
+    .source_data(boot_prompt), .video_data(boot_prompt_video)
+);
+boot_media_control #(.RAW_IDE(RAW_IDE)) boot_control (
+    .clk(clk_sys), .reset(!pll_locked), .restart(reset), .rom_ready(ldr_done),
+    .start_without_disk(status[27]), .floppy_ready(floppy_present),
+    .image_mounted(core_img_mounted), .image_size(core_img_size),
+    .hold_boot(boot_hold), .prompt(boot_prompt)
+);
 wire native_ce, native_hs, native_vs, native_de;
 wire [7:0] native_r, native_g, native_b;
 wire output_ce, output_hs, output_vs, output_de;
@@ -458,6 +501,7 @@ wire [7:0] output_r, output_g, output_b;
 
 video_output video_out (
 	.clk(clk_vid), .reset(!pll_locked), .test_pattern(status[3]),
+    .boot_prompt(boot_prompt_video),
 	.native_ce(native_ce), .native_r(native_r), .native_g(native_g), .native_b(native_b),
 	.native_hs(native_hs), .native_vs(native_vs), .native_de(native_de),
 	.ce(output_ce), .r(output_r), .g(output_g), .b(output_b),
@@ -503,7 +547,12 @@ localparam UPPER_RAM_ICACHE = 1;
 `else
 localparam UPPER_RAM_ICACHE = 0;
 `endif
-Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .LOWMEM_CACHE(LOWMEM_CACHE), .LOWMEM_CACHE_KB(LOWMEM_CACHE_KB), .UPPER_RAM_ICACHE(UPPER_RAM_ICACHE), .SND(SOUND_MODEL), .USE_JT08(USE_JT08)) Zet98_top
+`ifdef ZET98_PEGC
+localparam PEGC_ENABLED = 1;
+`else
+localparam PEGC_ENABLED = 0;
+`endif
+Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RAM_MB), .LOWMEM_CACHE(LOWMEM_CACHE), .LOWMEM_CACHE_KB(LOWMEM_CACHE_KB), .UPPER_RAM_ICACHE(UPPER_RAM_ICACHE), .PEGC_ENABLE(PEGC_ENABLED), .SND(SOUND_MODEL), .USE_JT08(USE_JT08), .USE_IDE_BOOTROM(RAW_IDE)) Zet98_top
 (
 	.ramclk(clk_ram),
 	.cpuclk(clk_sys),
@@ -534,6 +583,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.LDR_WR(ldr_wr),
 	.LDR_ACK(ldr_ack),
 	.LDR_DONE(ldr_done),
+    .pBootHold(boot_hold), .pFloppyPresent(floppy_present),
 
 	.pPs2Clkin(ps2_kbd_clk_out),
 	.pPs2Clkout(ps2_kbd_clk_in),
@@ -551,25 +601,29 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pFDSYNC(fdsync),
 	.pFDEJECT(fdeject),
 
-	.mist_mounted(img_mounted & (RAW_IDE ? 4'b1011 : 4'b1111)),
-	.mist_readonly({4{img_readonly}}),
-	.mist_imgsize(img_size),
+	.mist_mounted(core_img_mounted & (RAW_IDE ? 4'b1011 : 4'b1111)),
+	.mist_readonly({4{core_img_readonly}}),
+	.mist_imgsize(core_img_size),
 
 	.mist_lba(sd_lba),
 	.mist_rd(legacy_sd_rd),
 	.mist_wr(legacy_sd_wr),
 	// diskemu serializes all four image slots onto one buffer/acknowledgement.
 	// hps_io returns a one-hot ACK: narrowing it to one bit loses slots 1..3.
-	.mist_ack(|(sd_ack & (RAW_IDE ? 4'b1011 : 4'b1111))),
+	.mist_ack(|(core_sd_ack & (RAW_IDE ? 4'b1011 : 4'b1111))),
 
-	.mist_buffaddr(sd_buff_addr),
-	.mist_buffdout(sd_buff_dout),
+	.mist_buffaddr(core_buff_addr[legacy_buffer_slot]),
+	.mist_buffdout(core_buff_dout[legacy_buffer_slot]),
 	.mist_buffdin(sd_buff_din),
-	.mist_buffwr(sd_buff_wr & (!RAW_IDE || !sd_ack[2])),
+	.mist_buffwr(|(core_buff_wr & (RAW_IDE ? 4'b1011 : 4'b1111))),
 	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
 	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
 	.pIDEReadData(ide_readdata), .pIDEOE(ide_oe), .pIDEIRQ(ide_irq),
+	// Full compiled clock only. Keep saved status bits 29:28 reserved so an
+	// old slower-speed selection cannot re-enable the unqualified throttle.
+	.pCPUSpeed(2'b00),
 	.pMPUReadData(mpu_readdata), .pMPUOE(mpu_oe), .pMPUIRQ(mpu_irq),
+    .pCPUDebug(cpu_debug_snapshot),
 
 	.pLed(disk_led),
 	.pFloppyAccess(floppy_access),

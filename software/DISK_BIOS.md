@@ -1,12 +1,78 @@
 # Experimental PC-98 ATA disk service
 
 `pc98_ide_read_bios.inc` implements PC-98 INT 1Bh reads and optional bounded
-writes on the core's raw ATA master. It is **not yet an installable option
-ROM**. A separate BIOS-first diagnostic floppy now boots the private DOS 6.20
-VHD on Native50 and reaches its game menu and Rusty's illustrated intro.
-The existing D0000h disk-ROM window still returns FFFFh in the FPGA. ROM
-discovery, mount/geometry discovery and complete DOS compatibility
-remain work in progress.
+writes on the core's raw ATA master. `-RawIde` now includes our open-source
+8 KB disk option ROM at D0000h, with a RAM-resident service at D8000h–DFFFFh.
+Build #137R3 passes direct DOS 6.20 boot from raw VHD and IMG on the physical
+MiSTer, including a 70,001-byte file write/readback and a complete disk audit
+for each image. Earlier builds through #136 require the BIOS-first helper
+floppy described below.
+
+## Native hard-drive boot
+
+Build with `-Cpu ao486` or `-Cpu z486`: the disk firmware uses 386
+instructions and cannot execute on the original 8086-class Zet processor.
+
+Supply the owner's system `boot.rom` in the selected game folder. The new
+RBF contains the disk extension ROM; no separate disk-ROM download is needed.
+Open F12, select **IDE hard disk**, and mount a bootable raw PC-98 `.vhd` or
+`.img`. Leave the old IPL helper floppy unmounted. With no boot media, the
+core displays **PLEASE INSERT DISK** and starts the BIOS after a floppy
+finishes loading or a hard-disk image mounts. A missing system ROM instead
+shows **BOOT.ROM REQUIRED**. `Empty boot: Start BIOS` bypasses the media wait.
+When the system BIOS uses its default automatic boot order, the disk ROM
+selects a validated hard drive first to avoid repeated empty-floppy retries.
+An explicit BIOS boot priority is preserved. No CMOS/NVRAM writes are made:
+the ROM handles the first automatic boot-dispatch pass directly.
+Unmount the hard drive to boot a floppy with the default order.
+
+After replacing an image in an already running guest, use the core's Reset
+menu item so the BIOS discovers the new disk geometry. An MGL launching this
+core with an image needs no extra reset: boot starts after the media arrives.
+A delayed reset can restart a program that has already begun executing.
+
+The ROM discovers geometry from a PC-98 DOS partition entry and its FAT12/16
+BPB. It validates 512-byte physical sectors, matching hidden-sector LBA,
+geometry, partition length and ATA image capacity before installing INT 1Bh.
+The revised ROM supports 512/1024/2048-byte DOS logical sectors and the older
+NEC BPB layout (physical hidden LBA at 18h, physical sector bytes at 1Eh).
+Volume length is converted to physical sectors before the capacity check;
+INT 1Bh still reports the physical 512-byte geometry. Supported
+(heads, sectors) candidates are (8,17), (8,32), (16,63), (16,32), (8,63),
+(4,17), (16,17), (8,33), (8,25), (4,32), and (2,17). ATA transfers use LBA,
+independently of the controller's own CHS translation. This is not a claim
+that arbitrary PC-98 disks boot: unrecognized layouts, FAT32, 256-byte SASI
+sectors, dynamic VHD/VHDX and IBM-PC partition layouts are
+unsupported. File extension alone does not convert an image.
+Builds with the native image bridge strip a validated HDI header before ATA
+access. The revised ROM was tested on #142 through a disposable pre-DOS
+loader: Lemmings reaches its intro and the user confirms Xanadu in-game.
+Qualification of the integrated #143R2 ROM revision remains pending.
+
+The native ROM enables writes within the identified image capacity and
+honors the ATA device's read-only status. It does not format or repartition
+a disk. Its resident code and private stacks reserve D8000h–DFFFFh; an upper
+memory manager must not reuse that area. This RAM reservation is specific
+to this core. The legacy helper floppy uses the same RAM and must not be
+combined with the native ROM.
+
+Build/recheck the generated ROM using NASM:
+
+```sh
+python scripts/build_ide_bootrom.py --nasm /path/to/nasm
+python scripts/build_ide_bootrom.py --nasm /path/to/nasm --check
+python tests/ide_bootrom_unicorn.py build/ide-bootrom/bootrom.bin
+```
+
+Optional `--image private.vhd --owner-rom private-boot.rom` tests execute the
+owner BIOS's actual option-ROM discovery routines and the image's IPL. No
+owner ROM or DOS bytes are embedded in the generated firmware. The tests
+cover absent/invalid media, geometry, CHS/LBA, tiny DOS stacks, partial writes,
+capacity bounds, read-only errors, automatic/explicit boot order, forbidden
+NVRAM writes and floppy chaining. An IPL handoff in
+Unicorn does not establish complete hardware DOS compatibility.
+
+## Reusable service and legacy helper floppy
 
 The embedding 386-or-later program supplies `bios_previous_vector`, a far
 pointer to the previous INT 1Bh handler, and the constants `BIOS_HEADS`,
@@ -45,8 +111,10 @@ write/format command. Formatting remains unsupported in all builds.
 ## Optional bounded writes
 
 `BIOS_ALLOW_WRITES=1` enables AH=05h/85h with the same CHS/LBA, byte-count and
-buffer conventions. Both `BIOS_WRITE_FIRST_LBA` and `BIOS_WRITE_LAST_LBA`
-must explicitly define an inclusive window inside the configured image.
+buffer conventions. For a static-geometry embedding, both `BIOS_WRITE_FIRST_LBA` and
+`BIOS_WRITE_LAST_LBA` must explicitly define an inclusive window inside the
+configured image. The native ROM instead sets `BIOS_DYNAMIC_GEOMETRY=1` and
+bounds transfers by the discovered ATA capacity.
 Out-of-window writes return AH=70h before any disk command. These compile-time
 limits complement image identification; they do not identify a disk by themselves.
 

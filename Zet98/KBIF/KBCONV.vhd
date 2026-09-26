@@ -178,6 +178,17 @@ signal	RXRDY		:std_logic;
 signal	TXRDY		:std_logic;
 signal	RXED		:std_logic;
 signal	cmdnum		:integer range 0 to 3;
+
+-- Keep complete PS/2 bytes while the guest still owns the previous 8251 byte.
+-- Prefixes and releases must not be discarded in KS_WINT/KS_REP. This queue
+-- stays in clk; the existing pin synchronizers/KBIF remain the CDC boundary.
+type KB_BYTE_QUEUE_T is array (0 to 15) of std_logic_vector(7 downto 0);
+signal kb_queue : KB_BYTE_QUEUE_T;
+signal kb_qread, kb_qwrite : integer range 0 to 15;
+signal kb_qcount : integer range 0 to 16;
+signal kb_qpop, kb_qactive, kb_qoverflow : std_logic;
+signal kb_qdata : std_logic_vector(7 downto 0);
+signal kb_clock_release : std_logic;
 	
 begin
 --	MONOUT<="00000000" when KBSTATE=KS_IDLE else
@@ -204,7 +215,7 @@ begin
 	DSR<='0';
 	BRK<='0';
 	dFE<='0';
-	dOE<='0';
+	dOE<=kb_qoverflow;
 	dPE<='0';
 	TXEMP<='1';
 	TXRDY<='1';
@@ -226,7 +237,7 @@ begin
 	PERR	=>KB_PERR,
 	
 	KBCLKIN	=>KBCLKIN,
-	KBCLKOUT=>KBCLKOUT,
+	KBCLKOUT=>kb_clock_release,
 	KBDATIN	=>KBDATIN,
 	KBDATOUT=>KBDATOUT,
 	
@@ -234,6 +245,42 @@ begin
 	clk		=>clk,
 	rstn	=>rstn
 	);
+
+-- Stop the keyboard before the queue fills. Two slots remain for a byte
+-- already in flight and pin/receiver latency. Low means clock inhibit.
+	KBCLKOUT<=kb_clock_release when kb_qcount<14 else '0';
+	kb_qactive<='1' when KBSTATE=KS_IDLE or KBSTATE=KS_RDTBL or
+		KBSTATE=KS_REP or KBSTATE=KS_WINT else '0';
+	kb_qpop<='1' when KBSTATE=KS_IDLE and WAITCNT=0 and WAITSFT=0 and
+		semuen='0' and kb_qcount>0 else '0';
+	kb_qdata<=kb_queue(kb_qread);
+	process(clk,rstn)
+	variable push, pop : boolean;
+	begin
+		if rstn='0' then
+			kb_qread<=0;kb_qwrite<=0;kb_qcount<=0;kb_qoverflow<='0';
+		elsif rising_edge(clk) then
+			if semuen='1' then
+				kb_qread<=0;kb_qwrite<=0;kb_qcount<=0;kb_qoverflow<='0';
+			else
+				pop:=kb_qpop='1';
+				push:=KB_RXED='1' and kb_qactive='1';
+				if push and kb_qcount=16 and not pop then
+					-- Defensive status for a device that ignores clock inhibition.
+					kb_qoverflow<='1';push:=false;
+				end if;
+				if push then
+					kb_queue(kb_qwrite)<=KB_RXDAT;
+					if kb_qwrite=15 then kb_qwrite<=0;else kb_qwrite<=kb_qwrite+1;end if;
+				end if;
+				if pop then
+					if kb_qread=15 then kb_qread<=0;else kb_qread<=kb_qread+1;end if;
+				end if;
+				if push and not pop then kb_qcount<=kb_qcount+1;
+				elsif pop and not push then kb_qcount<=kb_qcount-1;end if;
+			end if;
+		end if;
+	end process;
 
 	emurxdat<=KB_RXDAT;
 	emurx<=	'0' when emuen='0' else 
@@ -364,14 +411,14 @@ begin
 						end if;
 					end if;
 				when KS_IDLE =>
-					if(KB_RXED='1' and semuen='0')then
-						if(KB_RXDAT=x"e0")then
+					if(kb_qpop='1')then
+						if(kb_qdata=x"e0")then
 							E0en<='1';
-						elsif(KB_RXDAT=x"f0")then
+						elsif(kb_qdata=x"f0")then
 							F0en<='1';
 						else
 							KBSTATE<=KS_RDTBL;
-							TBLADR<=KB_RXDAT;
+							TBLADR<=kb_qdata;
 							WAITCNT<=2;
 						end if;
 					end if;
@@ -429,6 +476,9 @@ begin
 						KBDAT<='0' & TBLDAT;	--mark
 						RXED<='1';
 						KBSTATE<=KS_WINT;
+						-- RXRDY is registered from RXED on the following edge.
+						-- Do not mistake that publication cycle for a guest read.
+						WAITCNT<=1;
 					end if;
 				when KS_WINT =>
 					if(RXRDY='0')then

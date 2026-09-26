@@ -18,7 +18,9 @@ An isolated Cyclone V fit uses 16 RAM blocks instead of 41 (25 fewer blocks).
 All 165200 reference pixels are verified after packing. The partial rightmost
 tile is padded with black, outside the visible 50-pixel disk.
 The first frame lasts 80 ms and subsequent frames 40 ms, rounded to the next
-video frame boundary. The caption is generated independently by the FPGA.
+video frame boundary. The caption is generated independently by the FPGA using `boot-font.mem`,
+the same font as the core boot-help display. Palette index zero is transparent
+in this overlay; the remaining three animation colors are unchanged.
 
 To regenerate from the supplied file, install Pillow and run:
 

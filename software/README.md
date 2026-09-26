@@ -15,6 +15,16 @@ entry points pass actual-CPU simulation with 0/16/64 MB, including restored
 A20/mode state and unchanged probe contents. This is a small map probe, not
 an exhaustive stability test.
 
+After a successful protected-mode probe, the initializer also clears only the
+V30-identification bit at BIOS address `0000:0501`. The installed legacy BIOS
+sets that bit during startup even when this core uses a 386-compatible CPU;
+stock PC-98 HIMEM 3.10 consequently rejects the machine. A hardware read-only
+probe confirmed normal CPU flags and the incorrect BIOS bit. The correction
+preserves all other identification bits and is withheld when the RAM map does
+not pass. Actual z486 tests cover 0/16/64 MB maps, both initial bit values, and
+restoration of the probed data and CPU mode. This is an initialization-driver
+compatibility correction, not a complete PC-9821 BIOS or boot memory counter.
+
 Use the **PC-98** build of [HIMEMX(98)](https://github.com/lpproj/himemx.nec),
 not an IBM-PC HIMEM driver. Tested reference commit:
 `5dad3f18835c0d028bb7c9e967c548aaf152b15e`. Its memory-map discovery supports

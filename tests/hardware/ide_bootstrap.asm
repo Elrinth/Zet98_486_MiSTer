@@ -12,6 +12,20 @@ org 100h
 %define BIOS_CYLINDERS 8162
 %define RESIDENT_SEGMENT 0d800h
 
+; Optional diagnostic image: give each boot failure its own stable HLT address
+; for the existing EIP debug UART. The ordinary acceptance image is unchanged.
+%ifdef BOOT_STAGE_TRAPS
+%define bad_vector boot_bad_vector
+%define bad_initialize boot_bad_initialize
+%define bad_read boot_bad_read
+%define bad_checksum boot_bad_checksum
+%else
+%define bad_vector boot_return
+%define bad_initialize boot_return
+%define bad_read boot_return
+%define bad_checksum boot_return
+%endif
+
 %ifdef BIOS_BOOT
 ; Entered directly by our floppy IPL, before any DOS has installed RAM
 ; interrupt hooks or device drivers. Already loaded at D800:0100.
@@ -32,9 +46,9 @@ start:
     movzx edx,word [bios_previous_vector]
     add eax,edx
     cmp eax,0e8000h
-    jb boot_return
+    jb bad_vector
     cmp eax,100000h
-    jae boot_return
+    jae bad_vector
     jmp relocated
 %else
 start:
@@ -175,7 +189,7 @@ relocated:
     mov word [1bh*4+2],cs
     mov ax,0380h
     int 1bh
-    jc boot_return
+    jc bad_initialize
     mov ax,01fc0h
     mov es,ax
     xor bp,bp
@@ -184,7 +198,7 @@ relocated:
     mov bx,1024
     mov ax,0680h
     int 1bh
-    jc boot_return
+    jc bad_read
     xor ax,ax
     xor di,di
     mov cx,512
@@ -194,7 +208,7 @@ relocated:
     add di,2
     loop .checksum
     cmp ax,0f270h
-    jne boot_return
+    jne bad_checksum
     mov byte [0584h],80h
     xor ax,ax
     mov es,ax
@@ -222,6 +236,67 @@ boot_return:
 .halt:
     hlt
     jmp .halt
+
+%ifdef BOOT_STAGE_TRAPS
+; No screen writes here: retain the failing AX/flags and stop at a unique EIP.
+%macro boot_trap 1
+%1:
+    cli
+%ifdef BOOT_DIAGNOSTIC_PORT
+    ; Unassigned core diagnostic port, also used by ram_probe.asm. The
+    ; existing debug UART latches this write without needing text video.
+    mov dx,7ff0h
+    out dx,ax
+%endif
+.halt:
+    hlt
+    jmp .halt
+%endmacro
+boot_trap boot_bad_vector
+boot_trap boot_bad_initialize
+boot_trap boot_bad_read
+%ifdef BOOT_REFERENCE_FILE
+%ifndef BOOT_DIAGNOSTIC_PORT
+%error BOOT_REFERENCE_FILE requires BOOT_DIAGNOSTIC_PORT
+%endif
+; Failure-only comparison against the owner's exact first 1024 disk bytes.
+; Report the first differing byte offset, or FFFF if all words match and
+; the preceding checksum computation/comparison was itself incorrect.
+boot_bad_checksum:
+    cli
+    mov ax,01fc0h
+    mov es,ax
+    xor di,di
+    mov si,boot_reference
+    mov cx,512
+.compare:
+    mov ax,[cs:si]
+    cmp ax,[es:di]
+    jne .different
+    add si,2
+    add di,2
+    loop .compare
+    mov ax,0ffffh
+    jmp .report
+.different:
+%ifdef BOOT_REPORT_WORD4
+    ; Contrast a fixed moffs load with the DI-based ModR/M comparison.
+    mov ax,[es:4]
+%elifdef BOOT_REPORT_WORD
+    mov ax,[es:di]
+%else
+    mov ax,di
+%endif
+.report:
+    mov dx,7ff0h
+    out dx,ax
+.halt:
+    hlt
+    jmp .halt
+%else
+boot_trap boot_bad_checksum
+%endif
+%endif
 
 bios_previous_vector: dd 0
 trace_count: dw 0
@@ -350,6 +425,32 @@ vector_text: db 13,10,'Stopped: old disk vector is not in system ROM.',13,10,'$'
 copy_text: db 13,10,'Stopped: resident BIOS RAM copy did not verify.',13,10,'$'
 boot_text: db 'Zet98 VHD bootstrap stopped: read, image check or IPL return.',0
 %include "software/pc98_ide_read_bios.inc"
+%ifdef BOOT_STAGE_TRAPS
+; EIP points immediately after HLT in a halted CPU snapshot.
+%ifdef BIOS_PROBE_READ_WORD4
+db 'Z98BUFR'
+dw bios_int1b.probe_read_halt+1
+%endif
+%ifdef BOOT_REFERENCE_FILE
+boot_reference: incbin BOOT_REFERENCE_FILE
+%if ($-boot_reference) != 1024
+%error Expected exactly 1024 private reference bytes
+%endif
+%ifdef BOOT_REPORT_WORD4
+db 'Z98ABS'
+%elifdef BOOT_REPORT_WORD
+db 'Z98VAL'
+%else
+db 'Z98CMP'
+%endif
+%endif
+%ifdef BOOT_DIAGNOSTIC_PORT
+db 'Z98PORT'
+%endif
+db 'Z98STAGE'
+dw boot_bad_vector.halt+1, boot_bad_initialize.halt+1
+dw boot_bad_read.halt+1, boot_bad_checksum.halt+1
+%endif
 image_end:
 %if image_end-$$ >= 1f00h
 %error Bootstrap code exceeds its reserved area
