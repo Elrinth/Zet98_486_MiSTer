@@ -1,6 +1,9 @@
 // z486 cache and external-memory fabric.
 // Owns both L1 caches, A20 masking, refill arbitration, and response tracking.
-module memory #(
+`include "z486_platform.svh"
+module memory
+    import z486_cache_map_pkg::*;
+#(
     parameter PC98_MODE = 0,
     parameter PC98_EXT_RAM_MB = 0,
     parameter PROTECT_UMA_ROM = 0,
@@ -8,7 +11,46 @@ module memory #(
     parameter ICACHE_SET_BITS = 7,
     parameter ENABLE_X87 = 0,
     parameter ENABLE_DEVICE_MMIO = 0,
-    parameter [31:0] DEVICE_MMIO_MASK = 32'hff00_0000
+    parameter [31:0] DEVICE_MMIO_MASK = 32'hff00_0000,
+
+    // A20 gate masks, applied closed / open. Default = PC/AT bit-20 clear / unmasked.
+    parameter [31:0] A20_MASK_OFF = 32'hffef_ffff,
+    parameter [31:0] A20_MASK_ON  = 32'hffff_ffff,
+
+    // VGA/device A0000-BFFFF template window (VGA_ENABLE gates only this copy).
+    // VGA_PRE_WRAP: 1 = raw, 0 = A20-masked.
+    parameter        VGA_ENABLE = 0,
+    parameter        VGA_PRE_WRAP = 1,
+    parameter [1:0]  VGA_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] VGA_BASE = 32'h000a_0000,
+    parameter [31:0] VGA_TOP  = 32'h000b_ffff,
+
+    // Device aperture (PC-98: A0000-FFFFF). Disabled by default.
+    parameter        APERTURE_ENABLE = 0,
+    parameter [1:0]  APERTURE_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] APERTURE_BASE = 32'h000a_0000,
+    parameter [31:0] APERTURE_TOP  = 32'h000f_ffff,
+
+    // Device-memory aliases (PC-98 mirror/PEGC/fw_high). Disabled by default.
+    parameter        ALIAS_ENABLE = 0,
+    parameter [1:0]  ALIAS_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] ALIAS0_BASE = 32'h00f0_0000,
+    parameter [31:0] ALIAS0_TOP  = 32'h00ff_ffff,
+    parameter [31:0] ALIAS1_BASE = 32'hfff0_0000,
+    parameter [31:0] ALIAS1_TOP  = 32'hfff7_ffff,
+    parameter [31:0] ALIAS2_BASE = 32'hffff_8000,
+    parameter [31:0] ALIAS2_TOP  = 32'hffff_ffff,
+
+    // Window-0 overlay range (PC-98 0x80000-0x9FFFF), enabled only when win0_unmapped.
+    parameter        WIN0_ENABLE = 0,
+    parameter [1:0]  WIN0_CLASS = Z486_CACHE_NO_ALLOC,
+    parameter [31:0] WIN0_BASE = 32'h0008_0000,
+    parameter [31:0] WIN0_TOP  = 32'h0009_ffff,
+
+    // No-allocate bound: addresses at or above it never install a line.
+    parameter        NO_ALLOC_ENABLE = 0,
+    parameter [1:0]  NO_ALLOC_CLASS = Z486_CACHE_NO_ALLOC,
+    parameter [31:0] NO_ALLOC_BOUND = 32'h0800_0000
 ) (
     input              clk,
     input              reset_n,
@@ -17,6 +59,10 @@ module memory #(
     input              a20_enable,
     input              device_mmio_enable,
     input      [31:0]  device_mmio_base,
+    // Idle in the default map; the template's WIN0 window uses it.
+    /* verilator lint_off UNUSEDSIGNAL */
+    input              win0_unmapped,        // 0x80000-0x9FFFF target is not RAM
+    /* verilator lint_on UNUSEDSIGNAL */
 
     // Paging-unit demand request
     input              dcache_req_valid,
@@ -92,18 +138,41 @@ module memory #(
     output             inta
 );
 
-wire [31:0] dcache_req_phys_addr = (!a20_enable && !dcache_req_is_io)
-                                      ? (dcache_req_phys_addr_raw & ~32'h0010_0000)
-                                      : dcache_req_phys_addr_raw;
-wire [31:0] dcache_vipt_resolve_phys_addr = !a20_enable
-                                      ? (dcache_vipt_resolve_phys_addr_raw & ~32'h0010_0000)
-                                      : dcache_vipt_resolve_phys_addr_raw;
-wire [31:0] fast_store_phys_addr = !a20_enable
-                                      ? (fast_store_phys_addr_raw & ~32'h0010_0000)
-                                      : fast_store_phys_addr_raw;
-wire [31:0] icache_req_phys_addr = !a20_enable
-                                      ? (icache_req_phys_addr_raw & ~32'h0010_0000)
-                                      : icache_req_phys_addr_raw;
+// z486_window_match assumes the A20 mask only clears bits [31:20]; assert it once.
+// synthesis translate_off
+initial begin
+    if (A20_MASK_OFF[19:0] !== 20'hfffff)
+        $fatal(1, "z486 A20MASK: A20_MASK_OFF[19:0] must be all ones (%h); z486_window_match assumes the mask only clears bits [31:20]",
+               A20_MASK_OFF);
+    if (A20_MASK_ON[19:0] !== 20'hfffff)
+        $fatal(1, "z486 A20MASK: A20_MASK_ON[19:0] must be all ones (%h)",
+               A20_MASK_ON);
+    // A line at or above the L1 tag reach would alias a lower address.
+    if (NO_ALLOC_ENABLE &&
+        ({1'b0, NO_ALLOC_BOUND} > (33'd1 << `Z486_L1_PHYS_ADDR_BITS)))
+        $fatal(1, "z486 NO_ALLOC_BOUND %h exceeds the L1 tag reach %0h (Z486_L1_PHYS_ADDR_BITS=%0d)",
+               NO_ALLOC_BOUND, 33'd1 << `Z486_L1_PHYS_ADDR_BITS,
+               `Z486_L1_PHYS_ADDR_BITS);
+    // paging_tlb classifies this window per 4 KB page, the unpaged path per byte.
+    if (VGA_BASE[11:0] !== 12'h000)
+        $fatal(1, "z486 VGA_BASE %h is not page-aligned (VGA_BASE[11:0] must be 0)",
+               VGA_BASE);
+    if (VGA_TOP[11:0] !== 12'hfff)
+        $fatal(1, "z486 VGA_TOP %h must end on a page boundary (VGA_TOP[11:0] must be fff)",
+               VGA_TOP);
+end
+// synthesis translate_on
+
+// A20 masking; the default masks reproduce upstream exactly.
+wire [31:0] dcache_req_a20_mask = (a20_enable || dcache_req_is_io)
+                                ? A20_MASK_ON : A20_MASK_OFF;
+wire [31:0] dcache_req_phys_addr = dcache_req_phys_addr_raw & dcache_req_a20_mask;
+wire [31:0] dcache_vipt_resolve_phys_addr = dcache_vipt_resolve_phys_addr_raw &
+                                            (a20_enable ? A20_MASK_ON : A20_MASK_OFF);
+wire [31:0] fast_store_phys_addr = fast_store_phys_addr_raw &
+                                   (a20_enable ? A20_MASK_ON : A20_MASK_OFF);
+wire [31:0] icache_req_phys_addr = icache_req_phys_addr_raw &
+                                   (a20_enable ? A20_MASK_ON : A20_MASK_OFF);
 // PC-98 banks, VRAM, ROM and unmapped space must never acquire RAM tags.
 // Low fixed RAM and the extended RAM aperture are the only cacheable regions.
 function automatic pc98_cacheable(input [31:0] a);
@@ -120,6 +189,99 @@ wire dcache_vipt_is_device_mmio = (PC98_MODE && !pc98_cacheable(dcache_vipt_reso
                                    ((dcache_vipt_resolve_phys_addr &
                                      DEVICE_MMIO_MASK) ==
                                     (device_mmio_base & DEVICE_MMIO_MASK));
+
+// Memory-map classification: the paging unit's VGA verdict is a floor; template
+// windows only add uncached classes (a constant with none enabled).
+localparam bit Z486_TEMPLATE_WINDOWS = VGA_ENABLE | APERTURE_ENABLE |
+                                       ALIAS_ENABLE | WIN0_ENABLE |
+                                       NO_ALLOC_ENABLE;
+
+// Quartus 17 rejects a user-enum-typed net; carry the class as a plain 2-bit vector.
+wire dcache_req_is_uncached;
+wire [1:0] dcache_vipt_class;
+wire icache_req_is_no_alloc;
+
+generate
+if (Z486_TEMPLATE_WINDOWS) begin : g_memmap_windows
+    wire [1:0] dcache_req_class;   // template-window path only
+    wire [31:0] dcache_vga_addr = VGA_PRE_WRAP ? dcache_req_phys_addr_raw
+                                               : dcache_req_phys_addr;
+    assign dcache_req_class = z486_classify_phys(
+        dcache_req_phys_addr_raw, dcache_req_phys_addr, dcache_vga_addr,
+        VGA_ENABLE, VGA_CLASS, VGA_BASE, VGA_TOP,
+        APERTURE_ENABLE, APERTURE_CLASS, APERTURE_BASE, APERTURE_TOP,
+        ALIAS_ENABLE, ALIAS_CLASS,
+        ALIAS0_BASE, ALIAS0_TOP, ALIAS1_BASE, ALIAS1_TOP, ALIAS2_BASE, ALIAS2_TOP,
+        WIN0_ENABLE && win0_unmapped, WIN0_CLASS, WIN0_BASE, WIN0_TOP,
+        NO_ALLOC_ENABLE, NO_ALLOC_CLASS, NO_ALLOC_BOUND);
+    assign dcache_vipt_class = z486_classify_phys(
+        dcache_vipt_resolve_phys_addr_raw, dcache_vipt_resolve_phys_addr,
+        dcache_vipt_resolve_phys_addr,
+        VGA_ENABLE, VGA_CLASS, VGA_BASE, VGA_TOP,
+        APERTURE_ENABLE, APERTURE_CLASS, APERTURE_BASE, APERTURE_TOP,
+        ALIAS_ENABLE, ALIAS_CLASS,
+        ALIAS0_BASE, ALIAS0_TOP, ALIAS1_BASE, ALIAS1_TOP, ALIAS2_BASE, ALIAS2_TOP,
+        WIN0_ENABLE && win0_unmapped, WIN0_CLASS, WIN0_BASE, WIN0_TOP,
+        NO_ALLOC_ENABLE, NO_ALLOC_CLASS, NO_ALLOC_BOUND);
+    assign dcache_req_is_uncached = dcache_req_is_vga_mem ||
+                                    (dcache_req_class != Z486_CACHE_CACHEABLE);
+    assign icache_req_is_no_alloc = (z486_classify_phys(
+        icache_req_phys_addr_raw, icache_req_phys_addr, icache_req_phys_addr,
+        VGA_ENABLE, VGA_CLASS, VGA_BASE, VGA_TOP,
+        APERTURE_ENABLE, APERTURE_CLASS, APERTURE_BASE, APERTURE_TOP,
+        ALIAS_ENABLE, ALIAS_CLASS,
+        ALIAS0_BASE, ALIAS0_TOP, ALIAS1_BASE, ALIAS1_TOP, ALIAS2_BASE, ALIAS2_TOP,
+        WIN0_ENABLE && win0_unmapped, WIN0_CLASS, WIN0_BASE, WIN0_TOP,
+        NO_ALLOC_ENABLE, NO_ALLOC_CLASS, NO_ALLOC_BOUND) == Z486_CACHE_NO_ALLOC);
+end else begin : g_memmap_inert
+    // Structural no-op: upstream VGA-only demand verdict.
+    assign dcache_vipt_class = Z486_CACHE_CACHEABLE;
+    assign dcache_req_is_uncached = dcache_req_is_vga_mem;
+    assign icache_req_is_no_alloc = 1'b0;
+end
+endgenerate
+
+// synthesis translate_off
+// DEFAULT-EQUIVALENCE FUSES: the default parameter set must reproduce upstream.
+always @* begin : memmap_equiv_fuse
+    logic [31:0] ref_d, ref_v, ref_f, ref_i;
+    logic ref_uncached;
+    ref_uncached = 1'b0;
+    if (A20_MASK_OFF == ~32'h0010_0000 && A20_MASK_ON == 32'hffff_ffff) begin
+        ref_d = (!a20_enable && !dcache_req_is_io)
+              ? (dcache_req_phys_addr_raw & ~32'h0010_0000)
+              : dcache_req_phys_addr_raw;
+        ref_v = !a20_enable
+              ? (dcache_vipt_resolve_phys_addr_raw & ~32'h0010_0000)
+              : dcache_vipt_resolve_phys_addr_raw;
+        ref_f = !a20_enable
+              ? (fast_store_phys_addr_raw & ~32'h0010_0000)
+              : fast_store_phys_addr_raw;
+        ref_i = !a20_enable
+              ? (icache_req_phys_addr_raw & ~32'h0010_0000)
+              : icache_req_phys_addr_raw;
+        if ((dcache_req_phys_addr !== ref_d) ||
+            (dcache_vipt_resolve_phys_addr !== ref_v) ||
+            (fast_store_phys_addr !== ref_f) || (icache_req_phys_addr !== ref_i))
+            $fatal(1, "A20MUX FUSE MISMATCH");
+    end
+    if (!Z486_TEMPLATE_WINDOWS && VGA_BASE == 32'h000a_0000 &&
+        VGA_TOP == 32'h000b_ffff && dcache_req_valid) begin
+        ref_uncached = z486_addr_in_window(dcache_req_phys_addr_raw,
+                                           32'h000a_0000, 32'h000b_ffff);
+        if (ref_uncached !== dcache_req_is_uncached)
+            $fatal(1, "MEMMAP UNCACHED FUSE MISMATCH raw=%h got=%b ref=%b",
+                   dcache_req_phys_addr_raw, dcache_req_is_uncached, ref_uncached);
+    end
+    if (VGA_ENABLE && VGA_PRE_WRAP && VGA_CLASS == Z486_CACHE_DIRECT &&
+        dcache_req_valid) begin
+        ref_uncached = z486_addr_in_window(dcache_req_phys_addr_raw, VGA_BASE, VGA_TOP);
+        if (ref_uncached !== dcache_req_is_vga_mem)
+            $fatal(1, "MEMMAP VGA FUSE MISMATCH raw=%h window=%b input=%b",
+                   dcache_req_phys_addr_raw, ref_uncached, dcache_req_is_vga_mem);
+    end
+end
+// synthesis translate_on
 
 wire [31:0] dcache_cpu_dout;
 wire        dcache_vipt_resolve_hit_cache;
@@ -152,7 +314,8 @@ wire         icache_mem_resp_valid;
 wire         icache_mem_line_resp_valid;
 
 assign dcache_vipt_resolve_hit = dcache_vipt_resolve_hit_cache &&
-                                  !dcache_vipt_is_device_mmio;
+                                  !dcache_vipt_is_device_mmio &&
+                                  (dcache_vipt_class == Z486_CACHE_CACHEABLE);
 
 logic [7:0] dcache_rd_pending;
 logic [7:0] icache_rd_pending;
@@ -165,7 +328,7 @@ assign x87_req_selected = ENABLE_X87 && dcache_req_valid && dcache_req_is_x87;
 // VGA aperture accesses are device transactions. Bypass the posted L1 store
 // queue so an ET4000 bank-register write cannot overtake framebuffer writes.
 wire normal_cache_req = dcache_req_valid && !dcache_req_is_io &&
-                        !dcache_req_is_inta && !dcache_req_is_vga_mem &&
+                        !dcache_req_is_inta && !dcache_req_is_uncached &&
                         !dcache_req_is_device_mmio &&
                         !x87_req_selected;
 wire dcache_cpu_req = fast_store_valid || normal_cache_req;
@@ -185,7 +348,7 @@ wire dcache_cpu_preread_priority = fast_store_valid ||
                                    dcache_req_preread_priority;
 wire dcache_direct_req = dcache_req_valid && !x87_req_selected &&
                          (dcache_req_is_io || dcache_req_is_inta ||
-                          dcache_req_is_vga_mem ||
+                          dcache_req_is_uncached ||
                           dcache_req_is_device_mmio);
 wire dcache_read_pending = (dcache_rd_pending != 8'd0);
 wire icache_read_pending = (icache_rd_pending != 8'd0);
@@ -200,6 +363,8 @@ wire icache_read_done = icache_cpu_resp_valid &&
 // DSP command lets DMA consume it.  VGA memory already bypasses the posted
 // queue, so direct VGA accesses remain mutually ordered without draining
 // unrelated normal-RAM stores first.
+// Only VGA writes may bypass the posted store queue (upstream); PC-98 mode
+// always drains (every non-RAM window is device space).
 wire direct_req_ordered = (!PC98_MODE && dcache_req_is_vga_mem) || dcache_stores_drained;
 wire ext_direct_req = dcache_direct_req && direct_req_ordered &&
                       !direct_rd_pending &&
@@ -408,7 +573,9 @@ end
 
 l1_cache #(
     .PROTECT_UMA_ROM(PROTECT_UMA_ROM),
-    .SET_BITS(DCACHE_SET_BITS)
+    .SET_BITS(DCACHE_SET_BITS),
+    .VGA_BASE(VGA_BASE),
+    .VGA_TOP(VGA_TOP)
 ) dcache_inst (
     .clk(clk),
     .reset(!reset_n),
@@ -466,6 +633,7 @@ l1_icache #(
     .cpu_addr(icache_req_phys_addr),
     .cpu_line(icache_cpu_line),
     .cpu_valid(icache_req_valid),
+    .cpu_no_alloc(icache_req_is_no_alloc),
     .cpu_ready(icache_cpu_ready),
     .cpu_resp_valid(icache_cpu_resp_valid),
     .mem_addr(icache_mem_addr),

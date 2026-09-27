@@ -59,6 +59,7 @@ module address_unit
     output logic [31:0] ea,
     output logic [31:0] issue_ea,              // Combinational D2 effective address
     output logic [31:0] issue_linear,          // Combinational D2 relocated address
+    output logic [31:0] ind_linear_next,       // Value ind_linear takes on the NEXT edge
     output logic [1:0]  issue_linear_low       // Low address bits without full relocation
 );
 
@@ -112,6 +113,13 @@ function automatic logic [2:0] onehot_idx(input logic [7:0] onehot);
                  onehot[7] ? 3'd7 : 3'd0;
 endfunction
 
+// Bitwise majority used by the CSA folds below (a+b+c = (a^b^c)+2*maj3).
+function automatic logic [31:0] maj3(input logic [31:0] x,
+                                     input logic [31:0] y,
+                                     input logic [31:0] z);
+    maj3 = (x & y) | (x & z) | (y & z);
+endfunction
+
 wire [63:0] ea_terms = ea_scale_operands(
     ea_base_value, ea_index_value, ea_scale_r, ea_scale_to_base_r);
 wire [31:0] ea_term_a_live = ea_terms[63:32];
@@ -129,7 +137,10 @@ wire [31:0] ea_add_b = (REGISTERED_EA || split_ea_use) ? displacement : ea_simpl
 wire [31:0] ea_offset_full = ea_add_a + ea_add_b;
 wire [31:0] effective_addr = ea_is_16bit_r
                            ? {16'd0, ea_offset_full[15:0]} : ea_offset_full;
-wire [31:0] linear32 = ea_offset_full + issue_seg_base;
+// linear32 folds the 3-operand sum into one carry chain via maj3; linear16 is
+// not folded (its 16-bit wrap would not be bit-exact).
+wire [31:0] linear32 = (ea_add_a ^ ea_add_b ^ issue_seg_base)
+                     + (maj3(ea_add_a, ea_add_b, issue_seg_base) << 1);
 wire [31:0] linear16 = {16'd0, ea_offset_full[15:0]} + issue_seg_base;
 wire [31:0] effective_linear = (ea_is_16bit_r || !issue_eff_mask)
                              ? linear16 : linear32;
@@ -197,6 +208,17 @@ function automatic logic [31:0] relocate(input logic [31:0] offset);
                seg_base_pending;
 endfunction
 
+// The 32-bit stack push folds f - d + base into one carry chain (f + ~d + base
+// + 1, the carry-in folded into bit 0 of the shifted majority).
+function automatic logic [31:0] relocate_stack_push(
+    input logic [31:0] f,
+    input logic [31:0] d
+);
+    relocate_stack_push =
+        (f ^ ~d ^ issue_seg_base) +
+        ((maj3(f, ~d, issue_seg_base) << 1) | 32'd1);
+endfunction
+
 // Issue-time relocation bypasses the generic SEG_CMD next-state cone. The
 // segmentation unit still receives INIT_SEG and commits identical state.
 function automatic logic [31:0] relocate_issue(input logic [31:0] offset);
@@ -220,7 +242,8 @@ function automatic logic [31:0] relocate_add2(
 );
     relocate_add2 = mask16
                   ? ({16'd0, a[15:0] + b[15:0]} + seg_base_pending_exec)
-                  : (a + b + seg_base_pending_exec);
+                  : ((a ^ b ^ seg_base_pending_exec)
+                     + (maj3(a, b, seg_base_pending_exec) << 1));
 endfunction
 
 logic        exec_linear_write;
@@ -278,6 +301,28 @@ always_comb begin
         default: ;
     endcase
 end
+
+// synthesis translate_off
+// CSA FUSE: the folded sums must equal their two-chain reference expressions.
+always @(posedge clk)
+    if (reset_n && exec && exec_linear_write && exec_linear_three_term &&
+        (relocate_add2(exec_linear_a, exec_linear_b, exec_linear_mask16) !=
+         (exec_linear_mask16
+              ? ({16'd0, exec_linear_a[15:0] + exec_linear_b[15:0]} +
+                 seg_base_pending_exec)
+              : (exec_linear_a + exec_linear_b + seg_base_pending_exec))))
+        $fatal(1, "RELOC-ADD2 CSA FUSE MISMATCH: a=%08x b=%08x base=%08x m16=%b",
+               exec_linear_a, exec_linear_b, seg_base_pending_exec,
+               exec_linear_mask16);
+always @(posedge clk)
+    if (reset_n && instr_issue && instr.stack_op && !instr.stack_dir &&
+        ss_stack32 && issue_eff_mask &&
+        (relocate_stack_push(forwarded_esp,
+                            instr.data32 ? 32'd4 : 32'd2) !=
+         relocate_issue(forwarded_esp - (instr.data32 ? 32'd4 : 32'd2))))
+        $fatal(1, "STACK-CSA FUSE MISMATCH: esp=%08x d=%0d base=%08x",
+               forwarded_esp, instr.data32 ? 4 : 2, issue_seg_base);
+// synthesis translate_on
 
 // Execution owns a separate relocation register. Updating this shadow in a
 // simultaneous issue cycle is harmless because linear_owner_issue_r selects
@@ -368,6 +413,51 @@ always_ff @(posedge clk) begin
     end
 end
 
+// D2 address of the issuing instruction, hoisted so the issue arms below and
+// `issue_linear_next` share one expression (the paging unit prereads with it).
+wire [31:0] issue_stack_offset_pop = ss_stack32 ? forwarded_esp
+                                                 : {16'd0, forwarded_esp[15:0]};
+wire [31:0] issue_stack_offset_push = ss_stack32
+    ? forwarded_esp - (instr.data32 ? 32'd4 : 32'd2)
+    : {16'd0, forwarded_esp[15:0] - (instr.data32 ? 16'd4 : 16'd2)};
+wire [31:0] issue_linear_arm =
+      (instr.stack_op && instr.stack_dir)
+        ? relocate_issue(issue_stack_offset_pop)
+    : (instr.stack_op && !instr.stack_dir)
+        // 32-bit-stack push sub-then-relocate is one folded chain.
+        ? ((ss_stack32 && issue_eff_mask)
+              ? relocate_stack_push(forwarded_esp,
+                                   instr.data32 ? 32'd4 : 32'd2)
+              : relocate_issue(issue_stack_offset_push))
+    : instr.has_moffs ? relocate_issue(instr.immediate)
+    : instr.has_modrm ? effective_linear
+    : issue_linear_r;
+// issue_linear_r's next value: the issuing D2 address, or the held value.
+wire [31:0] issue_linear_next = instr_issue ? issue_linear_arm : issue_linear_r;
+// EX side of the same identity: exec_linear_r is written only under this enable.
+wire [31:0] exec_linear_arm = (exec && exec_linear_write)
+    ? (exec_linear_three_term
+           ? relocate_add2(exec_linear_a, exec_linear_b, exec_linear_mask16)
+           : relocate_exec(exec_linear_source))
+    : exec_linear_r;
+// ind_linear's next value, preread by the paging unit's clocked TLB array. The
+// owner register is written by exactly issue-set, EX-clear, and this mux.
+assign ind_linear_next = (instr_issue ? 1'b1 :
+                          (exec && exec_linear_write) ? 1'b0 :
+                          linear_owner_issue_r)
+                       ? issue_linear_next : exec_linear_arm;
+
+// synthesis translate_off
+// ISSUE-LINEAR FUSE: issue_linear_next must equal what issue_linear_r latches.
+reg [31:0] issue_linear_next_d;
+always_ff @(posedge clk) begin
+    issue_linear_next_d <= issue_linear_next;
+    if (reset_n && (issue_linear_next_d !== issue_linear_r))
+        $fatal(1, "ISSUE-LINEAR FUSE MISMATCH: next_d=%08x reg=%08x",
+               issue_linear_next_d, issue_linear_r);
+end
+// synthesis translate_on
+
 always_ff @(posedge clk) begin
     if (!reset_n) begin
         issue_ind_r <= 32'd0;
@@ -383,31 +473,25 @@ always_ff @(posedge clk) begin
                      !instr.stack_dir ? (instr.data32 ? -32'd4 : -32'd2) :
                                         (instr.data32 ? 32'd4 : 32'd2);
         if (instr.stack_op && instr.stack_dir) begin
-            automatic logic [31:0] stack_offset =
-                ss_stack32 ? forwarded_esp : {16'd0, forwarded_esp[15:0]};
-            issue_ind_r <= stack_offset;
+            issue_ind_r <= issue_stack_offset_pop;
             ind_owner_issue_r <= 1'b1;
-            issue_linear_r <= relocate_issue(stack_offset);
+            issue_linear_r <= issue_linear_arm;
             ind_linear_valid <= 1'b1;
         end else if (instr.stack_op && !instr.stack_dir) begin
-            automatic logic [31:0] stack_offset = ss_stack32
-                ? forwarded_esp - (instr.data32 ? 32'd4 : 32'd2)
-                : {16'd0, forwarded_esp[15:0] -
-                          (instr.data32 ? 16'd4 : 16'd2)};
-            issue_ind_r <= stack_offset;
+            issue_ind_r <= issue_stack_offset_push;
             ind_owner_issue_r <= 1'b1;
-            issue_linear_r <= relocate_issue(stack_offset);
+            issue_linear_r <= issue_linear_arm;
             ind_linear_valid <= 1'b1;
         end else if (instr.has_moffs) begin
             issue_ind_r <= instr.addr32 ? instr.immediate
                                         : {16'd0, instr.immediate[15:0]};
             ind_owner_issue_r <= 1'b1;
-            issue_linear_r <= relocate_issue(instr.immediate);
+            issue_linear_r <= issue_linear_arm;
             ind_linear_valid <= 1'b1;
         end else if (instr.has_modrm) begin
             issue_ind_r <= effective_addr;
             ind_owner_issue_r <= 1'b1;
-            issue_linear_r <= effective_linear;
+            issue_linear_r <= issue_linear_arm;
             ind_linear_valid <= 1'b1;
         end
     end else if (exec) begin

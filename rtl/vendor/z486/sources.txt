@@ -1,4 +1,5 @@
 z486_pkg.sv
+z486_cache_map_pkg.sv
 x87/x87_pkg.sv
 x87/x87_ucode_pkg.sv
 address_unit.sv

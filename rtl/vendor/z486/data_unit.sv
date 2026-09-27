@@ -101,6 +101,7 @@ module data_unit
     output logic [31:0] source_value_live,        // Selected microcode source value
     output logic [31:0] memory_write_source_value,// Narrow source mux for WR W
     output logic [31:0] alu_source_value_live,    // Selected ALU-source value
+    output logic [31:0] alu_source_value_generic, // translate_off cross-check of the above
     output logic [31:0] dest_value,
     output logic [31:0] alu_src,
     output logic [31:0] eax,
@@ -429,6 +430,19 @@ function automatic logic [31:0] read_ea_gpr(
     end
 endfunction
 
+// Shared GPR read ports: one port per read shape, indexed by the consumer.
+wire [31:0] alu_fixed_gpr_value =
+    read_gpr_load_forwarded(alu_source[2:0], 2'd2);
+wire [31:0] src_fixed_gpr_value =
+    read_gpr_load_forwarded((source_live == SRC_eCX) ? 3'd1 : source_live[2:0],
+                            2'd2);
+wire [31:0] gpr_dst_op_size_value =
+    read_gpr_load_forwarded(dst_reg_sel_r, op_size);
+wire [31:0] gpr_src_op_size_value =
+    read_gpr_load_forwarded(src_reg_sel_r, op_size);
+wire [31:0] gpr_irf_value =
+    read_gpr_load_forwarded(countr[2:0], op_size_src == 2'd2 ? 2'd2 : 2'd1);
+
 // Every direct load reads its destination after older architectural writes
 // have settled but before cache data enters WB. Plain-load WB forwarding keeps
 // a chained older load visible at this capture edge. M3 uses the same value as
@@ -453,14 +467,16 @@ end
 
 function automatic logic [31:0] read_alu_source(input logic [5:0] field);
     case (field)
-        ALUSRC_EAX: read_alu_source = read_gpr_load_forwarded(3'd0, 2'd2);
-        ALUSRC_ECX: read_alu_source = read_gpr_load_forwarded(3'd1, 2'd2);
-        ALUSRC_EDX: read_alu_source = read_gpr_load_forwarded(3'd2, 2'd2);
-        ALUSRC_EBX: read_alu_source = read_gpr_load_forwarded(3'd3, 2'd2);
-        ALUSRC_ESP: read_alu_source = read_gpr_load_forwarded(3'd4, 2'd2);
-        ALUSRC_EBP: read_alu_source = read_gpr_load_forwarded(3'd5, 2'd2);
-        ALUSRC_ESI: read_alu_source = read_gpr_load_forwarded(3'd6, 2'd2);
-        ALUSRC_EDI: read_alu_source = read_gpr_load_forwarded(3'd7, 2'd2);
+        ALUSRC_EAX, ALUSRC_ECX, ALUSRC_EDX, ALUSRC_EBX,
+        ALUSRC_ESP, ALUSRC_EBP, ALUSRC_ESI, ALUSRC_EDI: begin
+            // alu_fixed_gpr_value is keyed on alu_source, not on `field`.
+            // synthesis translate_off
+            if (field !== alu_source)
+                $fatal(1, "read_alu_source register field %0d != alu_source %0d",
+                       field, alu_source);
+            // synthesis translate_on
+            read_alu_source = alu_fixed_gpr_value;
+        end
         ALUSRC_IMM8: read_alu_source = instr.has_modrm ? instr.immediate : instr.displacement;
         ALUSRC_IMM: read_alu_source = instr.immediate;
         ALUSRC_TMPB: read_alu_source = tmpb;
@@ -517,8 +533,8 @@ function automatic logic [31:0] read_alu_source(input logic [5:0] field);
             (op_size == 2'd0 ? 32'd1 : op_size == 2'd1 ? 32'd2 : 32'd4);
         ALUSRC_BITS_V: read_alu_source = op_size == 2'd0 ? 32'd7 :
                                           op_size == 2'd2 ? 32'd31 : 32'd15;
-        ALUSRC_DSTREG: read_alu_source = read_gpr_load_forwarded(dst_reg_sel_r, op_size);
-        ALUSRC_SRCREG: read_alu_source = read_gpr_load_forwarded(src_reg_sel_r, op_size);
+        ALUSRC_DSTREG: read_alu_source = gpr_dst_op_size_value;
+        ALUSRC_SRCREG: read_alu_source = gpr_src_op_size_value;
         ALUSRC_ZERO: read_alu_source = 32'd0;
         default: read_alu_source = 32'd0;
     endcase
@@ -526,13 +542,16 @@ endfunction
 
 function automatic logic [31:0] read_source(input logic [5:0] field);
     case (field)
-        SRC_EAX: read_source = read_gpr_load_forwarded(3'd0, 2'd2);
-        SRC_ECX: read_source = read_gpr_load_forwarded(3'd1, 2'd2);
-        SRC_EDX: read_source = read_gpr_load_forwarded(3'd2, 2'd2);
-        SRC_ESP: read_source = read_gpr_load_forwarded(3'd4, 2'd2);
-        SRC_EBP: read_source = read_gpr_load_forwarded(3'd5, 2'd2);
-        SRC_ESI: read_source = read_gpr_load_forwarded(3'd6, 2'd2);
-        SRC_EDI: read_source = read_gpr_load_forwarded(3'd7, 2'd2);
+        SRC_EAX, SRC_ECX, SRC_EDX, SRC_ESP, SRC_EBP,
+        SRC_ESI, SRC_EDI, SRC_eCX: begin
+            // src_fixed_gpr_value is keyed on source_live, not on `field`.
+            // synthesis translate_off
+            if (field !== source_live)
+                $fatal(1, "read_source register field %0d != source_live %0d",
+                       field, source_live);
+            // synthesis translate_on
+            read_source = src_fixed_gpr_value;
+        end
         SRC_EIP: read_source = eip;
         SRC_EFLAGS: read_source = eflags;
         SRC_CR0: read_source = cr0;
@@ -576,7 +595,6 @@ function automatic logic [31:0] read_source(input logic [5:0] field);
         SRC_OPR_R: read_source = opr_r;
         SRC_IRF2: read_source = ind;
         SRC_EA: read_source = ea;
-        SRC_eCX: read_source = read_gpr_load_forwarded(3'd1, 2'd2);
         SRC_IRF: read_source = 32'd0;
         SRC_USTEP_SEG_INDEX: read_source = {24'd0, 5'b10100, seg_reg_sel};
         SRC_FOP: read_source = {21'd0, instr.fop};
@@ -617,8 +635,7 @@ function automatic logic [31:0] read_factored_gpr_source(
             3'd0, op_size_src);
         SRC_eDX_AH: read_factored_gpr_source = read_gpr_load_forwarded(
             op_size_src == 2'd0 ? 3'd4 : 3'd2, op_size_src);
-        SRC_IRF: read_factored_gpr_source = read_gpr_load_forwarded(
-            countr[2:0], op_size_src == 2'd2 ? 2'd2 : 2'd1);
+        SRC_IRF: read_factored_gpr_source = gpr_irf_value;
         SRC_DSTREG: read_factored_gpr_source = read_gpr_load_forwarded(
             dst_reg_sel_r, srcreg_size_src);
         SRC_SRCREG: read_factored_gpr_source = read_gpr_load_forwarded(
@@ -696,23 +713,55 @@ function automatic logic [31:0] read_memory_write_source(input logic [5:0] field
                 default: read_memory_write_source = 32'd0;
             endcase
         end
-        SRC_IRF: read_memory_write_source = read_gpr_load_forwarded(
-            countr[2:0], op_size_src == 2'd2 ? 2'd2 : 2'd1);
+        SRC_IRF: read_memory_write_source = gpr_irf_value;
         default: read_memory_write_source = 32'd0;
     endcase
 endfunction
 
+// LDCNTR/SDES/SDEL read only this fixed ALU-source subset (re-scan ucode.hex
+// on any change).
+function automatic logic [31:0] read_counter_seg_source(input logic [5:0] field);
+    case (field)
+        ALUSRC_IMM8: read_counter_seg_source = instr.has_modrm
+                                             ? instr.immediate
+                                             : instr.displacement;
+        ALUSRC_TMPB:     read_counter_seg_source = tmpb;
+        ALUSRC_TMPC:     read_counter_seg_source = tmpc;
+        ALUSRC_TMPD:     read_counter_seg_source = tmpd;
+        ALUSRC_CONST_5D: read_counter_seg_source = 32'h5d;
+        ALUSRC_CONST_73: read_counter_seg_source = 32'h73;
+        ALUSRC_CONST_8200: read_counter_seg_source = 32'h8200;
+        ALUSRC_CONST_71: read_counter_seg_source = 32'h47;
+        ALUSRC_CONST_3:  read_counter_seg_source = 32'd3;
+        ALUSRC_CONST_6:  read_counter_seg_source = 32'd6;
+        ALUSRC_CONST_9:  read_counter_seg_source = 32'd9;
+        ALUSRC_CONST_29: read_counter_seg_source = 32'h29;
+        ALUSRC_CONST_7:  read_counter_seg_source = 32'd7;
+        ALUSRC_CONST_65: read_counter_seg_source = 32'h65;
+        ALUSRC_CONST_1F: read_counter_seg_source = 32'h1f;
+        ALUSRC_CONST_4:  read_counter_seg_source = 32'd4;
+        ALUSRC_BITS_V: read_counter_seg_source = op_size == 2'd0 ? 32'd7 :
+                                                 op_size == 2'd2 ? 32'd31 :
+                                                                   32'd15;
+        default: read_counter_seg_source = 32'd0;
+    endcase
+endfunction
+
+// Register-source encodings of read_alu_source (EAX..EDI == 0..7).
+function automatic logic is_alu_source_register(input logic [5:0] field);
+    is_alu_source_register = (field <= ALUSRC_EDI);
+endfunction
+
 always_comb begin
+    // source_live and source_field are the same registered ROM source field,
+    // so alu_dst reuses the live source mux.
     source_value_live = source_live == SRC_MDTMP ? muldiv_result :
                         source_is_factored_gpr(source_live)
                       ? read_factored_gpr_source(source_live)
                       : read_source(source_live);
     memory_write_source_value = read_memory_write_source(source_live);
-    alu_source_value_live = read_alu_source(alu_source_live);
-    alu_dst = source_field == SRC_MDTMP ? muldiv_result :
-              source_is_factored_gpr(source_field)
-            ? read_factored_gpr_source(source_field)
-            : read_source(source_field);
+    alu_source_value_live = read_counter_seg_source(alu_source_live);
+    alu_dst = source_value_live;
     dest_value = alu_dst;
     alu_src = fpu_f8 ? 32'h8000_00f8 : read_alu_source(alu_source);
     protection_source_value = read_protection_source(source_live,
@@ -722,6 +771,26 @@ always_comb begin
     ea_base_value = read_ea_gpr(ea_base.valid, ea_base.index);
     ea_index_value = read_ea_gpr(ea_index.valid, ea_index.index);
 end
+
+// synthesis translate_off
+// Simulation-only: the LDCNTR COUNTR load must read what the generic mux would
+// (its SDES/SDEL siblings are checked in z486.sv).
+always_comb begin
+    if (exec && (aluop == ALUJMP_LDCNTR)) begin
+        if (is_alu_source_register(alu_source_live))
+            $fatal(1, "LDCNTR uses register ALU source %0d outside the narrowed mux",
+                   alu_source_live);
+        else if (read_counter_seg_source(alu_source_live) !==
+                 read_alu_source(alu_source_live))
+            $fatal(1, "LDCNTR reads ALU source %0d outside the narrowed mux",
+                   alu_source_live);
+    end
+end
+
+// Generic ALU-source value, exported only for z486.sv's SDES/SDEL cross-check.
+always_comb
+    alu_source_value_generic = read_alu_source(alu_source_live);
+// synthesis translate_on
 
 //=============================================================================
 // Internal registers and architectural GPR writeback
@@ -898,6 +967,10 @@ always_ff @(posedge clk) begin
             write_gpr(recipe_memory_write.dst, opr_r,
                       recipe_memory_write.size);
 
+        // Assigned after the token above so it wins the bytes it writes.
+        if (load_wb_valid && !recipe_commit_cancel)
+            write_gpr(load_wb_dst, load_wb_commit_data, load_wb_size);
+
         // A younger VIPT candidate can shadow the ROM writeback slot of a
         // hardwired load.  If an interrupt redirects that boundary, retire
         // the completed OPR_R value before the handler starts using OPR_R.
@@ -977,6 +1050,63 @@ always_ff @(posedge clk) begin
         end
     end
 end
+
+// synthesis translate_off
+// Deferred-writer byte-lane collision assertion. Lane = {valid, normalized_reg[2:0],
+// byte_enable[3:0]}; the mem-before-load order resolves overlaps losslessly.
+function automatic logic [3:0] du_lane_be(input logic [2:0] sel,
+                                         input logic [1:0] size);
+    du_lane_be = (size == 2'd0) ? (sel[2] ? 4'b0010 : 4'b0001)
+               : (size == 2'd1) ? 4'b0011
+               :                  4'b1111;
+endfunction
+
+function automatic logic [2:0] du_lane_reg(input logic [2:0] sel,
+                                           input logic [1:0] size);
+    du_lane_reg = (size == 2'd0) ? {1'b0, sel[1:0]} : sel;
+endfunction
+
+// Reports "1" when two {valid, reg, be} lanes overlap on a byte.
+function automatic logic du_lane_overlap(input logic [7:0] a,
+                                         input logic [7:0] b);
+    du_lane_overlap = a[7] && b[7] && (a[6:4] == b[6:4]) &&
+                      (|(a[3:0] & b[3:0]));
+endfunction
+
+always_ff @(posedge clk) begin
+    logic [7:0] shift_lane, load_lane, mem_lane, intr_lane;
+    if (reset_n && !recipe_commit_cancel) begin
+        shift_lane = recipe_shift_write.valid
+            ? {1'b1, recipe_shift_widx,
+               du_lane_be(recipe_shift_write.dst, recipe_shift_write.size)}
+            : 8'h00;
+        load_lane = load_wb_valid
+            ? {1'b1, load_wb_widx, du_lane_be(load_wb_dst, load_wb_size)}
+            : 8'h00;
+        mem_lane = recipe_memory_write.valid
+            ? {1'b1, du_lane_reg(recipe_memory_write.dst,
+                                 recipe_memory_write.size),
+               du_lane_be(recipe_memory_write.dst, recipe_memory_write.size)}
+            : 8'h00;
+        intr_lane = (interrupt_entry && recipe_rni && recipe_state.hardwired &&
+                     (recipe_state.commit_sel == RECIPE_COMMIT_MEM))
+            ? {1'b1, du_lane_reg(dst_reg_sel_r, op_size),
+               du_lane_be(dst_reg_sel_r, op_size)}
+            : 8'h00;
+
+        if (du_lane_overlap(shift_lane, load_lane))
+            $fatal(1, "DUP GPR WRITER shift/load reg %0d", load_lane[6:4]);
+        if (du_lane_overlap(shift_lane, mem_lane))
+            $fatal(1, "DUP GPR WRITER shift/mem reg %0d", mem_lane[6:4]);
+        if (du_lane_overlap(intr_lane, load_lane))
+            $fatal(1, "DUP GPR WRITER intr/load reg %0d", load_lane[6:4]);
+        if (du_lane_overlap(intr_lane, mem_lane))
+            $fatal(1, "DUP GPR WRITER intr/mem reg %0d", mem_lane[6:4]);
+        if (du_lane_overlap(intr_lane, shift_lane))
+            $fatal(1, "DUP GPR WRITER intr/shift reg %0d", shift_lane[6:4]);
+    end
+end
+// synthesis translate_on
 
 //=============================================================================
 // Arithmetic state and flags
@@ -1476,8 +1606,7 @@ always_comb begin
                                     ? dest_value : tmpe;
         2'd2: shift2_capture_value = (exec && aluop == ALUJMP_SHIFT1)
                                     ? shift_setup_result : sigma;
-        2'd3: shift2_capture_value = read_gpr_load_forwarded(src_reg_sel_r,
-                                                              op_size);
+        2'd3: shift2_capture_value = gpr_src_op_size_value;
         default: shift2_capture_value = 32'd0;
     endcase
 end
@@ -1498,6 +1627,84 @@ alu alu_inst (
     .zsp_update(alu_zsp_update)
 );
 
+// Shifter operand selection: pre-select the SHIFT1 source and ALU operand here
+// so the barrel reuses the source/ALU-source trees instead of duplicating them.
+wire [31:0] gpr_dst_shift_size_value =
+    read_gpr_load_forwarded(dst_reg_sel_r, shift_data_size);
+wire [31:0] gpr_src_shift_size_value =
+    read_gpr_load_forwarded(src_reg_sel_r, shift_data_size);
+wire [31:0] shifter_src_operand =
+    (shift_source_class == 4'd2) ? gpr_dst_shift_size_value :
+    (shift_source_class == 4'd0) ? 32'd0 : alu_dst;
+wire [31:0] shifter_alu_operand =
+    (alu_source == ALUSRC_DSTREG) ? gpr_dst_shift_size_value :
+    (alu_source == ALUSRC_SRCREG) ? gpr_src_shift_size_value :
+    (alu_source == ALUSRC_BITS_V) ? (shift_data_size == 2'd0 ? 32'd7 :
+                                     shift_data_size == 2'd2 ? 32'd31 : 32'd15) :
+    (alu_source == ALUSRC_CONST_6) ? 32'd0 : alu_src;
+
+// synthesis translate_off
+// Equivalence guard for the shifter operand predecode: the muxes it replaced
+// returned 0 for unlisted source/ALU-source codes. Clocked, not combinational.
+function automatic logic [31:0] old_shift_source_mux(input logic [3:0] cls);
+    case (cls)
+        4'd1:    old_shift_source_mux = sigma;
+        4'd2:    old_shift_source_mux = gpr_dst_shift_size_value;
+        4'd4:    old_shift_source_mux = instr.immediate;
+        4'd5:    old_shift_source_mux = tmpb;
+        4'd6:    old_shift_source_mux = tmpc;
+        4'd7:    old_shift_source_mux = tmpd;
+        4'd8:    old_shift_source_mux = tmpe;
+        4'd9:    old_shift_source_mux = opr_r;
+        4'd10:   old_shift_source_mux = countr;
+        4'd11:   old_shift_source_mux = 32'hffff_ffff;
+        default: old_shift_source_mux = 32'd0;
+    endcase
+endfunction
+
+function automatic logic [31:0] old_shift_alu_mux(input logic [5:0] src);
+    case (src)
+        ALUSRC_CONST_0:        old_shift_alu_mux = 32'd0;
+        ALUSRC_TMPC:           old_shift_alu_mux = tmpc;
+        ALUSRC_TMPD:           old_shift_alu_mux = tmpd;
+        ALUSRC_TMPB:           old_shift_alu_mux = tmpb;
+        ALUSRC_DSTREG:         old_shift_alu_mux = gpr_dst_shift_size_value;
+        ALUSRC_SRCREG:         old_shift_alu_mux = gpr_src_shift_size_value;
+        ALUSRC_ECX:            old_shift_alu_mux = read_gpr_load_forwarded(3'd1, 2'd2);
+        ALUSRC_IMM:            old_shift_alu_mux = instr.immediate;
+        ALUSRC_BITS_V:         old_shift_alu_mux = shift_data_size == 2'd0 ? 32'd7 :
+                                                   shift_data_size == 2'd2 ? 32'd31 :
+                                                                             32'd15;
+        ALUSRC_CONST_1:        old_shift_alu_mux = 32'd1;
+        ALUSRC_CONST_3:        old_shift_alu_mux = 32'd3;
+        ALUSRC_CONST_7:        old_shift_alu_mux = 32'd7;
+        ALUSRC_CONST_1FF:      old_shift_alu_mux = 32'h0000_01ff;
+        ALUSRC_CONST_4000:     old_shift_alu_mux = 32'h0000_4000;
+        ALUSRC_CONST_F0000:    old_shift_alu_mux = 32'h000f_0000;
+        ALUSRC_MASK16:         old_shift_alu_mux = 32'h0000_ffff;
+        ALUSRC_CONST_FFFF0000: old_shift_alu_mux = 32'hffff_0000;
+        default:               old_shift_alu_mux = 32'd0;
+    endcase
+endfunction
+
+wire shift_source_captured = shift_is_shift2 ||
+    ((aluop == ALUJMP_SHIFT) && (shift_source_class == 4'd3));
+
+always @(posedge clk)
+    if (reset_n && exec &&
+        ((aluop == ALUJMP_SHIFT) || (aluop == ALUJMP_SHIFT1) ||
+         (aluop == ALUJMP_SHIFT2) || (aluop == ALUJMP_BITTST))) begin
+        if (shifter_alu_operand !== old_shift_alu_mux(alu_source))
+            $fatal(1, "SHIFTER ALU PREDECODE MISMATCH: sel=%02x pre=%08x old=%08x",
+                   alu_source, shifter_alu_operand, old_shift_alu_mux(alu_source));
+        if (!shift_source_captured &&
+            (shifter_src_operand !== old_shift_source_mux(shift_source_class)))
+            $fatal(1, "SHIFTER SOURCE PREDECODE MISMATCH: cls=%x pre=%08x old=%08x",
+                   shift_source_class, shifter_src_operand,
+                   old_shift_source_mux(shift_source_class));
+    end
+// synthesis translate_on
+
 shifter shifter_inst (
     .clk(clk),
     .reset_n(reset_n),
@@ -1511,7 +1718,8 @@ shifter shifter_inst (
     .capture_ce(shift2_capture_ce),
     .capture_valid(shift2_next_valid),
     .capture_value(shift2_capture_value),
-    .alu_source(alu_source),
+    .src_operand(shifter_src_operand),
+    .alu_operand(shifter_alu_operand),
     .instr_start(instr_start),
     .instr_is_shxd_next(next_instr.shift_is_double),
     .carry_in(eflags_fwd[0]),
@@ -1520,18 +1728,11 @@ shifter shifter_inst (
     .op_size(op_size),
     .alu_dst(alu_dst),
     .alu_src(alu_src),
-    .gpr_src_op_size(read_gpr_load_forwarded(src_reg_sel_r, op_size)),
-    .gpr_dst_shift_size(shift_dst_gpr_r),
-    .gpr_src_shift_size(shift_src_gpr_r),
-    .immediate(instr.immediate),
-    .ecx(read_gpr_load_forwarded(3'd1, 2'd2)),
+    .gpr_src_op_size(gpr_src_op_size_value),
+    .gpr_src_shift_size(gpr_src_shift_size_value),
     .sigma(sigma),
-    .tmpb(tmpb),
     .tmpc(tmpc),
-    .tmpd(tmpd),
     .tmpe(tmpe),
-    .opr_r(opr_r),
-    .countr(countr),
     .data_size(shift_data_size),
     .result(shift_result),
     .setup_result(shift_setup_result),

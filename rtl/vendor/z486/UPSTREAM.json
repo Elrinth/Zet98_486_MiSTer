@@ -23,5 +23,33 @@
     "Commit the successor VIPT load WB after older hardwired-load memory tokens (write and forward priority); fixes mov r,[m] followed by add r,[m] keeping the MOV value (PC-98 Doom R_PrecacheLevel).",
     "Deferred memory/shift GPR tokens stop committing and forwarding once a younger load WB has written their register or a younger RMW-fast step replaced OPR_R (they still recommit through stalls to deliver late OPR_R data, e.g. POP).",
     "A VIPT EX op whose destination is the register of a deferred memory token whose optimistic (DLY grace) read missed (mem_opt_wait) is routed to the slow path instead of capturing stale OPR_R (mov eax,[uncached]; and eax,[m])."
+  ],
+  "merged_forks": [
+    {
+      "repository": "https://github.com/doublej472/z486 (private; Apache-2.0, same as upstream)",
+      "commit": "8f4e1e266de9687b44bd150c4df6153eea66c16c",
+      "base": "53dc450e01302c174f75fc9280417a4dc5884863",
+      "summary": "FPGA area campaign (shared GPR read ports, shifter operand predecode, L1 comparator sharing, TLB data in block RAM, address-unit carry-save relocation), compile-time memory-map template, load write-after-write fix.",
+      "merge_notes": [
+        "Three-way merge onto the PC98 local changes; 9 conflict hunks resolved by hand.",
+        "PC-98 cacheability (pc98_cacheable) and PC98 store ordering (direct_req_ordered) kept; the fork A20 masks and VGA window parameters adopted with upstream-equivalent defaults.",
+        "I-cache: uncached ROM and the fork no-allocate class share one full-line fill without tag install.",
+        "Shifter uses the fork pre-selected operands, fed through read_gpr_load_forwarded (keeps the Doom load/forward fixes).",
+        "paging_unit keeps EARLY_DATA_REQUESTS(!PC98_MODE) and gains VGA_BASE/VGA_TOP.",
+        "New input win0_unmapped tied low in z486_pc98_adapter (the fork PC-98 window-0 scheme is not used).",
+        "Verified: 12 production z486 suites and 12 differential fuzz seeds (1200 blocks each) match Unicorn."
+      ]
+    },
+    {
+      "repository": "https://github.com/doublej472/z486 (private; Apache-2.0)",
+      "commit": "212e504ec90136b54fadcc2f3447a0161fb3e05f",
+      "base": "8f4e1e266de9687b44bd150c4df6153eea66c16c",
+      "summary": "Memory-map hardening: per-way TLB block RAM (fixes cross-way corruption of the 8f4e1e2 TLB), uncached non-VGA store ordering, no-allocate fills keep PLRU, z486_cache_map.svh became z486_cache_map_pkg.sv, NO_ALLOC_BOUND = 128 MiB L1 tag reach.",
+      "merge_notes": [
+        "memory.sv: fork package import + PC98 parameters; direct_req_ordered = (!PC98_MODE && vga) || drained (PC-98 always drains).",
+        "z486_cache_map_pkg.sv added to sources.txt, rtl/cpu/z486_pc98.qip and hand-listed test builds.",
+        "Verified: 12 production z486 suites and 12 fuzz seeds (1200 blocks) match Unicorn."
+      ]
+    }
   ]
 }

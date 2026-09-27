@@ -123,6 +123,12 @@ wire [31:0] GS_base = desc_cache[SEG_GS].base;
 // (the old seg_sel-keyed `seg_base` combinational mux was dead -- seg_base_r is
 //  driven from seg_base_for(seg_target); removed to recover the 6-way mux.)
 
+// One physical descriptor read port, shared by the LAR/LLIM/LBAS readback and
+// the relocation base/limit cones.
+seg_desc_t desc_read;
+assign desc_read = desc_for(seg_target);
+wire [20:0] desc_read_raw_limit = {desc_read.G, desc_read.limit};
+
 wire [31:0] eff_offset = (addr_size || is_dtable) ? offset : {16'h0, offset[15:0]};
 
 // Pending base: the value seg_base_r will hold next cycle. Mirrors exactly the seg_base_r next-state in the always_ff below (same...
@@ -139,7 +145,7 @@ always_comb begin
             seg_base_pending_c = SS_base;      // (does not change addr_size/is_dtable)
         case (seg_cmd)
             SEG_CMD_INIT_SEG: begin
-                seg_base_pending_c  = seg_base_for(seg_target, 1'b0);
+                seg_base_pending_c  = read_base_for(1'b0, desc_read);
                 addr_size_pending_c = (init_stack_op && pe) ? desc_cache[SEG_SS].D_B
                                                             : init_addr32;
                 is_dtable_pending_c = 1'b0;
@@ -147,7 +153,7 @@ always_comb begin
             SEG_CMD_UPDATE_SEG: begin
                 is_dtable_pending_c = (seg_target == SEG_IDT || seg_target == SEG_GDT);
                 if (clear_descsw) begin
-                    seg_base_pending_c  = seg_base_for(seg_target, 1'b0);
+                    seg_base_pending_c  = read_base_for(1'b0, desc_read);
                     addr_size_pending_c = pe ? desc_cache[SEG_SS].D_B : i_addr32_r;
                 end else if (seg_target == SEG_IO) begin
                     // I/O is not a segmented memory offset. Preserve reserved
@@ -156,7 +162,7 @@ always_comb begin
                     seg_base_pending_c  = 32'h0;
                     addr_size_pending_c = 1'b1;
                 end else begin
-                    seg_base_pending_c  = seg_base_for(seg_target, descsw_mode);
+                    seg_base_pending_c  = read_base_for(descsw_mode, desc_read);
                     addr_size_pending_c = ((i_stack_op_r || stack_push_mode) && pe && seg_target == SEG_SS)
                                           ? (descsw_mode ? desc_cache[SEG_CS].D_B : desc_cache[SEG_SS].D_B)
                                           : i_addr32_r;
@@ -328,21 +334,61 @@ function automatic [3:0] effective_target(input [3:0] target);
     effective_target = (target == SEG_NONE) ? desc_write_seg : target;
 endfunction
 
+// seg_target-keyed views of the read port, reproducing seg_base_for/seg_limit_for
+// with the SS-stack-switch and TI=1 table overrides applied to its fields.
+function automatic [31:0] read_base_for(input dsw, input seg_desc_t r);
+    if (seg_target == SEG_SS && dsw)
+        read_base_for = CS_base;               // cross-privilege stack switch
+    else if (seg_target == SEG_LDT)
+        read_base_for = 32'h0;                 // seg_base_for has no SEG_LDT arm
+    else if (seg_target == SEG_GDT && slctr[2])
+        read_base_for = desc_cache[7].base;    // TI=1 table access relocates from LDT
+    else
+        read_base_for = r.base;
+endfunction
+
+function automatic [31:0] read_limit_for(input dsw);
+    if (seg_target > SEG_GS && seg_target != SEG_TR)
+        read_limit_for = 32'hFFFF_FFFF;        // seg_limit_for default (table/IO/none)
+    else if (seg_target == SEG_SS && dsw)
+        read_limit_for = expand_raw_limit({desc_cache[SEG_CS].G, desc_cache[SEG_CS].limit});
+    else
+        read_limit_for = expand_raw_limit(desc_read_raw_limit);
+endfunction
+
 // LAR/LLIM/LBAS: z486 routes these to IND in same cycle
 seg_desc_t lar_desc;
 wire [7:0] lar_ar_byte = {lar_desc.P, lar_desc.DPL, lar_desc.S, lar_desc.seg_type};
-assign lar_desc = desc_for(seg_target);
+assign lar_desc = desc_read;
 assign lar_result = {16'h0, lar_ar_byte, 8'h0};
-always_comb begin
-    case (seg_target)
+// LLIM is the plain {G,limit} expansion: IDT/GDT carry G=0 and NONE/IO read zero.
+always_comb llim_result = expand_raw_limit(desc_read_raw_limit);
+assign lbas_result = desc_read.base;
+
+// synthesis translate_off
+// Equivalence fuse: the shared port's derived views must match the per-consumer
+// muxes they replace (LLIM and seg_base_for/seg_limit_for for both dsw values).
+function automatic [31:0] llim_ref(input [3:0] sel);
+    case (sel)
         SEG_ES, SEG_CS, SEG_SS, SEG_DS, SEG_FS, SEG_GS, SEG_TR, SEG_LDT:
-            llim_result = expand_raw_limit(raw_limit_for(seg_target, 1'b0));
-        SEG_IDT: llim_result = {12'h0, idt_limit};
-        SEG_GDT: llim_result = {12'h0, gdt_limit};
-        default: llim_result = 32'h0;
+            llim_ref = expand_raw_limit(raw_limit_for(sel, 1'b0));
+        SEG_IDT: llim_ref = {12'h0, idt_limit};
+        SEG_GDT: llim_ref = {12'h0, gdt_limit};
+        default: llim_ref = 32'h0;
     endcase
+endfunction
+
+always_comb begin
+    if (llim_result !== llim_ref(seg_target))
+        $fatal(1, "segmentation_unit: shared descriptor port LLIM mismatch (seg_target=%0d)", seg_target);
+    if (read_base_for(1'b0, desc_read) !== seg_base_for(seg_target, 1'b0) ||
+        read_base_for(1'b1, desc_read) !== seg_base_for(seg_target, 1'b1))
+        $fatal(1, "segmentation_unit: shared descriptor port base mismatch (seg_target=%0d)", seg_target);
+    if (read_limit_for(1'b0) !== seg_limit_for(seg_target, 1'b0) ||
+        read_limit_for(1'b1) !== seg_limit_for(seg_target, 1'b1))
+        $fatal(1, "segmentation_unit: shared descriptor port limit mismatch (seg_target=%0d)", seg_target);
 end
-assign lbas_result = lar_desc.base;
+// synthesis translate_on
 
 // Testbench can't force unpacked array struct elements, so use individual regs
 `ifdef VERILATOR
@@ -564,7 +610,7 @@ always_ff @(posedge clk) begin
             SEG_CMD_INIT_SEG: begin
                 seg_sel <= seg_target;
                 seg_is_io <= (seg_target == SEG_IO);
-                seg_limit_r <= seg_limit_for(seg_target, 1'b0);
+                seg_limit_r <= read_limit_for(1'b0);
                 i_addr32_r <= init_addr32;
                 i_stack_op_r <= init_stack_op;
                 stack_push_mode <= 1'b0;
@@ -576,9 +622,9 @@ always_ff @(posedge clk) begin
                 seg_is_io <= (seg_target == SEG_IO);
                 if (clear_descsw) begin
                     descsw_mode <= 1'b0;
-                    seg_limit_r <= seg_limit_for(seg_target, 1'b0);
+                    seg_limit_r <= read_limit_for(1'b0);
                 end else begin
-                    seg_limit_r <= seg_limit_for(seg_target, descsw_mode);
+                    seg_limit_r <= read_limit_for(descsw_mode);
                 end
             end
 

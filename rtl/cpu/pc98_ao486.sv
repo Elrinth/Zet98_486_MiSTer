@@ -191,10 +191,12 @@ module pc98_ao486 #(
 
 `ifdef ZET98_Z486
     wire [35:0] debug_cpu_state;
+    wire crash_tx;
     z486_pc98_adapter #(.EXT_RAM_MB(EXT_RAM_MB), .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ)) cpu (
         .cpu_speed_sel(cpu_speed_sel),
         .fabric_idle(!fabric_busy),
         .debug_state(debug_cpu_state),
+        .crash_tx(crash_tx),
 `else
     ao486 cpu (
 `endif
@@ -234,7 +236,7 @@ module pc98_ao486 #(
         debug_io_address,debug_io_data,debug_completed,
         4'b0,debug_cpu_state[3:0],
         cache_invalidate,cpu_reset,interrupt_do,interrupt_done,
-        bus_strobe,bus_ack,bus_io,bus_write};
+        bus_strobe,bus_ack,bus_io,crash_tx};   // bit 0: crash recorder UART (z486_crash_recorder)
 `else
     assign debug_snapshot = 0;
 `endif

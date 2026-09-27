@@ -1,6 +1,7 @@
 set_global_assignment -name SEARCH_PATH [file join $::quartus(qip_path) ../vendor/z486]
 set_global_assignment -name SEARCH_PATH [file join $::quartus(qip_path) ../vendor/z486/x87]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../vendor/z486/z486_pkg.sv]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../vendor/z486/z486_cache_map_pkg.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../vendor/z486/x87/x87_pkg.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../vendor/z486/x87/x87_ucode_pkg.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../vendor/z486/address_unit.sv]
@@ -45,3 +46,4 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) p
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) pc98_lowmem_cache.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) z486_pc98_adapter.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) pc98_debug_uart.sv]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) z486_crash_recorder.sv]

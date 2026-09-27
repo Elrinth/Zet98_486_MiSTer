@@ -9,7 +9,7 @@ trap 'rm -rf "$out"' EXIT
 verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
     -Wno-BLKANDNBLK -Wno-PINMISSING -Wno-UNOPTFLAT \
     -Irtl/vendor/z486 --Mdir "$out/obj" --top-module z486_prefetch_windows_tb \
-    rtl/vendor/z486/z486_pkg.sv rtl/vendor/z486/prefetch.sv \
+    rtl/vendor/z486/z486_pkg.sv rtl/vendor/z486/z486_cache_map_pkg.sv rtl/vendor/z486/prefetch.sv \
     tests/z486_prefetch_windows_tb.sv > "$out/compile.log" 2>&1 || {
         tail -n 100 "$out/compile.log"; exit 1;
     }

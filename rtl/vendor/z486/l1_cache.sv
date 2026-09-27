@@ -1,11 +1,17 @@
 // Physically indexed, physically tagged L1 cache for z486. CPU-side contract: * cpu_addr is a physical byte address. * A cache-hit...
 // Details: doc/z486/implementation_notes.md#src-24-z486-l1-cache-sv-1
 `include "z486_platform.svh"
-module l1_cache #(
+module l1_cache
+    import z486_cache_map_pkg::*;
+#(
     // Four ways, 16 bytes per line. SET_BITS=7 gives the default 8KB data
     // cache (128 sets x 4 ways x 16 B); use 8 for 16KB.
     parameter integer SET_BITS = 7,
-    parameter PROTECT_UMA_ROM = 0
+    parameter PROTECT_UMA_ROM = 0,
+    // VGA window for the VIPT reject; the default reproduces upstream's
+    // hardcoded A0000-BFFFF (vipt_resolve_phys_addr[31:17]==15'h5).
+    parameter [31:0] VGA_BASE = 32'h000a_0000,
+    parameter [31:0] VGA_TOP  = 32'h000b_ffff
 ) (
     input         clk,
     input         reset,
@@ -75,7 +81,7 @@ localparam integer BYTE_OFFSET_BITS = 2;
 localparam integer LINE_OFFSET_BITS = WORD_OFFSET_BITS + BYTE_OFFSET_BITS;
 localparam integer NUM_SETS = 1 << SET_BITS;
 localparam integer BRAM_ADDR_BITS = SET_BITS + WORD_OFFSET_BITS;
-localparam integer PHYS_ADDR_BITS = 27; // maximum supported RAM is 128MB
+localparam integer PHYS_ADDR_BITS = `Z486_L1_PHYS_ADDR_BITS; // 27: maximum supported RAM is 128MB
 localparam integer TAG_BITS = PHYS_ADDR_BITS - LINE_OFFSET_BITS - SET_BITS;
 localparam integer SET_LSB = LINE_OFFSET_BITS;
 localparam integer SET_MSB = SET_LSB + SET_BITS - 1;
@@ -235,6 +241,7 @@ begin
 end
 endfunction
 
+// Reference models for the translate_off equivalence guard at the end.
 function automatic [127:0] forward_storeq_line_slot(
     input [127:0] value,
     input         slot_live,
@@ -264,6 +271,18 @@ function automatic [31:0] forward_storeq_slot(
 begin
     forward_storeq_slot = (slot_live && slot_addr == addr_dw) ?
                           merge32(value, slot_data, slot_be) : value;
+end
+endfunction
+
+// Word-level store-queue forward; the DWORD compare is precomputed per slot.
+function automatic [31:0] forward_storeq_word(
+    input [31:0] value,
+    input        slot_hit,
+    input [31:0] slot_data,
+    input  [3:0] slot_be
+);
+begin
+    forward_storeq_word = slot_hit ? merge32(value, slot_data, slot_be) : value;
 end
 endfunction
 
@@ -353,8 +372,11 @@ wire vipt_lookup_store_match = (state == S_LOOKUP) && req_valid_r &&
 assign vipt_resolve_data = vipt_lookup_store_match
                          ? merge32(vipt_way_data, req_din_r, req_be_r)
                          : vipt_way_data;
+// VIPT VGA reject; the default window matches upstream's [31:17]!=15'h5 test.
+wire vipt_resolve_in_vga =
+    z486_page_in_window(vipt_resolve_phys_addr[31:12], VGA_BASE, VGA_TOP);
 assign vipt_resolve_hit = vipt_resolve_valid && cache_enable && !flush_block &&
-                          (vipt_resolve_phys_addr[31:17] != 15'h5) &&
+                          !vipt_resolve_in_vga &&
                           (|vipt_hit_vec);
 wire [BRAM_ADDR_BITS-1:0] req_bram_addr = {req_set_r, req_word_r};
 wire can_accept_cpu = (state == S_IDLE) && !reset && !flush_block && (!cpu_write || cpu_protect_write || storeq_can_accept);
@@ -362,10 +384,22 @@ wire ready_when_idle = !reset && storeq_can_accept;
 wire accept_cpu = cpu_valid && ready_r && can_accept_cpu;
 wire [29:0] req_addr_dw = req_addr_r[31:2];
 wire [29:0] fill_addr_dw = {req_addr_r[31:4], fill_count};
+// One DWORD compare per live store-queue slot, shared by every forward path.
+wire [STOREQ_DEPTH-1:0] storeq_hit_req = {
+    storeq_valid[2] && (storeq_addr[2] == req_addr_dw),
+    storeq_valid[1] && (storeq_addr[1] == req_addr_dw),
+    storeq_valid[0] && (storeq_addr[0] == req_addr_dw)
+};
+wire [STOREQ_DEPTH-1:0] storeq_hit_fill = {
+    storeq_valid[2] && (storeq_addr[2] == fill_addr_dw),
+    storeq_valid[1] && (storeq_addr[1] == fill_addr_dw),
+    storeq_valid[0] && (storeq_addr[0] == fill_addr_dw)
+};
 logic [31:0] lookup_forward_data;
 logic [31:0] fill_word_data;
 logic [31:0] bypass_forward_data;
-logic [127:0] wide_line_data;
+logic [31:0] wide_install_word;
+logic [31:0] wide_resp_word;
 wire lookup_read_hit_now = (state == S_LOOKUP) && req_valid_r &&
                            !req_write_r && !req_uncacheable_r && lookup_hit;
 
@@ -382,6 +416,8 @@ wire drain_block_state = (state == S_RESET_INIT) || (state == S_FILL) ||
                          (state == S_BYPASS_WAIT) ||
                          ((state == S_LOOKUP) && !req_protect_write_r && !req_write_r &&
                           (req_uncacheable_r ? storeq_empty : !lookup_hit));
+// S_FILL blocks store drains; the per-word fill merge is exact only while the
+// queue is frozen for the whole install (pinned by STOREQ-FROZEN below).
 wire drain_issue_now = !storeq_empty && !storeq_draining && !mem_valid_r &&
                        !mem_busy && !drain_block_state;
 
@@ -411,71 +447,123 @@ always_comb begin
     lookup_forward_data = lookup_way_data;
     fill_word_data = mem_dout;
     bypass_forward_data = mem_dout;
-    wide_line_data = mem_line_dout;
+    wide_install_word = wide_fill_line[{fill_count, 5'b0} +: 32];
+    wide_resp_word = mem_line_dout[{fill_target_word, 5'b0} +: 32];
 
     unique case (storeq_tail)
         2'd0: begin
             if (storeq_count > 0) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
             if (storeq_count > 1) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
             if (storeq_count > 2) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
         end
         2'd1: begin
             if (storeq_count > 0) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
             if (storeq_count > 1) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
             if (storeq_count > 2) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
         end
         default: begin
             if (storeq_count > 0) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[2], storeq_addr[2], storeq_data[2], storeq_be[2], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
             if (storeq_count > 1) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[0], storeq_addr[0], storeq_data[0], storeq_be[0], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
             if (storeq_count > 2) begin
-                lookup_forward_data = forward_storeq_slot(lookup_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                fill_word_data = forward_storeq_slot(fill_word_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], fill_addr_dw);
-                bypass_forward_data = forward_storeq_slot(bypass_forward_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_dw);
-                wide_line_data = forward_storeq_line_slot(wide_line_data, storeq_valid[1], storeq_addr[1], storeq_data[1], storeq_be[1], req_addr_r[31:4]);
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
         end
     endcase
 end
+
+// synthesis translate_off
+// Simulation-only guard: the shared forward must match the per-slot model.
+always_comb begin
+    automatic logic [31:0] ref_lookup = lookup_way_data;
+    automatic logic [31:0] ref_bypass = mem_dout;
+    automatic logic [31:0] ref_fillw = mem_dout;
+    automatic logic [127:0] ref_mem_line = mem_line_dout;
+    automatic logic [127:0] ref_fill_line = wide_fill_line;
+    automatic logic [STOREQ_IDX_BITS-1:0] idx = storeq_tail;
+    for (int k = 0; k < STOREQ_DEPTH; k++) begin
+        if (storeq_count > k) begin
+            ref_lookup = forward_storeq_slot(ref_lookup, storeq_valid[idx], storeq_addr[idx], storeq_data[idx], storeq_be[idx], req_addr_dw);
+            ref_bypass = forward_storeq_slot(ref_bypass, storeq_valid[idx], storeq_addr[idx], storeq_data[idx], storeq_be[idx], req_addr_dw);
+            ref_fillw = forward_storeq_slot(ref_fillw, storeq_valid[idx], storeq_addr[idx], storeq_data[idx], storeq_be[idx], fill_addr_dw);
+            ref_mem_line = forward_storeq_line_slot(ref_mem_line, storeq_valid[idx], storeq_addr[idx], storeq_data[idx], storeq_be[idx], req_addr_r[31:4]);
+            ref_fill_line = forward_storeq_line_slot(ref_fill_line, storeq_valid[idx], storeq_addr[idx], storeq_data[idx], storeq_be[idx], req_addr_r[31:4]);
+        end
+        idx = storeq_next_idx(idx);
+    end
+    if (lookup_forward_data !== ref_lookup) $fatal(1, "storeq lookup forward mismatch");
+    if (bypass_forward_data !== ref_bypass) $fatal(1, "storeq bypass forward mismatch");
+    if (fill_word_data !== ref_fillw) $fatal(1, "storeq fill word forward mismatch");
+    if (state == S_FILL && wide_resp_word !== ref_mem_line[{fill_target_word, 5'b0} +: 32]) $fatal(1, "storeq wide response mismatch");
+    if (wide_install_word !== ref_fill_line[{fill_count, 5'b0} +: 32]) $fatal(1, "storeq wide install mismatch");
+end
+// synthesis translate_on
+
+// synthesis translate_off
+// STOREQ-FROZEN: the per-word wide-line merge is exact only while the store
+// queue is frozen for the whole install, so no enqueue/dequeue during S_FILL.
+wire storeq_enqueue_now = (state == S_LOOKUP) && req_write_r &&
+                          !req_protect_write_r && !storeq_merge_lookup;
+// storeq_dequeuing (declared with the drain logic) is exactly the tail pop.
+always_ff @(posedge clk)
+    if (!reset && state == S_FILL && wide_fill_install) begin
+        if (storeq_enqueue_now)
+            $fatal(1, "storeq enqueue during wide fill install");
+        if (storeq_dequeuing)
+            $fatal(1, "storeq dequeue during wide fill install");
+    end
+// synthesis translate_on
 
 // Preread runs on every ready idle cycle, with no cpu_valid/TLB gating: when
 // no request is accepted the preread results are garbage that S_LOOKUP never
@@ -530,7 +618,7 @@ wire [BRAM_ADDR_BITS-1:0] data_write_addr = data_store_write ?
 wire [31:0] data_write_value = data_store_write ?
                                merge32(lookup_way_data, req_din_r, req_be_r) :
                                wide_fill_install ?
-                               wide_fill_line[{fill_count, 5'b0} +: 32] :
+                               wide_install_word :
                                fill_word_data;
 
 // Keep each tag array in one conventional synchronous-read/synchronous-write
@@ -767,9 +855,9 @@ always_ff @(posedge clk) begin
                     end
                     fill_count <= fill_count + 1'b1;
                 end else if (mem_line_resp_valid) begin
-                    wide_fill_line <= wide_line_data;
+                    wide_fill_line <= mem_line_dout;
                     wide_fill_install <= 1'b1;
-                    dout_r <= wide_line_data[{fill_target_word, 5'b0} +: 32];
+                    dout_r <= wide_resp_word;
                     resp_valid_r <= 1'b1;
                     fill_target_returned <= 1'b1;
                 end else if (mem_resp_valid) begin

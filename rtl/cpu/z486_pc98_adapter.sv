@@ -10,6 +10,7 @@ module z486_pc98_adapter #(
     input wire fabric_idle,
     input wire [1:0] cpu_speed_sel,
     output wire [35:0] debug_state,
+    output wire crash_tx,               // debug builds: crash recorder UART
     input wire cache_upper_ram,
     input wire interrupt_do,
     input wire [7:0] interrupt_vector,
@@ -44,6 +45,12 @@ module z486_pc98_adapter #(
     wire triple_fault;
     wire [31:0] eip;
     wire protected_mode;
+    wire [15:0] dbg_cs;
+    wire dbg_vm, dbg_gate_read;
+    wire [31:0] dbg_gate_addr, dbg_pf_addr, dbg_eflags;
+    wire [2:0] dbg_pf_code;
+    wire dbg_page_fault;
+    wire [31:0] dbg_walk_pde, dbg_walk_pte, dbg_cr3;
     wire real_mode = !protected_mode;
     reg second_inta;
     reg write_accepted;
@@ -112,10 +119,36 @@ module z486_pc98_adapter #(
         .din(read_data), .line_din(128'b0), .dout(write_data), .valid(valid),
         .ready(ready), .write(write), .io(io), .resp_valid(response), .line_resp_valid(1'b0),
         .intr(interrupt_do), .nmi(1'b0), .inta(inta), .snoop_addr(32'b0), .snoop_valid(1'b0),
-        .a20_enable(a20_enable), .cpu_speed_sel(cpu_speed_sel), .single_step(1'b0),
-        .dbg_CS(), .dbg_EIP(eip), .dbg_CS_base(), .dbg_pe(protected_mode), .dbg_vm(), .dbg_x87_state(),
+        .win0_unmapped(1'b0), .a20_enable(a20_enable), .cpu_speed_sel(cpu_speed_sel), .single_step(1'b0),
+        .dbg_CS(dbg_cs), .dbg_EIP(eip), .dbg_CS_base(), .dbg_pe(protected_mode), .dbg_vm(dbg_vm), .dbg_x87_state(),
+        .dbg_gate_read(dbg_gate_read), .dbg_gate_addr(dbg_gate_addr), .dbg_pf_code(dbg_pf_code),
+        .dbg_pf_addr(dbg_pf_addr), .dbg_eflags(dbg_eflags), .dbg_page_fault(dbg_page_fault),
+        .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3),
         .triple_fault_reset(triple_fault)
     );
+`ifdef ZET98_Z486_DEBUG
+`ifndef VERILATOR   // hardware debug builds only (tests/crash_recorder_tb.sv covers it)
+`ifdef ZET98_RECORDER_IO
+    localparam RECORDER_IO = 1;   // CD/IDE task-file trace instead of crash events
+`else
+    localparam RECORDER_IO = 0;
+`endif
+    z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO)) crash_recorder (
+        .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
+        .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
+        .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
+        .port_f0_data(io_write_data[7:0]), .page_fault(dbg_page_fault), .walk_pde(dbg_walk_pde),
+        .walk_pte(dbg_walk_pte), .cr3(dbg_cr3), .a20(a20_enable),
+        .mem_write(avm_write && !avm_waitrequest), .mem_addr({address, 2'b00}), .mem_data(write_data),
+        .mem_be(byte_enable), .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
+        .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),
+        .io_rdata(io_read_data), .tx(crash_tx));
+`else
+    assign crash_tx = 1'b1;
+`endif
+`else
+    assign crash_tx = 1'b1;
+`endif
     // synthesis translate_off
     always @(posedge clk) if (cpu_reset_n && valid) begin
         if (burst != 1 && burst != 4) $fatal(1,"unsupported z486 bus burst");

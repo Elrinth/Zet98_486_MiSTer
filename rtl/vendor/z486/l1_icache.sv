@@ -13,6 +13,9 @@ module l1_icache #(
     input  [31:0] cpu_addr,
     output [127:0] cpu_line,
     input         cpu_valid,
+    // NO_ALLOC line fill: the fetch is answered but no line is installed, so an
+    // address aliasing RAM under a 27-bit tag cannot occupy a line. 0 = cached.
+    input         cpu_no_alloc,
     output        cpu_ready,
     output        cpu_resp_valid,
 
@@ -44,7 +47,7 @@ localparam integer WORD_OFFSET_BITS = 2;
 localparam integer BYTE_OFFSET_BITS = 2;
 localparam integer LINE_OFFSET_BITS = WORD_OFFSET_BITS + BYTE_OFFSET_BITS;
 localparam integer NUM_SETS = 1 << SET_BITS;
-localparam integer PHYS_ADDR_BITS = 27; // maximum supported RAM is 128MB
+localparam integer PHYS_ADDR_BITS = `Z486_L1_PHYS_ADDR_BITS; // 27: maximum supported RAM is 128MB
 localparam integer TAG_BITS = PHYS_ADDR_BITS - LINE_OFFSET_BITS - SET_BITS;
 localparam integer SET_LSB = LINE_OFFSET_BITS;
 localparam integer SET_MSB = SET_LSB + SET_BITS - 1;
@@ -102,6 +105,7 @@ reg [2:0] rd_plru_r;
 
 reg        req_valid_r;
 reg [31:0] req_addr_r;
+reg        req_no_alloc_r;
 reg        req_uncacheable_r;
 reg [TAG_BITS-1:0] req_tag_r;
 reg [SET_BITS-1:0] req_set_r;
@@ -283,9 +287,12 @@ wire lookup_hit_usable = lookup_hit && !lookup_snoop_conflict && !flush_block;
 wire can_accept_cpu = (state == S_IDLE) && !reset && !flush_block;
 wire accept_cpu = cpu_valid && ready_r && can_accept_cpu;
 wire lookup_read_hit_now = (state == S_LOOKUP) && req_valid_r &&
-                           !req_uncacheable_r && lookup_hit_usable;
+                           !req_uncacheable_r && !req_no_alloc_r && lookup_hit_usable;
 logic [PATCHQ_DEPTH-1:0] patchq_snoop_match;
 logic patchq_snoop_hit;
+logic [PATCHQ_DEPTH-1:0] patchq_line_match;
+logic snoop_patch_line_match;
+logic live_patch_line_match;
 logic [31:0] fill_word_next;
 logic [127:0] fill_line_base;
 logic [127:0] fill_line_next;
@@ -298,21 +305,34 @@ always_comb begin
     patchq_snoop_hit = |patchq_snoop_match;
 end
 
+// Each patch's line (tag/set) compare is resolved once and shared by the
+// per-word and whole-line merges; the word offset is compared separately.
+always_comb begin
+    for (int p = 0; p < PATCHQ_DEPTH; p++)
+        patchq_line_match[p] = patchq_valid[p] &&
+            line_match_dw(patchq_addr[p], fill_tag, fill_set);
+    snoop_patch_line_match = snoop_valid_r && snoop_patch_r &&
+        line_match_dw(snoop_addr_dw_r, fill_tag, fill_set);
+    live_patch_line_match = patch_valid &&
+        line_match_dw(patch_addr[31:2], fill_tag, fill_set);
+end
+
 always_comb begin
     fill_word_next = mem_dout;
     for (int p = 0; p < PATCHQ_DEPTH; p++) begin
-        if (patchq_valid[p] && word_match_dw(patchq_addr[p], fill_tag, fill_set, fill_count))
+        if (patchq_line_match[p] &&
+            (patchq_addr[p][WORD_OFFSET_BITS-1:0] == fill_count))
             fill_word_next = merge32(fill_word_next, patchq_data[p], patchq_be[p]);
     end
-    if (snoop_valid_r && snoop_patch_r && word_match_dw(snoop_addr_dw_r, fill_tag, fill_set, fill_count))
+    if (snoop_patch_line_match && (snoop_word_r == fill_count))
         fill_word_next = merge32(fill_word_next, snoop_data_r, snoop_be_r);
-    if (patch_valid && word_match_dw(patch_addr[31:2], fill_tag, fill_set, fill_count))
+    if (live_patch_line_match && (patch_word == fill_count))
         fill_word_next = merge32(fill_word_next, patch_data, patch_be);
 
     fill_line_base = fill_line;
-    if (snoop_valid_r && snoop_patch_r && line_match_dw(snoop_addr_dw_r, fill_tag, fill_set))
+    if (snoop_patch_line_match)
         fill_line_base = patch_line_word_be(fill_line_base, snoop_word_r, snoop_data_r, snoop_be_r);
-    if (patch_valid && line_match_dw(patch_addr[31:2], fill_tag, fill_set))
+    if (live_patch_line_match)
         fill_line_base = patch_line_word_be(fill_line_base, patch_word, patch_data, patch_be);
     fill_line_next = patch_line_word(fill_line_base, fill_count, fill_word_next);
 
@@ -321,18 +341,56 @@ always_comb begin
     // applies one beat at a time.
     wide_line_next = mem_line_dout;
     for (int p = 0; p < PATCHQ_DEPTH; p++) begin
-        if (patchq_valid[p] && line_match_dw(patchq_addr[p], fill_tag, fill_set))
+        if (patchq_line_match[p])
             wide_line_next = patch_line_word_be(wide_line_next,
+                patchq_addr[p][WORD_OFFSET_BITS-1:0], patchq_data[p], patchq_be[p]);
+    end
+    if (snoop_patch_line_match)
+        wide_line_next = patch_line_word_be(wide_line_next, snoop_word_r,
+                                             snoop_data_r, snoop_be_r);
+    if (live_patch_line_match)
+        wide_line_next = patch_line_word_be(wide_line_next, patch_word,
+                                             patch_data, patch_be);
+end
+
+// synthesis translate_off
+// Simulation-only guard: the shared patch match must match the per-call model.
+always_comb begin
+    automatic logic [31:0] ref_word = mem_dout;
+    automatic logic [127:0] ref_base = fill_line;
+    automatic logic [127:0] ref_word_line;
+    automatic logic [127:0] ref_wide = mem_line_dout;
+    for (int p = 0; p < PATCHQ_DEPTH; p++) begin
+        if (patchq_valid[p] && word_match_dw(patchq_addr[p], fill_tag, fill_set, fill_count))
+            ref_word = merge32(ref_word, patchq_data[p], patchq_be[p]);
+    end
+    if (snoop_valid_r && snoop_patch_r && word_match_dw(snoop_addr_dw_r, fill_tag, fill_set, fill_count))
+        ref_word = merge32(ref_word, snoop_data_r, snoop_be_r);
+    if (patch_valid && word_match_dw(patch_addr[31:2], fill_tag, fill_set, fill_count))
+        ref_word = merge32(ref_word, patch_data, patch_be);
+
+    if (snoop_valid_r && snoop_patch_r && line_match_dw(snoop_addr_dw_r, fill_tag, fill_set))
+        ref_base = patch_line_word_be(ref_base, snoop_word_r, snoop_data_r, snoop_be_r);
+    if (patch_valid && line_match_dw(patch_addr[31:2], fill_tag, fill_set))
+        ref_base = patch_line_word_be(ref_base, patch_word, patch_data, patch_be);
+    ref_word_line = patch_line_word(ref_base, fill_count, ref_word);
+
+    for (int p = 0; p < PATCHQ_DEPTH; p++) begin
+        if (patchq_valid[p] && line_match_dw(patchq_addr[p], fill_tag, fill_set))
+            ref_wide = patch_line_word_be(ref_wide,
                 patchq_addr[p][WORD_OFFSET_BITS-1:0], patchq_data[p], patchq_be[p]);
     end
     if (snoop_valid_r && snoop_patch_r &&
         line_match_dw(snoop_addr_dw_r, fill_tag, fill_set))
-        wide_line_next = patch_line_word_be(wide_line_next, snoop_word_r,
-                                             snoop_data_r, snoop_be_r);
+        ref_wide = patch_line_word_be(ref_wide, snoop_word_r, snoop_data_r, snoop_be_r);
     if (patch_valid && line_match_dw(patch_addr[31:2], fill_tag, fill_set))
-        wide_line_next = patch_line_word_be(wide_line_next, patch_word,
-                                             patch_data, patch_be);
+        ref_wide = patch_line_word_be(ref_wide, patch_word, patch_data, patch_be);
+
+    if (fill_word_next !== ref_word) $fatal(1, "icache fill word forward mismatch");
+    if (fill_line_next !== ref_word_line) $fatal(1, "icache fill line forward mismatch");
+    if (wide_line_next !== ref_wide) $fatal(1, "icache wide line forward mismatch");
 end
+// synthesis translate_on
 
 assign cpu_line = lookup_read_hit_now ? lookup_way_line : line_r;
 assign cpu_resp_valid = lookup_read_hit_now || resp_valid_r;
@@ -371,7 +429,7 @@ wire registered_snoop_fill_conflict = snoop_valid_r &&
 // both operations need the same way RAM for different lines, the fill may
 // win: replacing the old tag also invalidates the snooped line.  Only a snoop
 // targeting the line being filled must leave that fill uncached.
-wire fill_install_allowed = !req_uncacheable_r && !flush_block && !live_snoop_fill_conflict &&
+wire fill_install_allowed = !req_uncacheable_r && !req_no_alloc_r && !flush_block && !live_snoop_fill_conflict &&
                             !registered_snoop_fill_conflict;
 wire data_fill_write = tag_fill_write && fill_install_allowed;
 
@@ -548,6 +606,7 @@ always_ff @(posedge clk) begin
                     req_valid_r <= 1'b1;
                     req_addr_r <= cpu_addr;
                     req_uncacheable_r <= cpu_uncacheable;
+                    req_no_alloc_r <= cpu_no_alloc;
                     req_tag_r <= cpu_tag;
                     req_set_r <= cpu_set;
                     state <= S_LOOKUP;
@@ -557,9 +616,10 @@ always_ff @(posedge clk) begin
             S_LOOKUP: begin
                 req_valid_r <= 1'b0;
 
-                // Prefetch consumes a whole aligned line even for uncached ROM.
-                // The fill path returns all four DWORDs but does not install tags.
-                if (!req_uncacheable_r && lookup_hit_usable) begin
+                // Prefetch consumes a whole aligned line even for uncached ROM and
+                // no-allocate windows: the fill path returns all four DWORDs but
+                // does not install tags (fill_install_allowed).
+                if (!req_uncacheable_r && !req_no_alloc_r && lookup_hit_usable) begin
                     plru_set[req_set_r] <= plru_update(rd_plru_r, lookup_way);
                     state <= S_IDLE;
                     ready_r <= 1'b1;
@@ -587,7 +647,9 @@ always_ff @(posedge clk) begin
                     fill_line <= wide_line_next;
                     line_r <= wide_line_next;
                     resp_valid_r <= 1'b1;
-                    plru_set[fill_set] <= plru_update(fill_plru_r, fill_way);
+                    // No line installed: leave the replacement bits alone.
+                    if (fill_install_allowed)
+                        plru_set[fill_set] <= plru_update(fill_plru_r, fill_way);
                     state <= S_IDLE;
                     ready_r <= 1'b1;
                 end else if (mem_resp_valid) begin
@@ -600,7 +662,8 @@ always_ff @(posedge clk) begin
                         // Do not restore any other way from the fill-start
                         // snapshot: a snoop during this fill must survive.
                         // Details: doc/z486/implementation_notes.md#src-24-z486-l1-icache-sv-491
-                        plru_set[fill_set] <= plru_update(fill_plru_r, fill_way);
+                        if (fill_install_allowed)
+                            plru_set[fill_set] <= plru_update(fill_plru_r, fill_way);
                         state <= S_IDLE;
                         ready_r <= 1'b1;
                     end

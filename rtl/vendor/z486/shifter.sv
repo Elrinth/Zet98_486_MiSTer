@@ -15,7 +15,8 @@ module shifter
     input  logic        capture_ce,         // q_mem -> q advance
     input  logic        capture_valid,      // Upcoming q word prereads its operand
     input  logic [31:0] capture_value,      // Forwarded upcoming shift operand
-    input  logic [5:0]  alu_source,
+    input  logic [31:0] src_operand,        // Pre-selected SHIFT1 source operand
+    input  logic [31:0] alu_operand,        // Pre-selected shift ALU operand
 
     input  logic        instr_start,        // Capture per-instruction shift state
     input  logic        instr_is_shxd_next, // D2 lookahead for SHLD/SHRD
@@ -27,17 +28,10 @@ module shifter
     input  logic [31:0] alu_dst,
     input  logic [31:0] alu_src,
     input  logic [31:0] gpr_src_op_size,
-    input  logic [31:0] gpr_dst_shift_size,
     input  logic [31:0] gpr_src_shift_size,
-    input  logic [31:0] immediate,
-    input  logic [31:0] ecx,
     input  logic [31:0] sigma,
-    input  logic [31:0] tmpb,
     input  logic [31:0] tmpc,
-    input  logic [31:0] tmpd,
     input  logic [31:0] tmpe,
-    input  logic [31:0] opr_r,
-    input  logic [31:0] countr,
 
     output logic [1:0]  data_size,
     output logic [31:0] result,
@@ -66,7 +60,6 @@ logic        set_zsp;
 logic [1:0]  shift1_size;
 logic [2:0]  operation;
 logic [31:0] source_value;
-logic [31:0] alu_value;
 logic [31:0] shift2_operand_r;
 
 // Capture the selector beside its operand and the ROM's q stage. Re-decoding
@@ -109,26 +102,9 @@ always_ff @(posedge clk) begin
         shift2_operand_r <= capture_value;
 end
 
+// SHIFT1 operand is pre-decoded in the data unit (except the q_mem preread).
 always_comb begin
-    if (use_captured_source) begin
-        source_value = shift2_operand_r;
-    end else begin
-        case (source_class)
-            4'd1:    source_value = sigma;
-            // The only DSTREG source sites are BITTST, whose operand width is
-            // the same width already selected for the shifter ALU operand.
-            4'd2:    source_value = gpr_dst_shift_size;
-            4'd4:    source_value = immediate;
-            4'd5:    source_value = tmpb;
-            4'd6:    source_value = tmpc;
-            4'd7:    source_value = tmpd;
-            4'd8:    source_value = tmpe;
-            4'd9:    source_value = opr_r;
-            4'd10:   source_value = countr;
-            4'd11:   source_value = 32'hffff_ffff;
-            default: source_value = 32'd0;
-        endcase
-    end
+    source_value = use_captured_source ? shift2_operand_r : src_operand;
 end
 
 // synthesis translate_off
@@ -150,32 +126,9 @@ always @(posedge clk)
         $fatal(1, "BITTST DSTREG source/ALU width mismatch");
 // synthesis translate_on
 
-always_comb begin
-    case (alu_source)
-        ALUSRC_CONST_0:      alu_value = 32'd0;
-        ALUSRC_TMPC:         alu_value = tmpc;
-        ALUSRC_TMPD:         alu_value = tmpd;
-        ALUSRC_TMPB:         alu_value = tmpb;
-        ALUSRC_DSTREG:       alu_value = gpr_dst_shift_size;
-        ALUSRC_SRCREG:       alu_value = gpr_src_shift_size;
-        ALUSRC_ECX:          alu_value = ecx;
-        ALUSRC_IMM:          alu_value = immediate;
-        ALUSRC_BITS_V:       alu_value = data_size == 2'd0 ? 32'd7 :
-                                         data_size == 2'd2 ? 32'd31 : 32'd15;
-        ALUSRC_CONST_1:      alu_value = 32'd1;
-        ALUSRC_CONST_3:      alu_value = 32'd3;
-        ALUSRC_CONST_7:      alu_value = 32'd7;
-        ALUSRC_CONST_1FF:    alu_value = 32'h0000_01ff;
-        ALUSRC_CONST_4000:   alu_value = 32'h0000_4000;
-        ALUSRC_CONST_F0000:  alu_value = 32'h000f_0000;
-        ALUSRC_MASK16:       alu_value = 32'h0000_ffff;
-        ALUSRC_CONST_FFFF0000: alu_value = 32'hffff_0000;
-        default:             alu_value = 32'd0;
-    endcase
-end
-
-wire [31:0] high_word = swap ? alu_value : source_value;
-wire [31:0] low_word  = swap ? source_value : alu_value;
+// The shift ALU operand is pre-selected in the data unit's ALU-source tree.
+wire [31:0] high_word = swap ? alu_operand : source_value;
+wire [31:0] low_word  = swap ? source_value : alu_operand;
 wire [63:0] shift_input = data_size == 2'd0 ? {high_word, low_word[7:0]} :
                           data_size == 2'd1 ? {high_word, low_word[15:0]} :
                                                 {high_word, low_word};
@@ -236,7 +189,7 @@ assign result = overflow ? (is_sar ? sar_overflow_result : 32'd0) : shifted[31:0
 // Every BITTST site uses a right-count setup with swap clear.  Its carry is
 // therefore the selected low-word bit; do not route the full 64-bit barrel
 // result back into the architectural flag write path.
-assign bit_test_cf = alu_value[count[4:0]];
+assign bit_test_cf = alu_operand[count[4:0]];
 // SHIFT2 writes the barrel result into SIGMA on the same edge that starts the
 // existing one-cycle deferred flag retirement.  Derive Z/S/P from that
 // registered result during the retirement cycle instead of placing the

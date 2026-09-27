@@ -33,7 +33,10 @@ module paging_walker
     output reg   [31:0] mem_addr,
     output reg   [31:0] mem_wdata,
     input        [31:0] mem_data,
-    input               mem_ready
+    input               mem_ready,
+    // PC98 debug: last directory and table entries read
+    output       [31:0] dbg_pde,
+    output       [31:0] dbg_pte
 );
 
 // Page walk state machine
@@ -306,5 +309,8 @@ always_comb begin
         default: ;
     endcase
 end
+
+assign dbg_pde = pde;
+assign dbg_pte = pte;
 
 endmodule

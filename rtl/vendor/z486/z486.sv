@@ -16,7 +16,7 @@
 
 `include "z486_platform.svh"
 module z486
-    import z486_pkg::*;
+    import z486_pkg::*, z486_cache_map_pkg::*;
 #(
     parameter PC98_MODE = 0,
     parameter PC98_EXT_RAM_MB = 0,
@@ -26,6 +26,37 @@ module z486
     parameter ENABLE_X87 = 0,
     parameter ENABLE_DEVICE_MMIO = 0,
     parameter [31:0] DEVICE_MMIO_MASK = 32'hff00_0000,
+
+    // Memory-map template (z486_cache_map_pkg); the defaults reproduce
+    // upstream's PC/AT map. See memory.sv for the per-window documentation.
+    parameter [31:0] A20_MASK_OFF = 32'hffef_ffff,
+    parameter [31:0] A20_MASK_ON  = 32'hffff_ffff,
+    // off: paging unit is the sole VGA source (this template window is a copy)
+    parameter        VGA_ENABLE = 0,
+    parameter        VGA_PRE_WRAP = 1,
+    parameter [1:0]  VGA_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] VGA_BASE = 32'h000a_0000,
+    parameter [31:0] VGA_TOP  = 32'h000b_ffff,
+    parameter        APERTURE_ENABLE = 0,
+    parameter [1:0]  APERTURE_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] APERTURE_BASE = 32'h000a_0000,
+    parameter [31:0] APERTURE_TOP  = 32'h000f_ffff,
+    parameter        ALIAS_ENABLE = 0,
+    parameter [1:0]  ALIAS_CLASS = Z486_CACHE_DIRECT,
+    parameter [31:0] ALIAS0_BASE = 32'h00f0_0000,
+    parameter [31:0] ALIAS0_TOP  = 32'h00ff_ffff,
+    parameter [31:0] ALIAS1_BASE = 32'hfff0_0000,
+    parameter [31:0] ALIAS1_TOP  = 32'hfff7_ffff,
+    parameter [31:0] ALIAS2_BASE = 32'hffff_8000,
+    parameter [31:0] ALIAS2_TOP  = 32'hffff_ffff,
+    parameter        WIN0_ENABLE = 0,
+    parameter [1:0]  WIN0_CLASS = Z486_CACHE_NO_ALLOC,
+    parameter [31:0] WIN0_BASE = 32'h0008_0000,
+    parameter [31:0] WIN0_TOP  = 32'h0009_ffff,
+    parameter        NO_ALLOC_ENABLE = 0,
+    parameter [1:0]  NO_ALLOC_CLASS = Z486_CACHE_NO_ALLOC,
+    parameter [31:0] NO_ALLOC_BOUND = 32'h0800_0000,   // L1 tag reach (128 MiB)
+
     parameter [6:0] CLOCK_RATE_MHZ = 7'd85
 )
 (
@@ -35,6 +66,8 @@ module z486
     input              cache_upper_ram,
     input              device_mmio_enable,
     input      [31:0]  device_mmio_base,
+    // Window-0 overlay verdict (PC-98 0x80000-0x9FFFF); tie 0 if unused.
+    input              win0_unmapped,
 
     // 32-bit bus interface (ready/valid handshake)
     output     [31:2]  addr,        // Physical address [31:2]
@@ -74,6 +107,17 @@ module z486
     output             dbg_pe,
     output             dbg_vm,
     output     [31:0]  dbg_x87_state,
+    // PC98 crash recorder: IDT/IVT gate reads (one pulse per accepted read)
+    // with the linear address, and the latched page-fault code and CR2.
+    output             dbg_gate_read,
+    output     [31:0]  dbg_gate_addr,
+    output      [2:0]  dbg_pf_code,
+    output     [31:0]  dbg_pf_addr,
+    output     [31:0]  dbg_eflags,
+    output             dbg_page_fault,
+    output     [31:0]  dbg_walk_pde,
+    output     [31:0]  dbg_walk_pte,
+    output     [31:0]  dbg_cr3,
 
     // A fault while delivering #DF shuts down the 386 and requests reset.
     output reg          triple_fault_reset
@@ -143,6 +187,7 @@ wire [31:0] muldiv_result;
 wire [31:0] source_value_live;
 wire [31:0] memory_write_source_value;
 wire [31:0] alu_src_data;
+wire [31:0] alu_src_data_generic;
 wire [31:0] protun_write_value;
 wire [15:0] cs_source_value;
 wire        uc_exec;
@@ -163,6 +208,7 @@ wire        cr3_write;
 wire [1:0]  pg_cpl;
 wire        seg_gp_fault;
 wire [31:0] issue_ind_linear;
+wire [31:0] issue_ind_linear_next;
 wire [1:0]  issue_ind_linear_low;
 wire        dly_gpr_we;
 wire        eff_mask_pending;
@@ -221,6 +267,10 @@ assign dbg_vm  = vm;
 reg pe_entry_cpl_zero;
 wire [1:0] cpl = vm ? 2'd3 : (!pe || pe_entry_cpl_zero) ? 2'd0 : CS[1:0];
 
+reg        paging_grace_r = 1'b0;   // PC98: see pf_paging_grace in paging_unit
+reg        cr0_pg_prev = 1'b0;
+wire       paging_grace = paging_grace_r || (CR0[31] && !cr0_pg_prev);
+reg        pf_store_held = 1'b0;    // a store's #PF is latched until delivered (PC98)
 reg [2:0]  latched_pf_code;         // Latched page fault error code (for LPCR microcode access)
 reg [31:0] latched_pf_addr;         // Latched faulting linear address (for LPCR microcode access)
 
@@ -806,7 +856,33 @@ memory #(
     .ICACHE_SET_BITS(ICACHE_SET_BITS),
     .ENABLE_X87(ENABLE_X87),
     .ENABLE_DEVICE_MMIO(ENABLE_DEVICE_MMIO),
-    .DEVICE_MMIO_MASK(DEVICE_MMIO_MASK)
+    .DEVICE_MMIO_MASK(DEVICE_MMIO_MASK),
+    .A20_MASK_OFF(A20_MASK_OFF),
+    .A20_MASK_ON(A20_MASK_ON),
+    .VGA_ENABLE(VGA_ENABLE),
+    .VGA_PRE_WRAP(VGA_PRE_WRAP),
+    .VGA_CLASS(VGA_CLASS),
+    .VGA_BASE(VGA_BASE),
+    .VGA_TOP(VGA_TOP),
+    .APERTURE_ENABLE(APERTURE_ENABLE),
+    .APERTURE_CLASS(APERTURE_CLASS),
+    .APERTURE_BASE(APERTURE_BASE),
+    .APERTURE_TOP(APERTURE_TOP),
+    .ALIAS_ENABLE(ALIAS_ENABLE),
+    .ALIAS_CLASS(ALIAS_CLASS),
+    .ALIAS0_BASE(ALIAS0_BASE),
+    .ALIAS0_TOP(ALIAS0_TOP),
+    .ALIAS1_BASE(ALIAS1_BASE),
+    .ALIAS1_TOP(ALIAS1_TOP),
+    .ALIAS2_BASE(ALIAS2_BASE),
+    .ALIAS2_TOP(ALIAS2_TOP),
+    .WIN0_ENABLE(WIN0_ENABLE),
+    .WIN0_CLASS(WIN0_CLASS),
+    .WIN0_BASE(WIN0_BASE),
+    .WIN0_TOP(WIN0_TOP),
+    .NO_ALLOC_ENABLE(NO_ALLOC_ENABLE),
+    .NO_ALLOC_CLASS(NO_ALLOC_CLASS),
+    .NO_ALLOC_BOUND(NO_ALLOC_BOUND)
 ) memory_inst (
     .cache_invalidate(cache_invalidate),
     .cache_upper_ram(cache_upper_ram),
@@ -815,6 +891,7 @@ memory #(
     .a20_enable(a20_enable),
     .device_mmio_enable(device_mmio_enable),
     .device_mmio_base(device_mmio_base),
+    .win0_unmapped(win0_unmapped),
 
     .dcache_req_valid(dcache_req_valid),
     .dcache_req_phys_addr_raw(dcache_req_phys_addr_raw),
@@ -1292,6 +1369,12 @@ assign vipt_load_retire = vipt_load_wb_valid_r && !vipt_load_overlap_r &&
                           !vipt_load_ex_r.valid &&
                           !vipt_load_replay_r.valid &&
                           !vipt_load_slow_busy;
+
+// The VIPT slow-fallback token installs vipt_load_ex_r.linear_addr on the next
+// edge; the paging live port presents it a cycle early (q_flush/interrupt win).
+wire vipt_slow_owns_next = vipt_load_ex_r.valid && vipt_load_ex_probed_r &&
+                           !vipt_load_ex_hit && !any_fault &&
+                           !q_flush && !interrupt_entry;
 
 always_ff @(posedge clk) begin
     if (!reset_n) begin
@@ -1954,6 +2037,18 @@ always_comb begin
     end
 end
 
+// synthesis translate_off
+// Runtime guard: an SDES/SDEL ucode word selecting outside alu_src_data's
+// narrowed mux subset would silently read 0.
+always_comb begin
+    if (uc_buscode == BUSOP_SDES || uc_buscode == BUSOP_SDEL) begin
+        if (alu_src_data !== alu_src_data_generic)
+            $fatal(1, "SDES/SDEL ALU source %0d outside the narrowed mux",
+                   uc_alu_src);
+    end
+end
+// synthesis translate_on
+
 always_comb begin
     if (i_issue) begin
         seg_cmd = SEG_CMD_INIT_SEG;
@@ -2054,9 +2149,13 @@ assign mem_req_current = mem_op_eligible && uc_busreq;  // drives paging unit
 wire mem_req_upcoming = uc_next[39] && !halted && (uc_active || d2_valid);
 
 // Implicit supervisor access: descriptor table and TSS reads, cross-privilege
-// stack writes use CPL=0 for paging regardless of current CPL.
+// stack writes use CPL=0 for paging regardless of current CPL. While VM is
+// still set during an exception/interrupt from V86 mode, the frame pushes are
+// supervisor once the ring-0 CS descriptor is loaded. PC98: this used to test
+// the CS value's low bits, which V86 code segments (e.g. 1000h) also match,
+// so V86 accesses lost user-mode page protection and the #PF U bit.
 wire implicit_supervisor = mem_is_dtable || (mem_seg_sel == SEG_TR) ||
-                           descsw_mode || (vm && CS[1:0] == 2'b00);
+                           descsw_mode || (vm && desc_cache[SEG_CS].DPL == 2'b00);
 assign pg_cpl = implicit_supervisor ? 2'b00 : cpl;
 
 // Registered fault redirect state.
@@ -2080,6 +2179,14 @@ wire [1:0]  paging_mem_eff_size = vipt_slow_submit
                                 : x87_direct_mem_req ? 2'd2 : mem_eff_size;
 wire [31:0] paging_linear_addr = vipt_slow_addr_owned
                                ? vipt_load_slow_r.linear_addr : ind_linear;
+// Predicts paging_linear_addr one edge early so the TLB's clocked live port can
+// answer the demand lookup in the cycle its address appears; paging_tlb refuses
+// the preread and falls back to the registered route when the prediction misses.
+wire [31:0] paging_live_preread_addr = vipt_slow_addr_owned
+                                     ? paging_linear_addr
+                                     : vipt_slow_owns_next
+                                     ? vipt_load_ex_r.linear_addr
+                                     : issue_ind_linear_next;
 wire [3:0]  mem_be_now = iack_busop ? 4'b1111 :
                           calc_be(paging_mem_eff_size,
                                   paging_linear_addr[1:0]);
@@ -2172,7 +2279,14 @@ assign d2_vipt_rmw = d2_vipt_rmw_candidate &&
 // The PC-98 MMIO/cache aperture decode lengthens the early live-TLB-to-accept
 // path. Use the existing registered demand stage; fast load/store recipes
 // and instruction prefetch remain enabled.
-paging_unit #(.EARLY_DATA_REQUESTS(!PC98_MODE)) paging_inst (
+paging_unit #(
+    .EARLY_DATA_REQUESTS(!PC98_MODE),
+    .VGA_BASE       (VGA_BASE),
+    .VGA_TOP        (VGA_TOP)
+) paging_inst (
+    .pf_paging_grace    (paging_grace),
+    .dbg_walk_pde       (dbg_walk_pde),
+    .dbg_walk_pte       (dbg_walk_pte),
     .clk                (clk),
     .reset_n            (reset_n),
     .cr0                (CR0),
@@ -2200,6 +2314,7 @@ paging_unit #(.EARLY_DATA_REQUESTS(!PC98_MODE)) paging_inst (
     .mem_opt_wait       (mem_opt_wait),
     .mem_write_wait     (mem_write_wait),
     .linear_addr        (paging_linear_addr),
+    .live_preread_addr  (paging_live_preread_addr),
     .live_valid         (paging_live_valid),
     .mem_op_size        (paging_mem_eff_size),
     .mem_write          (mem_write_now),
@@ -2737,6 +2852,7 @@ always_ff @(posedge clk) begin
     if (!reset_n) begin
         uc_active <= 1'b0;
         halted <= 1'b0;
+        pf_store_held <= 1'b0;
         instr_eip_written <= 1'b0;
         dbg_first_done <= 1'b0;
         debug_ip <= 32'h0;
@@ -2809,9 +2925,17 @@ always_ff @(posedge clk) begin
         // Fetch faults may arrive while no uop is active.
         if (page_fault) begin
             uc_active <= 1'b1;
-            latched_pf_code <= pg_fault_code;
-            latched_pf_addr <= pg_cr2_out;
+            // A posted store is older than anything that ran after it: its
+            // fault may replace a younger one, but a younger read that faults
+            // after the store must not overwrite the store's code and CR2
+            // (PC98: V86 monitors such as EMM386 decode the error code).
+            if (!pf_store_held || pg_fault_code[1]) begin
+                latched_pf_code <= pg_fault_code;
+                latched_pf_addr <= pg_cr2_out;
+            end
+            if (pg_fault_code[1]) pf_store_held <= 1'b1;
         end
+        if (fault_delivery_done) pf_store_held <= 1'b0;
 
         // Interrupt recognition is last so it overrides speculative successor state.
         if (i_rni_delay && !stall && !page_fault) begin
@@ -3130,7 +3254,7 @@ always_ff @(posedge clk) begin
         wr_restart_eip <= TMPeIP;
     if (page_fault && pg_fault_code[1])
         TMPeIP <= wr_restart_eip;
-    else if (data_page_fault && vipt_load_slow_wait_r)
+    else if (data_page_fault && vipt_load_slow_wait_r && !pf_store_held)
         TMPeIP <= vipt_load_slow_r.restart_eip;
     else if (ifetch_page_fault) begin
         // A cross-page instruction can fault before i_issue captures its restart
@@ -3195,6 +3319,7 @@ address_unit #(.REGISTERED_EA(PC98_MODE)) address_unit_inst (
     .ea(ea_reg),
     .issue_ea(ea_early),
     .issue_linear(issue_ind_linear),
+    .ind_linear_next(issue_ind_linear_next),
     .issue_linear_low(issue_ind_linear_low)
 );
 
@@ -3339,6 +3464,7 @@ data_unit data_unit_inst (
     .source_value_live(source_value_live),
     .memory_write_source_value(memory_write_source_value),
     .alu_source_value_live(alu_src_data),
+    .alu_source_value_generic(alu_src_data_generic),
     .dest_value(dest_value),
     .alu_src(alu_src),
     .eax(EAX),
@@ -3455,5 +3581,23 @@ cpu_throttle #(.CLOCK_RATE_MHZ(CLOCK_RATE_MHZ), .PC98_MODE(PC98_MODE)) throttle 
     .full_speed(throttle_full)
 );
 
+
+// PC98: paging grace (see paging_unit). Set when a CR0 write turns PG on,
+// cleared by the next control-transfer queue flush or when PG is turned off.
+always_ff @(posedge clk) begin
+    cr0_pg_prev <= CR0[31];
+    if (!reset_n || !CR0[31]) paging_grace_r <= 1'b0;
+    else if (!cr0_pg_prev) paging_grace_r <= 1'b1;
+    else if (q_flush && !pe_mode_toggle_now) paging_grace_r <= 1'b0;
+end
+
+// PC98 crash recorder taps (see the dbg_gate_read port).
+assign dbg_gate_read = mem_req_to_paging && mem_accepted && (mem_seg_sel == SEG_IDT);
+assign dbg_gate_addr = paging_linear_addr;
+assign dbg_pf_code   = latched_pf_code;
+assign dbg_pf_addr   = latched_pf_addr;
+assign dbg_eflags    = EFLAGS;
+assign dbg_page_fault = page_fault;
+assign dbg_cr3       = CR3;
 
 endmodule

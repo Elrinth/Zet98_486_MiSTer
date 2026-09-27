@@ -21,7 +21,7 @@ module z486_pc98_cache_tb;
     wire ready = remaining==0 && gap==0;
 
     memory #(.PC98_MODE(1),.PC98_EXT_RAM_MB(64)) dut (
-        .clk(clk), .reset_n(reset_n), .cache_invalidate(cache_invalidate), .cache_upper_ram(cache_upper_ram), .a20_enable(1'b1),
+        .clk(clk), .reset_n(reset_n), .cache_invalidate(cache_invalidate), .cache_upper_ram(cache_upper_ram), .win0_unmapped(1'b0), .a20_enable(1'b1),
         .device_mmio_enable(1'b0), .device_mmio_base(32'b0),
         .dcache_req_valid(dreq), .dcache_req_phys_addr_raw(daddr),
         .dcache_req_preread_offset(daddr[11:0]), .dcache_req_preread_priority(dreq),

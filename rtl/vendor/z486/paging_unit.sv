@@ -3,9 +3,12 @@
 
 `include "z486_platform.svh"
 module paging_unit
-    import z486_pkg::*;
+    import z486_pkg::*, z486_cache_map_pkg::*;
 #(
-    parameter EARLY_DATA_REQUESTS = 1
+    parameter EARLY_DATA_REQUESTS = 1,
+    // VGA/device window for the demand-path classification (default: A0000-BFFFF).
+    parameter [31:0] VGA_BASE = 32'h000a_0000,
+    parameter [31:0] VGA_TOP  = 32'h000b_ffff
 )
 (
     input               clk,
@@ -13,6 +16,7 @@ module paging_unit
 
     // Control registers
     input        [31:0] cr0,
+    input               pf_paging_grace,   // PC98: fetches stay untranslated right after PG is set
     input        [31:0] cr3,
     input               cr3_write,         // TLB flush on CR3 write
 
@@ -36,6 +40,8 @@ module paging_unit
     output reg          mem_servicing,     // High while accepted request is in flight
     output              mem_complete_now,  // Completion shortcut (disabled: use registered mem_servicing clear)
     output              mem_read_complete, // Demand operand read, excluding walker traffic
+    output       [31:0] dbg_walk_pde,      // PC98 debug: walker's last PDE/PTE
+    output       [31:0] dbg_walk_pte,
     output reg          mem_dly_grace,     // Pulse: dcache lookup cycle of an optimistic demand read;
                                            // a pure-DLY uop may execute this cycle (data lands end of cycle)
     output              mem_write_dly_grace, // PG_MEM_TLB cycle of a write that posts THIS cycle (no fault,
@@ -51,6 +57,9 @@ module paging_unit
     input        [31:0] linear_addr,       // Registered linear (reloc(IND)) for BOTH the demand path
                                            // (-> req_linear / tlb_lookup_addr) and the live TLB; the
                                            // seg-adder stays off the live cone since it is registered
+    // The value linear_addr takes on the next edge; the TLB's live port is read
+    // with it one cycle early and refuses the preread if it did not predict.
+    input        [31:0] live_preread_addr,
     input               live_valid,        // linear_addr is the true linear (trust live write-post)
     input        [1:0]  mem_op_size,       // 0=byte, 1=word, 2=dword
     input               mem_write,         // 1=write, 0=read
@@ -136,6 +145,11 @@ reg                 rd_ind_active;     // BUSOP_RD_IND active (internal; demoted
 
 // Control register bits
 wire pg_enable = cr0[31];   // PG - Paging enable
+// Instruction fetches right after a MOV CR0 that sets PG come from the 486's
+// prefetch queue and are not translated; the required branch that follows
+// ends this (pf_paging_grace). EMM386 relies on it: the page holding its
+// switch code is not identity-mapped.
+wire pf_pg_enable = pg_enable && !pf_paging_grace;
 wire wp_enable = cr0[16];   // WP - Write protect
 
 // Compile-time-off sim trace flags to keep hot scheduler paths free of
@@ -233,10 +247,15 @@ end
 // Details: doc/z486/implementation_notes.md#src-24-z486-paging-unit-sv-189
 wire idle_pf_req = s_idle && pf_pending && !fast_path_pending && !pf_fast_pending;
 
-paging_tlb tlb_inst (
+paging_tlb #(
+    .VGA_BASE       (VGA_BASE),
+    .VGA_TOP        (VGA_TOP)
+) tlb_inst (
     .clk            (clk),
     .reset_n        (reset_n),
     .linear_addr    (tlb_lookup_addr),
+    // Clocked array read one cycle early: the next value of the consumed address.
+    .lookup_addr_next(tlb_lookup_addr_next),
     .hit            (tlb_hit),
     .physical_addr  (tlb_physical_addr),
     .writable       (tlb_writable),
@@ -244,6 +263,7 @@ paging_tlb tlb_inst (
     .dirty          (tlb_dirty),
     .is_vga_mem     (tlb_is_vga_mem),
     .linear_addr_live(linear_addr),       // same registered linear -> seg-adder off the live-TLB cone
+    .live_preread_addr(live_preread_addr),
     .live_hit       (live_tlb_hit),
     .live_physical_addr(live_tlb_physical),
     .live_writable  (live_tlb_writable),
@@ -342,7 +362,9 @@ paging_walker walker_inst (
     .mem_addr       (walker_mem_addr),
     .mem_wdata      (walker_mem_wdata),
     .mem_data       (dcache_rdata),
-    .mem_ready      (walker_feed_ready)
+    .mem_ready      (walker_feed_ready),
+    .dbg_pde        (dbg_walk_pde),
+    .dbg_pte        (dbg_walk_pte)
 );
 
 // Permission Checking
@@ -456,10 +478,10 @@ wire dcache_posted_write_done = (dcache_req_valid_r || req_mem_dcache_candidate)
                                 posted_write_isw && dcache_req_accepted && dcache_req_complete;
 wire cross2_tlb_dirty_ok = !req_is_write || tlb_dirty;
 wire cross2_can_translate = !pg_enable || (tlb_hit && slow_tlb_access_ok && cross2_tlb_dirty_ok);
-wire pf_tlb_match = !pg_enable || (tlb_lookup_addr_r[31:12] == pf_linear_addr[31:12]);
+wire pf_tlb_match = !pf_pg_enable || (tlb_lookup_addr_r[31:12] == pf_linear_addr[31:12]);
 wire fast_pf_candidate = idle_pf_req && cache_lookup_granted &&
-                         (!pg_enable || (pf_tlb_match && tlb_hit && pf_tlb_user_ok));
-wire [31:0] fast_pf_phys = pg_enable ? {tlb_physical_addr[31:12], pf_linear_addr[11:0]} : pf_linear_addr;
+                         (!pf_pg_enable || (pf_tlb_match && tlb_hit && pf_tlb_user_ok));
+wire [31:0] fast_pf_phys = pf_pg_enable ? {tlb_physical_addr[31:12], pf_linear_addr[11:0]} : pf_linear_addr;
 
 assign mem_accepted = mem_accepted_r || idle_mem_ready;
 wire        req_mem_present    = (state == PG_MEM_TLB);
@@ -485,9 +507,9 @@ wire        early_idx_drive    = early_rd_idx_drive || early_wr_idx_drive;
 wire [31:0] early_phys         = pg_enable ? {live_tlb_physical[31:12], linear_addr[11:0]}
                                           : linear_addr;
 wire        early_is_vga_mem   = pg_enable ? live_tlb_is_vga_mem
-                                           : (linear_addr[31:17] == 15'h5);
+                                           : z486_addr_in_window(linear_addr, VGA_BASE, VGA_TOP);
 wire        req_is_vga_mem     = pg_enable ? tlb_is_vga_mem
-                                           : (req_linear[31:17] == 15'h5);
+                                           : z486_addr_in_window(req_linear, VGA_BASE, VGA_TOP);
 wire        early_rd_accept    = early_rd_present && dcache_req_accepted;
 wire        early_wr_accept    = early_wr_present && dcache_req_accepted;
 wire        early_present      = early_rd_present || early_wr_present;
@@ -543,13 +565,13 @@ assign dcache_req_is_inta = (early_present || req_mem_present) ? 1'b0 : dcache_r
 assign dcache_req_is_x87 = (early_present || req_mem_present) ? 1'b0 : dcache_req_is_x87_r;
 assign dcache_req_is_vga_mem = early_present ? early_is_vga_mem :
                                req_mem_present ? req_is_vga_mem :
-                               (dcache_req_phys_addr_r[31:17] == 15'h5);
+                               z486_addr_in_window(dcache_req_phys_addr_r, VGA_BASE, VGA_TOP);
 assign icache_req_valid = icache_req_valid_r || fast_pf_candidate;
 assign icache_req_phys_addr = icache_req_valid_r ? icache_req_phys_addr_r : fast_pf_phys;
 
 // Keep the registered TLB lookup address on a dedicated write-enable path.
 wire idle_mem_precheck_capture = idle_mem_precheck && !mem_is_io;
-wire idle_pf_lookup_capture = pg_enable && idle_pf_req && !pf_tlb_match;
+wire idle_pf_lookup_capture = pf_pg_enable && idle_pf_req && !pf_tlb_match;
 wire walk_cross_lookup_load = (state == PG_WALKING) &&
                               walk_done && !walk_fault &&
                               req_check_only && req_crossing;
@@ -834,11 +856,11 @@ always_ff @(posedge clk or negedge reset_n) begin
                     if (fast_pf_candidate) begin
                         // Completion is tracked by pf_fast_pending, allowing
                         // demand translation to proceed in parallel.
-                    end else if (pg_enable && pf_tlb_match && tlb_hit) begin
+                    end else if (pf_pg_enable && pf_tlb_match && tlb_hit) begin
                         // Permission fail: silently fault, ack prefetch.
                         ack_prefetch_fault(pf_linear_addr,
                                            {(cpl == 2'd3), 1'b0, 1'b1});
-                    end else if (pf_tlb_match) begin
+                    end else if (pf_tlb_match && !pf_paging_grace) begin
                         // TLB miss: start page walk for prefetch
                         // For prefetch walks, use supervisor read permissions
                         req_is_write <= 1'b0;

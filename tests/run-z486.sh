@@ -45,7 +45,7 @@ for test in cache extmem; do
 done
 verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
     -Wno-PINMISSING -Wno-UNOPTFLAT -Irtl/vendor/z486 --Mdir "$out/cache" \
-    --top-module z486_pc98_cache_tb rtl/vendor/z486/memory.sv \
+    --top-module z486_pc98_cache_tb rtl/vendor/z486/z486_cache_map_pkg.sv rtl/vendor/z486/memory.sv \
     rtl/vendor/z486/l1_cache.sv rtl/vendor/z486/l1_icache.sv \
     tests/z486_pc98_cache_tb.sv > "$out/cache-compile.log" 2>&1 || {
         tail -n 100 "$out/cache-compile.log"; exit 1;

@@ -264,6 +264,55 @@ module z486_xms_resident_tb;
         memory[20'hffff3]=0; memory[20'hffff4]=DOS_PROBE ? 8'h10 : 0;
         repeat(5) @(negedge clk); reset=0;
     end
+`ifdef V86_IRQ_TRACE
+    reg irq_do_d=0; integer irq_trace_n=0;
+    always @(posedge clk) begin
+        irq_do_d<=interrupt_do;
+        if((interrupt_do!=irq_do_d || interrupt_done) && irq_trace_n<40) begin
+            irq_trace_n<=irq_trace_n+1;
+            $display("IRQTRACE t=%0t do=%b done=%b mask=%h acc=%0d eoi=%0d IF=%b VM=%b EIP=%h",$time,interrupt_do,interrupt_done,
+                     irq_mask,irq_accepted,irq_eoi,dut.cpu.core.EFLAGS[9],dut.cpu.core.EFLAGS[17],dut.cpu.eip);
+        end
+    end
+    integer uc_trace_left=0;
+    reg good_traced=0;
+    reg [11:0] last_uaddr=0;
+    always @(posedge clk) begin
+        if((interrupt_done && irq_accepted==0) || (dut.cpu.core.uaddr==12'h8b4 && dut.cpu.core.vm && !good_traced)) begin
+            uc_trace_left<=(interrupt_done ? 700 : 700);
+            if(!interrupt_done) good_traced<=1;
+            $display("UCTRACE ---- start %s mem[10828]=%h %h %h %h %h %h %h %h mem[10850]=%h %h %h %h %h %h %h %h", interrupt_done ? "IRQ" : "GP-FROM-V86",
+                memory[20'h10828],memory[20'h10829],memory[20'h1082a],memory[20'h1082b],memory[20'h1082c],memory[20'h1082d],memory[20'h1082e],memory[20'h1082f],
+                memory[20'h10850],memory[20'h10851],memory[20'h10852],memory[20'h10853],memory[20'h10854],memory[20'h10855],memory[20'h10856],memory[20'h10857]);
+        end
+        else if(uc_trace_left>0) begin
+            uc_trace_left<=uc_trace_left-1;
+            if(dut.cpu.core.protection_unit_inst.result_now || dut.cpu.core.protection_unit_inst.jump_valid)
+                $display("PROTTRACE t=%0t uaddr=%h jv=%b jaddr=%h redir=%b sv=%b cpl=%d ecpl=%d vm=%b pe=%b rpl=%d dpl=%d testaddr=%h gp=%b",
+                    $time,dut.cpu.core.uaddr,dut.cpu.core.protection_unit_inst.jump_valid,dut.cpu.core.protection_unit_inst.jump_addr,
+                    dut.cpu.core.protection_unit_inst.redirect_taken,dut.cpu.core.protection_unit_inst.state_vector_comb,
+                    dut.cpu.core.protection_unit_inst.cpl,dut.cpu.core.protection_unit_inst.effective_cpl,dut.cpu.core.vm,
+                    dut.cpu.core.protection_unit_inst.pe_mode,dut.cpu.core.protection_unit_inst.selector_rpl,
+                    dut.cpu.core.protection_unit_inst.descriptor_dpl_live,dut.cpu.core.protection_unit_inst.pla_test_addr,dut.cpu.core.gp_fault_trigger);
+            if(dut.cpu.core.uaddr!=last_uaddr) begin
+                last_uaddr<=dut.cpu.core.uaddr;
+                if(dut.cpu.core.uaddr>=12'h8b4 && dut.cpu.core.uaddr<=12'h8b9) $display("DESCTRACE uaddr=%h OPR_R=%h desc_hi=%h",dut.cpu.core.uaddr,dut.cpu.core.OPR_R,dut.cpu.core.desc_raw_hi);
+                $display("UCTRACE t=%0t uaddr=%h EIP=%h ESP=%h CS=%h VM=%b stall=%b memreq=%b lin=%h fault=%b",$time,dut.cpu.core.uaddr,dut.cpu.eip,
+                         dut.cpu.core.ESP,dut.cpu.core.CS,dut.cpu.core.EFLAGS[17],dut.cpu.core.stall,dut.cpu.core.mem_req_current,
+                         dut.cpu.core.paging_inst.req_linear,dut.cpu.core.page_fault);
+            end
+        end
+    end
+`endif
+`ifdef V86_TRACE
+    always @(posedge clk) if(!reset && (dut.cpu.core.paging_inst.walk_request || dut.cpu.core.paging_inst.walk_fault ||
+                               (dut.cpu.core.mem_req_current && dut.cpu.core.vm)))
+        $display("V86TRACE t=%0t walkreq=%b fault=%b code=%b req_write=%b req_cpl=%d chk=%b | memreq=%b uc_wr=%b uc_cw=%b vslow=%b pgwr=%b pgcpl=%d lin=%h EIP=%h",
+          $time,dut.cpu.core.paging_inst.walk_request,dut.cpu.core.paging_inst.walk_fault,dut.cpu.core.paging_inst.walk_fault_code,
+          dut.cpu.core.paging_inst.req_is_write,dut.cpu.core.paging_inst.req_cpl,dut.cpu.core.paging_inst.req_check_only,
+          dut.cpu.core.mem_req_current,dut.cpu.core.uc_is_write,dut.cpu.core.uc_is_check_write,dut.cpu.core.vipt_slow_submit,
+          dut.cpu.core.paging_is_write_access,dut.cpu.core.pg_cpl,dut.cpu.core.paging_inst.req_linear,dut.cpu.eip);
+`endif
     reg [31:0] last_eip=0;
     integer shown=0;
     always @(posedge clk) if(!reset && dut.cpu.eip!=last_eip) begin
