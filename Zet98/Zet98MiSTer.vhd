@@ -66,6 +66,11 @@ port(
 	pPmsClkout	: out std_logic;
 	pPmsDatin	: in std_logic;
 	pPmsDatout	: out std_logic;
+	-- Analog-stick mouse movement and buttons (see rtl/stick_mouse.sv)
+	pMsExtDX	: in std_logic_vector(7 downto 0) := (others=>'0');
+	pMsExtDY	: in std_logic_vector(7 downto 0) := (others=>'0');
+	pMsExtStb	: in std_logic := '0';
+	pMsExtBtn	: in std_logic_vector(1 downto 0) := "00";
 	
 	-- Joystick ports (Port_A, Port_B)
 	pJoyA       : inout std_logic_vector( 5 downto 0);
@@ -1777,6 +1782,11 @@ port(
 	MCLKOUT:out std_logic;
 	MDATIN	:in std_logic;
 	MDATOUT:out std_logic;
+
+	EXTDX	:in std_logic_vector(7 downto 0) := (others=>'0');
+	EXTDY	:in std_logic_vector(7 downto 0) := (others=>'0');
+	EXTSTB	:in std_logic := '0';
+	EXTBTN	:in std_logic_vector(1 downto 0) := "00";
 	
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -4170,6 +4180,11 @@ begin
 		MCLKOUT	=>pPmsClkout,
 		MDATIN	=>pPmsDatin,
 		MDATOUT	=>pPmsDatout,
+
+		EXTDX	=>pMsExtDX,
+		EXTDY	=>pMsExtDY,
+		EXTSTB	=>pMsExtStb,
+		EXTBTN	=>pMsExtBtn,
 		
 		clk		=>cpuclk,
 		rstn		=>srstn

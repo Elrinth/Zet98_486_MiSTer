@@ -5,6 +5,7 @@ module floppy_caption_tb;
     reg clk=0,reset=1,enabled=0;
     always #5 clk=~clk;
     reg [1:0] activity=0;
+    reg [1:0] writing=0;
     reg [11:0] crop_left=0,crop_top=0,crop_width=0,crop_height=0;
     reg in_ce=0,in_hs=0,in_vs=0,in_de=0;
     reg [7:0] in_r=0,in_g=0,in_b=0;

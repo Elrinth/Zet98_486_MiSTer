@@ -13,7 +13,7 @@ using System.Text.RegularExpressions;
 using System.Globalization;
 
 class Job {
- public string Id, Kind, Status, Log="", Config=""; public DateTime Start, End;
+ public string Id, Kind, Status, Log="", Config="", Release="", Reason=""; public DateTime Start, End;
  public bool Running; public double Seconds; public int Number; public DateTime LastOutput;
 }
 class Snapshot { public List<Job> Jobs=new List<Job>(); public string Activity="No MiSTer activity recorded yet.", Health="", Estimate=""; public bool LiveStateKnown; }
@@ -107,13 +107,34 @@ class MonitorForm : Form {
   if(Val(d,"Status")=="created")j.Status="Waiting to start";
   j.Seconds=j.Start==DateTime.MinValue?0:((j.Running?DateTime.UtcNow:j.End)-j.Start).TotalSeconds;
  }
+ Dictionary<string,string> releases=new Dictionary<string,string>();DateTime releasesRead=DateTime.MinValue;
+ // build/hardware/<bundle>/manifest.json maps a Quartus build folder to its release (e.g. B173).
+ void ReadReleases(){
+  if((DateTime.UtcNow-releasesRead).TotalSeconds<60)return;releasesRead=DateTime.UtcNow;
+  try{foreach(var m in Directory.GetFiles(Path.Combine(root,"build","hardware"),"manifest.json",SearchOption.AllDirectories)){
+   try{var d=Obj(File.ReadAllText(m));string b=Val(d,"build"),c=Val(d,"core");if(b==""||c=="")continue;
+    var rel=System.Text.RegularExpressions.Regex.Match(c,@"_(B\d+)_");releases["zet98-"+b]=rel.Success?rel.Groups[1].Value:Path.GetFileNameWithoutExtension(c);}catch{}
+  }}catch{}
+ }
+ // The line that explains a failed build, instead of Quartus's closing summary.
+ static string FailureReason(string log){
+  var lines=log.Replace("\r","").Split('\n').Select(l=>l.Trim()).Where(l=>l!="").ToArray();
+  var stall=lines.FirstOrDefault(l=>l.StartsWith("Z98_WATCHDOG STALL")||l.StartsWith("Z98_WATCHDOG TIME"));
+  if(stall!=null)return stall;
+  var err=lines.FirstOrDefault(l=>l.StartsWith("Error (")&&!l.StartsWith("Error (293001)")&&!l.StartsWith("Error (23031)")&&!l.StartsWith("Error (11802)"));
+  if(err!=null)return err;
+  var any=lines.FirstOrDefault(l=>l.IndexOf("error",StringComparison.OrdinalIgnoreCase)>=0&&!l.StartsWith("Info"));
+  return any??"";
+ }
  void Local(List<Job> result){
+  ReadReleases();
   string build=Path.Combine(root,"build");if(!Directory.Exists(build))return;
   var dirs=Directory.GetDirectories(build).Where(p=>Path.GetFileName(p).StartsWith("quartus-")||Path.GetFileName(p).StartsWith("simulation-")).OrderBy(p=>p).ToArray();
   int number=0;
   foreach(var dir in dirs){ string id="zet98-"+Path.GetFileName(dir);if(id.Contains("quartus-"))number++;
    Job j; if(!history.TryGetValue(id,out j)){j=new Job{Id=id,Kind=Kind(id),Status="Status unavailable"};history[id]=j;}
    j.Number=id.Contains("quartus-")?number:0;
+   string rel;if(releases.TryGetValue(id,out rel))j.Release=rel;
    string analysisId=Read(Path.Combine(dir,"timequest-container-name.txt"));
    string analysisState=Read(Path.Combine(dir,"timequest-result.json"));
    if(analysisId!=""&&analysisState!=""){
@@ -227,11 +248,14 @@ class MonitorForm : Form {
   var shot=new Snapshot();Local(shot.Jobs);shot.Activity=Activity();
   if(DateTime.UtcNow<retryAfter){shot.Health="Docker unavailable · retry "+retryAfter.ToLocalTime().ToString("HH:mm:ss")+" · showing last known state";}
   else try{
-   string list=RunDocker("ps -a --format \"{{json .}}\"",cancel.Token);var names=new List<string>();int others=0;
+   string list=RunDocker("ps -a --format \"{{json .}}\"",cancel.Token);var names=new List<string>();int others=0;var otherNames=new List<string>();
    foreach(string line in list.Split('\n').Where(l=>l.Trim()!="")){
     var d=Obj(line);string name=Val(d,"Names");
     if(name.StartsWith("zet98-quartus-")||name.StartsWith("zet98-simulation-")||name.StartsWith("zet98-timequest-"))names.Add(name);
-    else if(Val(d,"State")=="running")others++;
+    else if(Val(d,"State")=="running"){
+     others++;Job o;if(!history.TryGetValue(name,out o)){o=new Job{Id=name,Kind="Tests / other container"};history[name]=o;}
+     o.Config=Val(d,"Image");o.Running=true;o.Status="Running";otherNames.Add(name);
+    }
    }
    // One inspect for all project jobs, then at most three short log calls.
    if(names.Count>0){string raw=RunDocker("inspect "+string.Join(" ",names.Select(n=>Quote(n)).ToArray()),cancel.Token);
@@ -243,7 +267,19 @@ class MonitorForm : Form {
     foreach(var j in history.Values.Where(j=>names.Contains(j.Id)).OrderByDescending(j=>j.Running).ThenByDescending(j=>j.Start).Take(3)) {string logText=RunDocker("logs --timestamps --tail 3 "+Quote(j.Id),cancel.Token);DateTime last;j.Log=Tail(StripStamps(logText,out last));if(last!=DateTime.MinValue)j.LastOutput=last;}
    }
    foreach(var j in history.Values.Where(j=>j.Kind=="FPGA build"&&!j.Running).OrderByDescending(j=>j.Start).Take(3))ReviewTiming(j,names.Contains(j.Id));
-   foreach(var j in history.Values.Where(j=>j.Running&&!names.Contains(j.Id))){j.Running=false;j.Status="Container removed · result unavailable";}
+   // Other containers: short log tail and elapsed time; drop them once they exit.
+   foreach(var name in otherNames.Take(2)){var o=history[name];
+    try{var d=(Dictionary<string,object>)json.Deserialize<object[]>(RunDocker("inspect "+Quote(name),cancel.Token))[0];State(o,(Dictionary<string,object>)d["State"]);}catch{}
+    DateTime last;o.Log=Tail(StripStamps(RunDocker("logs --timestamps --tail 3 "+Quote(name),cancel.Token),out last));if(last!=DateTime.MinValue)o.LastOutput=last;}
+   foreach(var o in history.Values.Where(j=>j.Kind=="Tests / other container"&&!otherNames.Contains(j.Id)).ToList())history.Remove(o.Id);
+   // Failed builds: find the line that explains the failure (fitter, watchdog, synthesis).
+   foreach(var j in history.Values.Where(j=>j.Kind=="FPGA build"&&!j.Running&&j.Status.StartsWith("Failed")&&j.Reason=="").OrderByDescending(j=>j.Start).Take(3)){
+    string text="";
+    string local=Path.Combine(root,"build",j.Id.Replace("zet98-",""),"quartus.log");
+    try{if(File.Exists(local))text=File.ReadAllText(local);else if(names.Contains(j.Id))text=RunDocker("logs --tail 4000 "+Quote(j.Id),cancel.Token);}catch{}
+    j.Reason=FailureReason(text);if(j.Reason=="")j.Reason="(no error line found)";
+   }
+   foreach(var j in history.Values.Where(j=>j.Running&&!names.Contains(j.Id)&&j.Kind!="Tests / other container")){j.Running=false;j.Status="Container removed · result unavailable";}
    failures=0;shot.LiveStateKnown=true;shot.Health="Updated "+DateTime.Now.ToString("HH:mm:ss")+" · "+history.Values.Count(j=>j.Running)+" active project jobs · "+others+" other running containers";
   }catch(Exception ex){failures++;retryAfter=DateTime.UtcNow.AddSeconds(Math.Min(120,30*failures));shot.Health="Docker unavailable: "+ex.Message+" · polling paused briefly";}
   Local(shot.Jobs);
@@ -291,13 +327,15 @@ class JobCard:Panel{
   if(Job==null){text.SetLiveText("No additional jobs");return;}
   var j=Job;var elapsed=TimeSpan.FromSeconds(Math.Max(0,j.Seconds));string time=((int)elapsed.TotalHours).ToString("00")+elapsed.ToString(@"\:mm\:ss");
   bool stale=j.Running&&!LiveStateKnown;
-  string title=j.Kind+(j.Number>0?" #"+j.Number:"")+" · "+(stale?"Status unknown · last seen ":"")+j.Status;
+  string title=j.Kind+(j.Number>0?" #"+j.Number:"")+(j.Release!=""?" · "+j.Release:"")+" · "+(stale?"Status unknown · last seen ":"")+j.Status;
   string stall=MonitorForm.StallText(j);
-  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+j.Id+"\n"+(stall!=""?stall+"\n":"")+j.Log;
+  string reason=j.Reason!=""&&j.Status.StartsWith("Failed")?"Cause: "+j.Reason:"";
+  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+j.Id+"\n"+(stall!=""?stall+"\n":"")+(reason!=""?reason:j.Log);
   if(!text.SetLiveText(content))return;
   text.SelectAll();text.SelectionFont=normal;text.SelectionColor=Color.Gainsboro;
   text.Select(0,title.Length);text.SelectionFont=bold;
   text.SelectionColor=stale?Color.FromArgb(238,193,111):j.Status.Contains("Failed")||j.Status.Contains("FAILED")?Color.FromArgb(255,129,133):j.Running?Color.FromArgb(93,204,246):Color.FromArgb(141,213,170);
+  if(reason!=""){int at=content.IndexOf(reason);text.Select(at,reason.Length);text.SelectionFont=bold;text.SelectionColor=Color.FromArgb(255,129,133);}
   if(stall!=""){int at=content.IndexOf(stall);text.Select(at,stall.Length);text.SelectionFont=bold;text.SelectionColor=stall.StartsWith("WATCHDOG")?Color.FromArgb(255,129,133):Color.FromArgb(238,193,111);}
   text.Select(0,0);
  }

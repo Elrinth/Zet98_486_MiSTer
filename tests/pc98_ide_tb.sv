@@ -16,6 +16,14 @@ module pc98_ide_tb;
     reg [8:0] sd_buff_addr=0;
     reg [7:0] sd_buff_dout=0;
     wire [7:0] sd_buff_din;
+    // CD-ROM slot (secondary channel) idle: no disc.
+    reg cd_mounted=0, cd_ack=0, cd_buff_wr=0;
+    reg [63:0] cd_size=0;
+    reg [8:0] cd_buff_addr=0;
+    reg [7:0] cd_buff_dout=0;
+    wire [31:0] cd_lba;
+    wire cd_rd;
+    wire signed [15:0] cd_audio_l, cd_audio_r;
     pc98_ide dut(.*);
     // The shared RAM port depends on mutually exclusive command ownership.
     always @(posedge clk) if(dut.cpu_buffer_write && dut.host_buffer_write)
@@ -178,8 +186,13 @@ module pc98_ide_tb;
         inw('h642,value,1); if(value[7:0]!='h04) $fatal(1,"readonly error missing");
         if(reads!=old_reads || writes!=old_writes) $fatal(1,"invalid request touched disk");
         mount(524288,0); outw('h432,1,1); inw('h64e,value,1);
-        if(value[7:0]!=0) $fatal(1,"absent channel ready");
-        outw('h64e,'hec,1); if(irq) $fatal(1,"absent channel IRQ");
+        if(value[7:0]!=0) $fatal(1,"CD not in reset state");
+        // Bank 1 holds the ATAPI CD: IDENTIFY DEVICE aborts with the packet
+        // signature and an interrupt; reading status acknowledges it.
+        outw('h64e,'hec,1); repeat(3) @(negedge clk); if(!irq) $fatal(1,"CD abort IRQ missing");
+        inw('h648,value,1); if(value[7:0]!='h14) $fatal(1,"CD signature missing");
+        inw('h64e,value,1); if(value[7:0]!='h41) $fatal(1,"CD abort status");
+        if(irq) $fatal(1,"CD IRQ not acknowledged");
         outw('h432,0,1); outw('h64c,'hb0,1); inw('h64e,value,1);
         if(value[7:0]!=0) $fatal(1,"absent slave ready");
         outw('h64c,'ha0,1);

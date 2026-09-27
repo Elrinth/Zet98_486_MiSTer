@@ -141,6 +141,47 @@ reach their menus and play on the 90 MHz z486 test build B164 (see below); sound
 - `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout and the plan for an
   open replacement BIOS.
 
+## CD-ROM (ATAPI) and CD audio
+
+Builds with the raw IDE option have a CD-ROM drive on the IDE secondary channel
+(bank 1, master), where NEC's internal-drive driver `NECCDD.SYS` expects it.
+Mount a disc image in the core menu under **CD-ROM (ISO/BIN/PCD)**:
+
+- `.iso` (2048-byte sectors) or a raw `.bin` (2352-byte sectors): one data track,
+  no CD audio. The drive reads the first blocks to detect raw sync patterns.
+- `.pcd`: a whole CUE/BIN disc, data and **CD audio** tracks, in one file. MiSTer
+  mounts one file per slot, so the CUE sheet's track list is stored in a header.
+  Convert once on a PC (Python 3, no extra modules):
+  ```
+  python scripts/pc98_cd_image.py "Policenauts.cue"          -> Policenauts.pcd
+  python scripts/pc98_cd_image.py game.cue D:\PC98\game.pcd
+  ```
+  Single-BIN and multi-BIN CUE sheets both work (MODE1/2048, MODE1/2352,
+  MODE2/2352, AUDIO; INDEX 00 and PREGAP gaps). The converter never overwrites an
+  existing file.
+- DOS setup (MS-DOS 6.20):
+  ```
+  CONFIG.SYS:   DEVICE=A:\TOOLS\NECCDD.SYS /D:CD_101
+  AUTOEXEC.BAT: A:\DOS\MSCDEX.EXE /D:CD_101 /L:Q
+  ```
+  `NECCDD.SYS` (17,616 bytes, "IDE-951031") is NEC's driver for internal ATAPI
+  drives; `MSCDEX.EXE` ships with DOS. The disc then appears as drive Q:.
+- The drive answers as "NEC CD-ROM DRIVE:98" (the driver checks this), sends one
+  2048-byte sector per data request with an interrupt each, and supports the
+  commands NECCDD and MSCDEX use (INQUIRY, REQUEST SENSE, TEST UNIT READY, MODE
+  SENSE/SELECT, READ TOC formats 0/1 incl. BCD MSF, READ(10), READ CAPACITY, READ
+  SUB-CHANNEL, START/STOP, PREVENT/ALLOW, SEEK). The ARTIC 307.2 kHz counter
+  (ports 5Ch-5Fh), which the driver uses for timeouts, is implemented too.
+- CD audio: PLAY AUDIO(10), PLAY AUDIO MSF (BCD in NEC mode), PAUSE/RESUME and
+  STOP PLAY; READ SUB-CHANNEL reports playing/paused/completed and the track and
+  position, which games poll to loop their music. Audio sectors stream from the
+  image through a 2048-sample buffer at 44.1 kHz and join the core's mix at half
+  scale before the audio filter. A data read, SEEK or START/STOP UNIT stops
+  playback, as on a real drive.
+- Tests: `tests/run-atapi.sh` (ISO, raw BIN, a PCD with one data and two audio
+  tracks: TOC, play/pause/stop, sub-channel, sample-exact audio; bank routing next
+  to the hard disk) and `tests/test_pc98_cd_image.py` (converter).
+
 ## Video outputs: HDMI, VGA and SCART RGB
 
 HDMI always carries the scaled picture. The analog outputs (VGA, and SCART RGB
@@ -151,7 +192,7 @@ multisync monitor or a scaler that accepts 24 kHz (for example a RetroTINK 4K).
 HDMI and the analog outputs work at the same time.
 
 Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
-`setname` section you use, such as `[Zet98_Test]`):
+`setname` section you use):
 
 ```ini
 [PC98]
@@ -186,8 +227,8 @@ setup program on build B164; report problems in the issue tracker.
   (e.g. Nightslave) program the graphics GDC for 5 MHz timing and the core shows
   the picture repeated and shifted across the screen.
 - **DIP1-3 Display: Normal** (the default since B165; Plasma changes some games' palettes).
-- These settings are saved per core name: loading the RBF directly uses the name
-  `Zet98`, while the test launchers (`.mgl`) use `Zet98_Test`, so set them for each.
+- These settings are saved per core name (`PC98.CFG`). Launchers (`.mgl`) without a
+  `setname` share them; an MGL with its own `setname` keeps separate settings.
 - In the MiSTer UART settings for this core, set the UART connection to **MIDI**
   and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
   FluidSynth, as for other cores).
@@ -390,20 +431,32 @@ beep's tail. The revised behavior passes simulation; hardware checks are pending
 
 `Audio filter: On / Off` defaults to **On** (status bit 34 clear). The FM (OPNA, 55.5 kHz) and PCM86 (44.1 kHz) outputs are held sample staircases; the MiSTer framework takes 48 kHz samples of them, which folds high tones back as audible noise (a 10 kHz FM tone also appears at 2.5 kHz, only 13 dB down). `rtl/audio_decimator.sv` band-limits the mix to 48 kHz on the framework's audio clock: a CIC to 768 kHz, then a 255-tap FIR (flat to 18 kHz, -75 dB from 28 kHz, coefficients from `scripts/design_audio_decimator.py`). In simulation the worst alias drops from -13 to -67 dBc (FM) and from -7 to -65 dBc (PCM86). **Off** restores the previous direct output for comparison.
 
-`SNAC PS pads: Off / On` (default Off, status bit 38) reads original PlayStation
+`SNAC PS pads: On / Off` (default On, status bit 38 clear) reads original PlayStation
 controllers on the MiSTer user port with the standard SNAC wiring (for example the
 SuperStation One's PlayStation ports): port 1 is joystick 1, port 2 joystick 2,
 combined with USB controllers. D-pad, or the left stick of a DualShock in analog mode,
 gives the directions; Cross/Square are trigger 1 and Circle/Triangle trigger 2 of the
 PC-98 sound-board joystick port. `rtl/snac_psx_pad.sv` polls both ports about 60
-times per second at 250 kHz; with the option Off the user port is not driven.
+times per second at 250 kHz and only accepts replies with the PlayStation 5Ah
+handshake, so other user-port hardware cannot create input; with the option Off
+the user port is not driven.
 
-`Loading text: On / Off` defaults to **On** (status bit 5 clear). The caption
-`LOADING D0...` or `LOADING D1...` (with cycling dots) appears at the lower right
-during floppy controller activity and floppy image transfers, with a short hold
-for visibility. It follows the measured active raster, leaves blanking/sync
-unchanged, and disappears when idle. After B167 the animated disk icon was
-removed to free FPGA area for EGC and the audio filter; the text remains.
+`Right stick mouse: On / Off` (default On, status bit 39 clear) moves the PC-98
+mouse with the right analog stick of a USB controller or of a DualShock in the
+SNAC port (analog mode). Mouse buttons: on SNAC pads L3/L1 = left and R3/R1 = right;
+on USB controllers map the core's **Mouse L** / **Mouse R** buttons in MiSTer's
+*Define joystick buttons* (for example to L3/R3). A dead zone and a quadratic
+curve keep small movements precise. A USB mouse (and the PS5 touchpad, which
+MiSTer reports as a mouse) keeps working; all sources add up
+(`rtl/stick_mouse.sv`, extra input of `Zet98/MOUSE/MOUSECONV.vhd`).
+
+`Show D0/D1 disk access: On / Off` defaults to **On** (status bit 5 clear). The
+caption `READING D0...` or `READING D1...` (with cycling dots) appears at the lower
+right while that floppy drive is accessed, and `WRITING D0...`/`WRITING D1...`
+while its image is being written back, with a short hold for visibility. It
+follows the measured active raster, leaves blanking/sync unchanged, and
+disappears when idle. After B167 the animated disk icon was removed to free FPGA
+area for EGC and the audio filter; the text remains.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

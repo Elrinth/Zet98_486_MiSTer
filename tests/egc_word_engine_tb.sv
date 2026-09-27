@@ -169,6 +169,17 @@ module egc_word_engine_tb;
             watch=0;
             while(!acknowledge && watch<1000) begin @(negedge clk);watch=watch+1;end
             if(!acknowledge || fault) $fatal(1,"EGC request did not complete normally");
+            if(wr) begin
+                // Posted write: the CPU is released before the RMW reaches memory,
+                // and the engine stays busy until the write has completed.
+                if(writes!=old_writes) $fatal(1,"EGC write was not posted (acknowledged after the memory write)");
+                if(!busy) $fatal(1,"EGC posted write left the engine idle before its memory write");
+                watch=0;
+                while(busy && watch<1000) begin
+                    @(negedge clk);watch=watch+1;
+                    if(acknowledge) $fatal(1,"EGC posted write acknowledged twice");
+                end
+            end
             if(!wr && readdata!==expected_read)
                 $fatal(1,"EGC read result mismatch actual=%h expected=%h memory=%h source=%h",
                     readdata,expected_read,memory_readdata,dut.selected_source);

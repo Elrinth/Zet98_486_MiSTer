@@ -29,6 +29,11 @@ module pc98_egc_word_engine #(
         WRITE_SHIFT=3, WRITE_BUILD=4, WRITE_MEMORY=5, RELEASE=6, REJECT=7;
     reg [3:0] state;
     reg reset_pending;
+    // Posted writes: a valid word write is acknowledged when accepted and the
+    // four-plane read-modify-write completes in the background. busy stays
+    // high until it is done, so the next EGC or bus access waits its turn.
+    // held_request blocks re-accepting the same (still asserted) CPU strobe.
+    reg posted, held_request;
     // Global reset is shared with SDRAMC. A CPU-only reset must drain an
     // already accepted memory operation with its original held operands.
     wire state_reset = reset || (reset_pending && state == IDLE);
@@ -86,7 +91,7 @@ module pc98_egc_word_engine #(
     end
     always @(posedge clk) begin
         if (state_reset) begin
-            state<=IDLE; acknowledge<=0; fault<=0; readdata<=0;
+            state<=IDLE; acknowledge<=0; fault<=0; readdata<=0; posted<=0; held_request<=0;
             memory_address<=0; memory_bank<=0; memory_bytes<=0; memory_planes<=0;
             memory_base<=0; memory_xor_mask<=64'hffffffffffffffff;
             transfer_operation<=0; transfer_color<=0; transfer_pixel_mask<=0;
@@ -95,10 +100,11 @@ module pc98_egc_word_engine #(
             retained_source<=0; source_advanced<=0;
         end else begin
             acknowledge<=0; fault<=0;
+            if (!request) held_request<=0;
             if (shift_reload) source_advanced<=0;
             else if (shift_advance) source_advanced<=1;
             case (state)
-                IDLE: if (request && !soft_reset && !reset_pending) begin
+                IDLE: if (request && !held_request && !soft_reset && !reset_pending) begin
                     // The CPU request may remain asserted until ACK; no live
                     // request metadata is used after this acceptance edge.
                     memory_address<={request_address[ADDRESS_WIDTH-1:2],2'b00};
@@ -110,10 +116,17 @@ module pc98_egc_word_engine #(
                     transfer_operation<=operation; transfer_color<=color_select;
                     transfer_pixel_mask<=pixel_mask;
                     transfer_foreground<=foreground_words; transfer_background<=background_words;
-                    if (!egc_enable || request_bytes != 2'b11) state<=REJECT;
-                    else if (!request_write) state<=READ_MEMORY;
-                    else if (operation[12:11] != 1 || operation[10]) state<=WRITE_SHIFT;
-                    else state<=WRITE_BUILD;
+                    if (!egc_enable || request_bytes != 2'b11) begin
+                        posted<=0; state<=REJECT;
+                    end else if (!request_write) begin
+                        posted<=0; state<=READ_MEMORY;
+                    end else begin
+                        // Posted write: release the CPU now; the RMW follows.
+                        posted<=1; held_request<=1;
+                        acknowledge<=!reset_pending && !soft_reset;
+                        if (operation[12:11] != 1 || operation[10]) state<=WRITE_SHIFT;
+                        else state<=WRITE_BUILD;
+                    end
                 end
                 READ_MEMORY: if (memory_acknowledge) begin
                     returned_words<=memory_readdata;
@@ -143,13 +156,18 @@ module pc98_egc_word_engine #(
                     // SDRAMC returns the old destination used for this RMW,
                     // including when every byte/plane was masked from writing.
                     if (load_on_write) pattern_latch<=memory_readdata;
-                    acknowledge<=!reset_pending && !soft_reset; state<=RELEASE;
+                    if (posted) begin posted<=0; state<=IDLE; end
+                    else begin acknowledge<=!reset_pending && !soft_reset; state<=RELEASE; end
                 end
                 RELEASE: if (!request || reset_pending) state<=IDLE;
                 REJECT: begin
-                    acknowledge<=!reset_pending && !soft_reset;
-                    fault<=!reset_pending && !soft_reset;
-                    readdata<=16'hffff; state<=RELEASE;
+                    // A posted write was already acknowledged: drop it silently.
+                    if (posted) begin posted<=0; state<=IDLE; end
+                    else begin
+                        acknowledge<=!reset_pending && !soft_reset;
+                        fault<=!reset_pending && !soft_reset;
+                        readdata<=16'hffff; state<=RELEASE;
+                    end
                 end
                 default: state<=IDLE;
             endcase

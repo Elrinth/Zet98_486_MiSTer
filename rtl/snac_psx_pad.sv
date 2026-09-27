@@ -18,7 +18,12 @@ module snac_psx_pad #(
     input wire [6:0] user_in,
     output reg [6:0] user_out = 7'h7f,
     output reg [5:0] joy1 = 0,
-    output reg [5:0] joy2 = 0
+    output reg [5:0] joy2 = 0,
+    // Mouse emulation: right stick {Y, X} (unsigned, 80h centre) of pads in
+    // analog mode, and mouse buttons {right, left} = {R3|R1, L3|L1}.
+    output reg [1:0] analog = 0,
+    output reg [15:0] right1 = 16'h8080, right2 = 16'h8080,
+    output reg [1:0] mbtn1 = 0, mbtn2 = 0
 );
     localparam integer HALF = CLK_HZ / 500000;        // 2 us: 250 kHz clock
     localparam integer GAP = CLK_HZ / 50000;          // 20 us between bytes
@@ -39,7 +44,7 @@ module snac_psx_pad #(
     reg [3:0] byte_index = 0;
     reg [2:0] bit_index = 0;
     reg [7:0] tx = 0, rx = 0;
-    reg [7:0] id, buttons_lo, buttons_hi, left_x, left_y;
+    reg [7:0] id, handshake, buttons_lo, buttons_hi, left_x, left_y, right_x, right_y;
     reg att = 1, cmd = 1, sclk = 1;
 
     function automatic [7:0] command(input [3:0] index);
@@ -47,10 +52,14 @@ module snac_psx_pad #(
     endfunction
 
     // Stick outside the centre third counts as a direction.
-    wire analog = id == 8'h73;
-    wire st_left  = analog && left_x < 8'h40, st_right = analog && left_x > 8'hc0;
-    wire st_up    = analog && left_y < 8'h40, st_down  = analog && left_y > 8'hc0;
-    wire present  = id != 8'hff && id != 8'h00;
+    wire analog_mode = id == 8'h73;
+    wire st_left  = analog_mode && left_x < 8'h40, st_right = analog_mode && left_x > 8'hc0;
+    wire st_up    = analog_mode && left_y < 8'h40, st_down  = analog_mode && left_y > 8'hc0;
+    // A real pad answers the 42h read with its ID and then 5Ah.
+    wire present  = id != 8'hff && id != 8'h00 && handshake == 8'h5a;
+    // L3/L1 = left mouse button, R3/R1 = right (buttons active low).
+    wire [1:0] mouse_buttons = !present ? 2'b0 :
+        {!buttons_lo[2] || !buttons_hi[3], !buttons_lo[1] || !buttons_hi[2]};
     // Buttons are active low.
     wire [5:0] mapped = !present ? 6'b0 : {
         !buttons_hi[5] || !buttons_hi[4],                   // fire 2: Circle, Triangle
@@ -65,6 +74,7 @@ module snac_psx_pad #(
         if (!en_sync[1]) begin
             state <= IDLE; timer <= 0; att <= 1; cmd <= 1; sclk <= 1;
             joy1 <= 0; joy2 <= 0; user_out <= 7'h7f;
+            analog <= 0; mbtn1 <= 0; mbtn2 <= 0;
         end else begin
             user_out <= {1'b1, sclk, 1'b1, 1'b1, cmd, port ? 1'b1 : att, port ? att : 1'b1};
             if (timer != 0) timer <= timer - 1'b1;
@@ -87,8 +97,11 @@ module snac_psx_pad #(
                     cmd <= 1;
                     case (byte_index)
                         1: id <= rx;
+                        2: handshake <= rx;
                         3: buttons_lo <= rx;
                         4: buttons_hi <= rx;
+                        5: right_x <= rx;
+                        6: right_y <= rx;
                         7: left_x <= rx;
                         8: left_y <= rx;
                         default: ;
@@ -98,7 +111,13 @@ module snac_psx_pad #(
                 end
                 DONE: begin
                     att <= 1;
-                    if (port) joy2 <= mapped; else joy1 <= mapped;
+                    if (port) begin
+                        joy2 <= mapped; mbtn2 <= mouse_buttons;
+                        analog[1] <= present && analog_mode; right2 <= {right_y, right_x};
+                    end else begin
+                        joy1 <= mapped; mbtn1 <= mouse_buttons;
+                        analog[0] <= present && analog_mode; right1 <= {right_y, right_x};
+                    end
                     port <= !port; state <= IDLE; timer <= FRAME;
                 end
                 default: state <= IDLE;

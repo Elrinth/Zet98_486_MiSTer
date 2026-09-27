@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// "LOADING D0..." / "LOADING D1..." caption with cycling dots at the lower
-// right while a floppy is accessed. (The animated disk icon was removed to
+// "READING D0..." / "WRITING D1..." caption with cycling dots at the lower
+// right while a floppy is accessed (WRITING while the drive's image is
+// being written back). (The animated disk icon was removed to
 // free FPGA area.) A three-clock pipeline keeps font pixels, RGB, blanking,
 // sync and CE aligned.
 module floppy_overlay #(
@@ -10,6 +11,7 @@ module floppy_overlay #(
 ) (
     input wire clk, reset, enabled,
     input wire [1:0] activity,
+    input wire [1:0] writing,      // image write-back per drive (subset of activity)
     input wire [11:0] crop_left, crop_top, crop_width, crop_height,
     input wire in_ce, in_hs, in_vs, in_de,
     input wire [7:0] in_r, in_g, in_b,
@@ -17,7 +19,8 @@ module floppy_overlay #(
     output reg [7:0] out_r, out_g, out_b
 );
     (* preserve, altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg [1:0] activity_meta, activity_sync;
+    reg [1:0] activity_meta, activity_sync, writing_meta, writing_sync;
+    reg write_mode;
     (* preserve, altera_attribute="-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg enabled_meta, enabled_sync;
     reg prev_de,prev_vs,sized,drive;
@@ -41,12 +44,12 @@ module floppy_overlay #(
     // Reuse the core boot-help font, with one byte per 8x8 character row.
     // The caption background stays transparent.
     function automatic [6:0] caption_ascii(input [3:0] position,
-        input selected_drive,input [1:0] dots);
+        input selected_drive,input write,input [1:0] dots);
         case(position)
-            0: caption_ascii="L";
-            1: caption_ascii="O";
-            2: caption_ascii="A";
-            3: caption_ascii="D";
+            0: caption_ascii=write ? "W" : "R";
+            1: caption_ascii=write ? "R" : "E";
+            2: caption_ascii=write ? "I" : "A";
+            3: caption_ascii=write ? "T" : "D";
             4: caption_ascii="I";
             5: caption_ascii="N";
             6: caption_ascii="G";
@@ -60,7 +63,7 @@ module floppy_overlay #(
     wire [3:0] character=tx[6:3];
     wire [2:0] column=tx[2:0];
     wire [2:0] font_row_address=dy[2:0];
-    wire [6:0] font_character=caption_ascii(character,drive,dot_phase[4:3]);
+    wire [6:0] font_character=caption_ascii(character,drive,write_mode,dot_phase[4:3]);
     wire text_area=box && dx>=2 && dx<106 && dy<8;
     (* ramstyle="M10K" *) reg [7:0] boot_font[0:1023];
     reg [7:0] font_row;
@@ -74,6 +77,7 @@ module floppy_overlay #(
     always @(posedge clk or posedge reset) begin
         if(reset) begin
             activity_meta<=0;activity_sync<=0;enabled_meta<=0;enabled_sync<=0;
+            writing_meta<=0;writing_sync<=0;write_mode<=0;
             prev_de<=0;prev_vs<=0;sized<=0;drive<=0;
             position_pending<=0;crop_right_sum<=0;crop_bottom_sum<=0;crop_large<=0;
             right_edge<=0;bottom_edge<=0;box_left<=0;box_right<=0;box_top<=0;box_bottom<=0;
@@ -88,6 +92,7 @@ module floppy_overlay #(
             out_ce<=0;out_hs<=0;out_vs<=0;out_de<=0;out_r<=0;out_g<=0;out_b<=0;
         end else begin
             activity_meta<=activity;activity_sync<=activity_meta;
+            writing_meta<=writing;writing_sync<=writing_meta;
             enabled_meta<=enabled;enabled_sync<=enabled_meta;
             position_pending<={position_pending[0],frame_start};
             if(frame_start) begin
@@ -109,6 +114,10 @@ module floppy_overlay #(
             else if(frame_start && hold_frames!=0) hold_frames<=hold_frames-1'b1;
             if(activity_sync==1) drive<=0;
             else if(activity_sync==2) drive<=1;
+            // A new access starts as READING; any write-back in the hold
+            // window switches the caption to WRITING until it expires.
+            if(writing_sync!=0) write_mode<=1;
+            else if(hold_frames==0) write_mode<=0;
             if(hold_frames==0) begin
                 animation_ticks<=0;dot_phase<=0;
             end else if(frame_start && animation_ticks >= ANIMATION_CYCLES) begin

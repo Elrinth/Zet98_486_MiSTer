@@ -18,6 +18,13 @@ port(
 	MCLKOUT:out std_logic;
 	MDATIN	:in std_logic;
 	MDATOUT:out std_logic;
+
+	-- Extra movement (PS/2 convention: +X right, +Y up) and buttons, e.g.
+	-- from analog sticks; added to the PS/2 mouse. EXTBTN = {right, left}.
+	EXTDX	:in std_logic_vector(7 downto 0) := (others=>'0');
+	EXTDY	:in std_logic_vector(7 downto 0) := (others=>'0');
+	EXTSTB	:in std_logic := '0';
+	EXTBTN	:in std_logic_vector(1 downto 0) := "00";
 	
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -107,6 +114,8 @@ signal	msbX,msbY	:std_logic;
 signal	sw0,sw1,sw2		:std_logic;
 signal	TXX,TXY		:std_logic_vector(7 downto 0);
 signal	lHC			:std_logic;
+signal	extpend		:std_logic;
+signal	extX,extY	:std_logic_vector(7 downto 0);
 	
 begin
 	
@@ -147,6 +156,10 @@ begin
 			TXX<=(others=>'0');
 			TXY<=(others=>'0');
 			lHC<='0';
+			extpend<='0';
+			sw0<='0';
+			sw1<='0';
+			sw2<='0';
 		elsif(clk' event and clk='1')then
 			M_WRn<='1';
 			lHC<=HC;
@@ -255,6 +268,37 @@ begin
 					PS2STATE<=P2ST_IDLE;
 				end case;
 			end if;
+
+			-- Stick movement joins the same saturating accumulators, on a cycle
+			-- without a PS/2 byte so neither source overwrites the other.
+			if(EXTSTB='1')then
+				extpend<='1';
+				extX<=EXTDX;
+				extY<=EXTDY;
+			end if;
+			if(extpend='1' and M_RXED='0' and not(lHC='0' and HC='1'))then
+				extpend<='0';
+				tmp:=valX;
+				tmp:=tmp+(extX(7) & extX(7) & extX);
+				case tmp(9 downto 8) is
+				when "01" =>
+					valX<="0100000000";
+				when "10" =>
+					valX<="1011111111";
+				when others =>
+					valX<=tmp;
+				end case;
+				tmp:=valY;
+				tmp:=tmp-(extY(7) & extY(7) & extY);
+				case tmp(9 downto 8) is
+				when "01" =>
+					valY<="0100000000";
+				when "10" =>
+					valY<="1011111111";
+				when others =>
+					valY<=tmp;
+				end case;
+			end if;
 			
 			if(lHC='0' and HC='1')then
 				TXX<=valX(9 downto 2);
@@ -267,7 +311,7 @@ begin
 			end if;
 		end if;
 	end process;
-	MOUSDAT(7 downto 4)<=not sw0 & not sw2 & not sw1 & '1';
+	MOUSDAT(7 downto 4)<=not (sw0 or EXTBTN(0)) & not sw2 & not (sw1 or EXTBTN(1)) & '1';
 	MOUSDAT(3 downto 0)<=
 		TXX(3 downto 0) when SXY='0' and SHL='0' else
 		TXX(7 downto 4) when SXY='0' and SHL='1' else

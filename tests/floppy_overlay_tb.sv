@@ -2,6 +2,7 @@
 module floppy_overlay_tb;
     reg clk=0,reset=1,enabled=1;
     reg [1:0] activity=0;
+    reg [1:0] writing=0;
     reg [11:0] crop_left=0,crop_top=0,crop_width=0,crop_height=0;
     integer expected_right=0,expected_bottom=0;
     always #5 clk=!clk;
@@ -18,7 +19,7 @@ module floppy_overlay_tb;
     reg [63:0] digit0,digit1;
     reg [7:0] reference_font[0:1023];
     initial $readmemh("rtl/assets/boot-font.mem",reference_font);
-    reg expected_drive=0;
+    reg expected_drive=0,expected_write=0;
     reg [23:0] expected_pixel;
     reg [1:0] source_pixel;
     integer bx,by,cx,cy,char_index,char_code;
@@ -35,7 +36,7 @@ module floppy_overlay_tb;
             changed=0;
             if(activity==1) expected_drive=0;
             if(activity==2) expected_drive=1;
-            caption="LOADING D0...";
+            caption=expected_write ? "WRITING D0..." : "READING D0...";
             if(expected_drive) caption[31:24]="1";
             bx=(expected_right ? expected_right : w)-112;
             by=(expected_bottom ? expected_bottom : h)-30;
@@ -105,6 +106,12 @@ module floppy_overlay_tb;
         if(changed==0) $fatal(1,"activity hold missing");
         repeat(4) frame(128,96,-1,-1,1);
         if(changed) $fatal(1,"indicator failed to expire");
+        // Image write-back switches the caption to WRITING until the hold expires.
+        activity=1;writing=1;expected_write=1;frame(128,96,0,0,1);
+        writing=0;frame(128,96,1,0,1);
+        activity=0;repeat(5) frame(128,96,-1,-1,1);
+        if(changed) $fatal(1,"write indicator failed to expire");
+        activity=1;expected_write=0;frame(128,96,0,0,1);
         activity=1;frame(160,120,-1,-1,0);frame(160,120,-1,-1,1);
         if(changed<60 || changed>=108*10) $fatal(1,"mode-change placement failed");
         crop_left=20;crop_top=10;crop_width=120;crop_height=100;
@@ -119,7 +126,7 @@ module floppy_overlay_tb;
         expected_right=0;expected_bottom=0;
         frame(160,120,-1,-1,1);
         if(changed<60 || changed>=108*10) $fatal(1,"invalid crop did not use native bounds");
-        $display("PASS floppy caption: LOADING D0/D1 boot-font text, dot phases/wrap, transparent backgrounds, 16-pixel lift, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);
+        $display("PASS floppy caption: READING/WRITING D0/D1 boot-font text, dot phases/wrap, transparent backgrounds, 16-pixel lift, dots, D0/D1, idle/disable/hold, bounds, CE/sync, two rasters (%0d frames)",frames);
         $finish;
     end
     initial begin #100000000; $fatal(1,"floppy overlay watchdog");end

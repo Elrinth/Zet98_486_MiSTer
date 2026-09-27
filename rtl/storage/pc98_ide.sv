@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 `timescale 1ns/1ps
 // PC-98 ATA PIO task file, backed by one MiSTer raw-image slot. All signals
-// share clk. This is a controller, not a disk BIOS or an ATAPI implementation.
+// share clk. This is a controller, not a disk BIOS.
 // Port layout follows NP2kai cbus/ideio.c (5939e0c); no emulator code is used.
-// Only channel 0/master exists. Geometry is 16 heads, 32 sectors (512 bytes).
+// Channel 0 (bank 0) master is the ATA disk: 16 heads, 32 sectors (512 bytes).
+// Channel 1 (bank 1) master is an ATAPI CD-ROM (pc98_atapi) on its own image
+// slot, where NEC's NECCDD.SYS expects it. Both share the IDE interrupt.
 // Data is 16-bit at 0640h; task-file registers occupy even low-byte ports.
-module pc98_ide (
+module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     input wire clk, reset,
     input wire [15:0] io_address, io_writedata,
     input wire [1:0] io_select,
@@ -20,7 +22,18 @@ module pc98_ide (
     input wire [8:0] sd_buff_addr,
     input wire [7:0] sd_buff_dout,
     output wire [7:0] sd_buff_din,
-    input wire sd_buff_wr
+    input wire sd_buff_wr,
+    // CD-ROM image slot (secondary channel)
+    input wire cd_mounted,
+    input wire [63:0] cd_size,
+    output wire [31:0] cd_lba,
+    output wire cd_rd,
+    input wire cd_ack,
+    input wire [8:0] cd_buff_addr,
+    input wire [7:0] cd_buff_dout,
+    input wire cd_buff_wr,
+    // CD audio (CD-DA), signed, 44.1 kHz
+    output wire signed [15:0] cd_audio_l, cd_audio_r
 );
     localparam IDLE=0, READ_START=1, READ_WAIT=2, READ_DATA=3,
         WRITE_DATA=4, WRITE_START=5, WRITE_WAIT=6, IDENTIFY=7;
@@ -50,7 +63,42 @@ module pc98_ide (
     wire read_start = io_read && !previous_read && decoded;
     wire write_start = io_write && !previous_write && decoded;
     assign io_oe = decoded && io_read;
-    assign irq = pending_irq && !control[1] && !control[2];
+    wire hdd_irq = pending_irq && !control[1] && !control[2];
+
+    // ---- secondary channel: ATAPI CD-ROM ----------------------------------
+    wire cd_channel = bank[0];
+    wire cd_port = task_port || io_address == 16'h074c || io_address == 16'h074e;
+    wire [2:0] cd_index = io_address == 16'h074e ? 3'd6 : io_address[3:1];
+    reg cd_read_active = 0, cd_read_word = 0;
+    reg [2:0] cd_read_index = 0;
+    reg cd_read_alt = 0;
+    wire cd_write = write_start && cd_channel && task_port;
+    wire cd_read_done = cd_read_active && !io_read;       // after the CPU sampled
+    wire [15:0] cd_readdata;
+    wire cd_irq;
+    pc98_atapi #(.CLK_HZ(CLK_HZ)) cdrom (
+        .clk(clk), .reset(reset),
+        .reg_index(cd_read_done ? cd_read_index : cd_write ? io_address[3:1] : cd_index),
+        .reg_write(cd_write), .reg_read(cd_read_done),
+        .writedata(io_writedata),
+        .word_access(cd_read_done ? cd_read_word : io_select == 2'b11),
+        .ctrl_write(write_start && cd_channel && io_address == 16'h074c),
+        .ctrl_data(io_writedata[7:0]),
+        .readdata(cd_readdata), .read_alt(cd_read_done ? cd_read_alt : io_address == 16'h074c),
+        .irq(cd_irq), .present(),
+        .image_mounted(cd_mounted), .image_size(cd_size),
+        .sd_lba(cd_lba), .sd_rd(cd_rd), .sd_ack(cd_ack),
+        .sd_buff_addr(cd_buff_addr), .sd_buff_dout(cd_buff_dout), .sd_buff_wr(cd_buff_wr),
+        .audio_l(cd_audio_l), .audio_r(cd_audio_r)
+    );
+    always @(posedge clk) begin
+        if (reset) cd_read_active <= 0;
+        else if (read_start && cd_channel && cd_port) begin
+            cd_read_active <= 1; cd_read_index <= cd_index;
+            cd_read_word <= io_select == 2'b11; cd_read_alt <= io_address == 16'h074c;
+        end else if (cd_read_done) cd_read_active <= 0;
+    end
+    assign irq = hdd_irq || cd_irq;
 
     // Transport has independent lifetime: a CPU/SRST reset drains an accepted
     // HPS transaction before another request can reuse the sector buffer.
@@ -161,6 +209,11 @@ module pc98_ide (
             16'h074e: io_readdata={8'hff,2'b11,~device_head[3:0],!device_head[4],device_head[4]};
             default: ;
         endcase
+        if(cd_channel && cd_port) begin
+            if(io_address==16'h074e)
+                io_readdata={8'hff,2'b11,~cd_readdata[3:0],!cd_readdata[4],cd_readdata[4]};
+            else io_readdata=cd_readdata;
+        end
         if(!io_select[1]) io_readdata[15:8]=8'hff;
     end
 

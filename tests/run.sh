@@ -71,6 +71,8 @@ bash tests/run-pcm86.sh
 bash tests/run-audio-decimator.sh
 bash tests/run-alsa-gain.sh
 bash tests/run-snac-psx.sh
+bash tests/run-stick-mouse.sh
+bash tests/run-atapi.sh
 bash tests/run-opna-timer.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/DMA/DMASW.vhd tests/dma_grant_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" dma_grant_tb

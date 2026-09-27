@@ -174,8 +174,9 @@ parameter CONF_STR = {
 	"O3,Video test,Off,Color bars;",
 	"O4,Startup mute,10s,Off;",
 	"o2,Audio filter,On,Off;",
-	"o6,SNAC PS pads,Off,On;",
-	"O5,Loading text,On,Off;",
+	"o6,SNAC PS pads,On,Off;",
+	"o7,Right stick mouse,On,Off;",
+	"O5,Show D0/D1 disk access,On,Off;",
 `ifdef ZET98_MPU_UART
 	"OQ,MPU MIDI,Off,UART;",
 	"o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
@@ -188,6 +189,7 @@ parameter CONF_STR = {
 	"S1,D88HDMFDI,FDD1;",
 `ifdef ZET98_RAW_IDE
 	"S2,VHDIMGHDI,IDE hard disk;",
+	"S4,ISOBINPCD,CD-ROM (ISO/BIN/PCD);",
 `else
 	"S2,HDF,SASI;",
 `endif
@@ -212,7 +214,7 @@ parameter CONF_STR = {
 	"OK,DIP2-6 Int.HDD,Disconnect,Connect;",
 	"OL,DIP2-7 FDD Motor,Control,ON;",
 	"o1,DIP2-8 GDC clock,2.5MHz,5MHz;",
-	"J,Fire 1,Fire 2;",
+	"J,Fire 1,Fire 2,Mouse L,Mouse R;",
 	"V,v",`BUILD_DATE
 };
 
@@ -296,9 +298,23 @@ wire [63:0] status;
 // Band-limit the core mix to 48 kHz on the framework's audio clock so the
 // OPNA/PCM86 staircases do not alias (rtl/audio_decimator.sv).
 wire [15:0] core_snd_l, core_snd_r;
+// CD audio (PCD images) joins the mix at half scale, saturating.
+wire signed [15:0] cd_audio_l, cd_audio_r;
+reg  [15:0] snd_mix_l, snd_mix_r;
+function automatic [15:0] mix_sat(input [15:0] a, input signed [15:0] b);
+	reg signed [16:0] sum;
+	begin
+		sum = $signed({a[15], a}) + (b >>> 1);
+		mix_sat = sum[16] != sum[15] ? {sum[16], {15{!sum[16]}}} : sum[15:0];
+	end
+endfunction
+always @(posedge clk_sys) begin
+	snd_mix_l <= mix_sat(core_snd_l, cd_audio_l);
+	snd_mix_r <= mix_sat(core_snd_r, cd_audio_r);
+end
 audio_decimator audio_decimator (
 	.clk(CLK_AUDIO), .enable(~status[34]),
-	.in_l(core_snd_l), .in_r(core_snd_r),
+	.in_l(snd_mix_l), .in_r(snd_mix_r),
 	.out_l(AUDIO_L), .out_r(AUDIO_R)
 );
 
@@ -308,10 +324,28 @@ wire [15:0] joystick_0, joystick_1;
 
 // PlayStation pads on the user port (SNAC) add to USB joysticks 1 and 2.
 wire  [5:0] snac_joy1, snac_joy2;
+wire  [1:0] snac_analog, snac_mbtn1, snac_mbtn2;
+wire [15:0] snac_right1, snac_right2;
+wire [15:0] joystick_r0, joystick_r1;
 snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
-	.clk(clk_sys), .enable(status[38]), .user_in(USER_IN), .user_out(USER_OUT),
-	.joy1(snac_joy1), .joy2(snac_joy2)
+	.clk(clk_sys), .enable(!status[38]), .user_in(USER_IN), .user_out(USER_OUT),
+	.joy1(snac_joy1), .joy2(snac_joy2),
+	.analog(snac_analog), .right1(snac_right1), .right2(snac_right2),
+	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2)
 );
+// Right stick of USB controllers or SNAC DualShocks moves the PC-98 mouse;
+// buttons "Mouse L/R" (USB) and L3/L1, R3/R1 (SNAC) click. A USB mouse
+// keeps working; both add up.
+wire signed [7:0] stick_dx, stick_dy;
+wire        stick_stb;
+stick_mouse #(.CLK_HZ(SYS_CLK_KHZ*1000)) stick_mouse (
+	.clk(clk_sys), .enable(!status[39]),
+	.usb_r0(joystick_r0), .usb_r1(joystick_r1),
+	.snac_valid(snac_analog), .snac_r0(snac_right1), .snac_r1(snac_right2),
+	.dx(stick_dx), .dy(stick_dy), .strobe(stick_stb)
+);
+wire  [1:0] stick_buttons = status[39] ? 2'b00 :
+	(joystick_0[7:6] | joystick_1[7:6] | snac_mbtn1 | snac_mbtn2);
 wire  [5:0] joy0_bits = joystick_0[5:0] | snac_joy1;
 wire  [5:0] joy1_bits = joystick_1[5:0] | snac_joy2;
 wire  [5:0] joyA = ~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
@@ -390,8 +424,27 @@ pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE)) images (
 );
 wire [1:0] legacy_buffer_slot = core_sd_ack[0] ? 0 : core_sd_ack[1] ? 1 : core_sd_ack[3] ? 3 : 2;
 
+// Slot 4 is the ATAPI CD-ROM image (read-only), connected directly.
+wire [31:0] cd_lba;
+wire        cd_rd;
+wire [31:0] hps_lba [5];
+wire  [5:0] hps_blk_cnt [5];
+wire  [7:0] hps_buff_din [5];
+wire  [4:0] hps_ack, hps_mounted;
+genvar hslot;
+generate for (hslot = 0; hslot < 4; hslot = hslot + 1) begin : hps_slots
+	assign hps_lba[hslot] = host_slot_lba[hslot];
+	assign hps_buff_din[hslot] = host_slot_buff_din[hslot];
+	assign hps_blk_cnt[hslot] = sd_slot_blk_cnt[hslot];
+end endgenerate
+assign hps_lba[4] = cd_lba;
+assign hps_buff_din[4] = 8'h00;
+assign hps_blk_cnt[4] = 6'd0;
+assign sd_ack = hps_ack[3:0];
+assign img_mounted = hps_mounted[3:0];
+
 generate if(RAW_IDE) begin : raw_ide
-	pc98_ide controller (
+	pc98_ide #(.CLK_HZ(SYS_CLK_KHZ*1000)) controller (
 		.clk(clk_sys), .reset(!ide_resetn),
 		.io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
 		.io_read(ide_read), .io_write(ide_write), .io_readdata(ide_readdata),
@@ -399,12 +452,26 @@ generate if(RAW_IDE) begin : raw_ide
 		.image_mounted(core_img_mounted[2]), .image_readonly(core_img_readonly), .image_size(core_img_size),
 		.sd_lba(ide_lba), .sd_rd(ide_rd), .sd_wr(ide_wr), .sd_ack(core_sd_ack[2]),
 		.sd_buff_addr(core_buff_addr[2]), .sd_buff_dout(core_buff_dout[2]),
-		.sd_buff_din(ide_buff_din), .sd_buff_wr(core_buff_wr[2])
+		.sd_buff_din(ide_buff_din), .sd_buff_wr(core_buff_wr[2]),
+		.cd_mounted(hps_mounted[4]), .cd_size(img_size),
+		.cd_lba(cd_lba), .cd_rd(cd_rd), .cd_ack(hps_ack[4]),
+		.cd_buff_addr(sd_buff_addr), .cd_buff_dout(sd_buff_dout), .cd_buff_wr(sd_buff_wr),
+		.cd_audio_l(cd_audio_l), .cd_audio_r(cd_audio_r)
 	);
 end else begin : no_raw_ide
 	assign {ide_lba,ide_rd,ide_wr,ide_buff_din,ide_oe,ide_irq}=0;
+	assign {cd_lba,cd_rd}=0;
+	assign {cd_audio_l,cd_audio_r}=0;
 	assign ide_readdata=16'hffff;
 end endgenerate
+
+// ARTIC 307.2 kHz counter at 5Ch-5Fh (NEC's CD-ROM driver times with it).
+wire [15:0] artic_readdata;
+wire artic_oe;
+pc98_artic #(.CLK_HZ(SYS_CLK_KHZ*1000)) artic (
+	.clk(clk_sys), .io_address(ide_address), .io_read(ide_read),
+	.io_readdata(artic_readdata), .io_oe(artic_oe)
+);
 
 // MPU-PC98II uses even low-byte ports E0D0/E0D2 and the otherwise unused
 // master PIC IRQ6. Reuse the exported CPU I/O request, not IDE's decode.
@@ -423,9 +490,8 @@ pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000), .RESET_PANIC(1)) mpu (
 assign mpu_readdata=8'hff;
 assign {mpu_oe,mpu_irq}=0;
 `ifdef ZET98_Z486_DEBUG
-pc98_debug_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000)) boot_debug (
-    .clk(clk_sys), .reset(!pll_locked), .snapshot(cpu_debug_snapshot), .tx(UART_TXD)
-);
+// Debug builds: the z486 crash recorder's UART rides bit 0 of the snapshot.
+assign UART_TXD = cpu_debug_snapshot[0];
 `else
 assign UART_TXD=1'b1;
 `endif
@@ -434,7 +500,7 @@ assign UART_TXD=1'b1;
 wire [65:0] ps2_key;
 wire [64:0] sysrtc;
 
-hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .VDNUM(4)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .VDNUM(5)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -444,17 +510,17 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .V
 	
 	.TIMESTAMP(TIMESTAMP),
 
-	.sd_lba(host_slot_lba),
-	.sd_blk_cnt(sd_slot_blk_cnt),
-	.sd_rd(host_rd),
-	.sd_wr(host_wr),
-	.sd_ack(sd_ack),
+	.sd_lba(hps_lba),
+	.sd_blk_cnt(hps_blk_cnt),
+	.sd_rd({cd_rd, host_rd}),
+	.sd_wr({1'b0, host_wr}),
+	.sd_ack(hps_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(host_slot_buff_din),
+	.sd_buff_din(hps_buff_din),
 	.sd_buff_wr(sd_buff_wr),
 
-	.img_mounted(img_mounted),
+	.img_mounted(hps_mounted),
 	.img_readonly(img_readonly),
 	.img_size(img_size),
 
@@ -479,7 +545,9 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .V
 	.RTC(sysrtc),
 
 	.joystick_0(joystick_0),
-	.joystick_1(joystick_1)
+	.joystick_1(joystick_1),
+	.joystick_r_analog_0(joystick_r0),
+	.joystick_r_analog_1(joystick_r1)
 );
 
 /////////////////  RESET  /////////////////////////
@@ -540,7 +608,7 @@ video_output video_out (
 );
 floppy_overlay floppy_icon (
 	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
-	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]),
+	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]), .writing(sd_wr[1:0]),
 	.crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
 	.crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
 	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
@@ -625,6 +693,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pPmsClkout(ps2_mouse_clk_in),
 	.pPmsDatin(ps2_mouse_data_out),
 	.pPmsDatout(ps2_mouse_data_in),
+	.pMsExtDX(stick_dx), .pMsExtDY(stick_dy), .pMsExtStb(stick_stb), .pMsExtBtn(stick_buttons),
 
 	.pJoyA(joyA),
 	.pJoyB(joyB),
@@ -649,7 +718,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.mist_buffwr(|(core_buff_wr & (RAW_IDE ? 4'b1011 : 4'b1111))),
 	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
 	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
-	.pIDEReadData(ide_readdata), .pIDEOE(ide_oe), .pIDEIRQ(ide_irq),
+	.pIDEReadData(artic_oe ? artic_readdata : ide_readdata), .pIDEOE(ide_oe | artic_oe), .pIDEIRQ(ide_irq),
 	// Full compiled clock only. Keep saved status bits 29:28 reserved so an
 	// old slower-speed selection cannot re-enable the unqualified throttle.
 	.pCPUSpeed(2'b00),

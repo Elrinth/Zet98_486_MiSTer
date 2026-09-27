@@ -143,6 +143,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     output [127:0] pCPUDebug,
     input pPs2Clkin, pPs2Datin, pPmsClkin, pPmsDatin,
     output pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout,
+    input [7:0] pMsExtDX, pMsExtDY, input pMsExtStb, input [1:0] pMsExtBtn,
     input [5:0] pJoyA, pJoyB,
     input [1:0] pFDSYNC, pFDEJECT,
     input [3:0] mist_mounted, mist_readonly,

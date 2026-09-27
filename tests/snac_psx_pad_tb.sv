@@ -7,13 +7,16 @@ module snac_psx_pad_tb;
     reg enable = 0;
     wire [6:0] user_out;
     wire [5:0] joy1, joy2;
+    wire [1:0] analog, mbtn1, mbtn2;
+    wire [15:0] right1, right2;
     wire att1 = user_out[1], att2 = user_out[0], cmd = user_out[2], sclk = user_out[5];
     reg dat1 = 1, dat2 = 1;
     reg present1 = 1, present2 = 1;
     wire dat = (present1 ? dat1 : 1'b1) & (present2 ? dat2 : 1'b1);
     wire [6:0] user_in = {1'b1, 1'b1, dat, 1'b1, 3'b111};
     snac_psx_pad #(.CLK_HZ(5000000)) dut(.clk(clk), .enable(enable), .user_in(user_in),
-        .user_out(user_out), .joy1(joy1), .joy2(joy2));
+        .user_out(user_out), .joy1(joy1), .joy2(joy2),
+        .analog(analog), .right1(right1), .right2(right2), .mbtn1(mbtn1), .mbtn2(mbtn2));
 
     reg [7:0] resp1[0:8], resp2[0:8];
     reg [7:0] got1[0:8], got2[0:8];
@@ -77,13 +80,26 @@ module snac_psx_pad_tb;
         resp2[3] = 8'hff; resp2[4] = 8'hff; resp2[8] = 8'h80;
         wait_polls(2);
         check_joy(0, 0, "released");
+        // Mouse emulation: right stick of the analog pad, L1 / R3 as buttons.
+        resp2[5] = 8'h20; resp2[6] = 8'he0; resp1[4] = 8'hfb; resp2[3] = 8'hfb;
+        wait_polls(2);
+        if (analog !== 2'b10 || right2 !== 16'he020 || mbtn1 !== 2'b01 || mbtn2 !== 2'b10)
+            $fatal(1, "mouse outputs: analog=%b right2=%h mbtn1=%b mbtn2=%b", analog, right2, mbtn1, mbtn2);
+        resp2[5] = 8'h80; resp2[6] = 8'h80; resp1[4] = 8'hff; resp2[3] = 8'hff;
+        wait_polls(2);
+        if (mbtn1 !== 0 || mbtn2 !== 0) $fatal(1, "mouse buttons stuck");
+        // A device without the 5Ah handshake is not a pad: no input.
+        resp1[2] = 8'h00; resp1[3] = 8'h00; resp1[4] = 8'h00;
+        wait_polls(2);
+        check_joy(0, 0, "no 5Ah handshake");
+        resp1[2] = 8'h5a; resp1[3] = 8'hff; resp1[4] = 8'hff;
         // Unplugged ports read FFh (pull-up) and report nothing.
         present1 = 0; present2 = 0;
         wait_polls(2);
         check_joy(0, 0, "no pads");
         enable = 0; repeat (10) @(posedge clk);
         if (user_out !== 7'h7f || joy1 !== 0 || joy2 !== 0) $fatal(1, "disable did not release port");
-        $display("PASS: SNAC PlayStation pads: 01/42 polling, digital+analog mapping, both ports, unplugged, off");
+        $display("PASS: SNAC PlayStation pads: 01/42 polling, digital+analog mapping, 5Ah handshake, right stick/mouse buttons, both ports, unplugged, off");
         $finish;
     end
     initial begin #2000000000; $fatal(1, "SNAC timeout"); end

@@ -499,6 +499,9 @@ set_global_assignment -name VHDL_FILE ../../rtl/video_retrace_cdc.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pcm86.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/audio_decimator.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/snac_psx_pad.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/stick_mouse.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_atapi.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pc98_artic.sv
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/pegc_raster.vhd

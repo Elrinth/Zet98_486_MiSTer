@@ -12,6 +12,7 @@ org 0
     jmp near initialize
     jmp near boot
     db 'ZB'
+    dw int1f_handler              ; offset 8: INT 1Fh block move (tests hook it directly)
 state: db 0                       ; 1 ready, 2 absent, 3 read error, 4 geometry
 init_ss: dw 0
 init_sp: dw 0
@@ -27,6 +28,7 @@ result_flags: dw 0
 resident_handler: dw bios_int1b,RESIDENT_SEGMENT
 partition: dw 0
 candidate: dw 0
+int1f_previous: dd 0
 
 initialize:
     cli
@@ -39,6 +41,16 @@ initialize:
     mov ds,ax
     mov es,ax
     cld
+    ; INT 1Fh AH=90h (extended memory block move, used by HIMEM.SYS for all
+    ; XMS copies). The PC-9801VM BIOS cannot reach memory above 1 MB.
+    push es
+    xor ax,ax
+    mov es,ax
+    mov eax,[es:1fh*4]
+    mov [int1f_previous],eax
+    mov word [es:1fh*4],int1f_handler
+    mov word [es:1fh*4+2],cs
+    pop es
     mov byte [state],2
     call bios_present
     jc .return
@@ -372,6 +384,149 @@ bios_stack_int1b:
     mov sp,[cs:caller_sp]
     mov ax,[cs:caller_ax]
     iret
+
+; ---- INT 1Fh AH=90h: block move (NP2kai bios1f.c interface) -------------------
+; ES:BX -> descriptor table: source descriptor at +10h, destination at +18h
+; (16-bit limit, 24-bit base). SI/DI: offsets, CX: bytes (0 = 64 KiB).
+; Returns CF=0 on success. Done in a short 386 protected-mode trip with
+; interrupts off; A20 is enabled for the copy and restored afterwards. From
+; protected or V86 mode (e.g. EMM386 active) the previous handler is used.
+int1f_handler:
+    cmp ah,90h
+    je .move
+.chain:
+    jmp far [cs:int1f_previous]
+.move:
+    push eax
+    smsw ax
+    test al,1
+    pop eax
+    jnz .chain
+    push bp
+    mov bp,sp                       ; [bp+2] IP, [bp+4] CS, [bp+6] FLAGS
+    pushad
+    push ds
+    push es
+    push fs
+    push gs
+    cli
+    movzx ecx,cx
+    test ecx,ecx
+    jnz .count
+    mov ecx,10000h
+.count:
+    ; source/destination linear addresses and limit checks
+    movzx eax,word [es:bx+10h]      ; source limit
+    inc eax
+    movzx edx,si
+    add edx,ecx
+    cmp edx,eax
+    ja .fail
+    movzx eax,word [es:bx+18h]      ; destination limit
+    inc eax
+    movzx edx,di
+    add edx,ecx
+    cmp edx,eax
+    ja .fail
+    mov eax,[es:bx+12h]
+    and eax,0ffffffh
+    movzx esi,si
+    add esi,eax
+    mov eax,[es:bx+1ah]
+    and eax,0ffffffh
+    movzx edi,di
+    add edi,eax
+    ; A20: remember the state, enable for the copy
+    call int1f_a20_state
+    mov [cs:int1f_a20],al
+    out 0f2h,al
+    ; protected mode, flat data, copy, back with 64 KiB real-mode limits
+    sgdt [cs:int1f_old_gdtr]
+    lgdt [cs:int1f_gdtr]
+    mov eax,cr0
+    or al,1
+    mov cr0,eax
+    jmp 08h:.pm
+.pm:
+    mov ax,10h
+    mov ds,ax
+    mov es,ax
+    cld
+    mov edx,ecx
+    shr ecx,2
+    a32 rep movsd
+    mov ecx,edx
+    and ecx,3
+    a32 rep movsb
+    mov ax,18h
+    mov ds,ax
+    mov es,ax
+    mov fs,ax
+    mov gs,ax
+    mov eax,cr0
+    and al,0feh
+    mov cr0,eax
+    jmp RESIDENT_SEGMENT:.rm
+.rm:
+    lgdt [cs:int1f_old_gdtr]
+    cmp byte [cs:int1f_a20],0
+    jne .done
+    mov al,3                        ; A20 was off: switch it off again
+    out 0f6h,al
+.done:
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popad
+    and word [bp+6],0fffeh
+    pop bp
+    iret
+.fail:
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popad
+    or word [bp+6],1
+    pop bp
+    iret
+; AL = 1 when A20 is on (0000:0080 and FFFF:0090 differ, or stop aliasing).
+int1f_a20_state:
+    push ds
+    push es
+    xor ax,ax
+    mov ds,ax
+    dec ax
+    mov es,ax
+    mov ax,[ds:80h]
+    cmp ax,[es:90h]
+    jne .on
+    not word [ds:80h]
+    mov ax,[ds:80h]
+    cmp ax,[es:90h]
+    not word [ds:80h]
+    je .off
+.on:
+    mov al,1
+    jmp .out
+.off:
+    xor al,al
+.out:
+    pop es
+    pop ds
+    ret
+int1f_a20: db 0
+align 8
+int1f_gdt:
+    dq 0
+    dq 00009A0D8000FFFFh + 0          ; 08h code16, base D8000h (this segment)
+    dq 00CF92000000FFFFh              ; 10h data, flat 4 GB
+    dq 000092000000FFFFh              ; 18h data16, 64 KiB (real-mode limits)
+int1f_gdtr: dw 4*8-1
+    dd RESIDENT_SEGMENT*16 + int1f_gdt
+int1f_old_gdtr: dw 0
+    dd 0
 
 geometries: db 8,17, 8,32, 16,63, 16,32, 8,63, 4,17, 16,17, 8,33, 8,25, 4,32, 2,17, 0,0
 error_text: db 'Zet98: VHD boot failed. Use a raw 512-byte-sector PC-98 DOS image.',0
