@@ -450,13 +450,20 @@ curve keep small movements precise. A USB mouse (and the PS5 touchpad, which
 MiSTer reports as a mouse) keeps working; all sources add up
 (`rtl/stick_mouse.sv`, extra input of `Zet98/MOUSE/MOUSECONV.vhd`).
 
-`Show D0/D1 disk access: On / Off` defaults to **On** (status bit 5 clear). The
+`Show D0/D1 disk access`, `Show CD access` and `Show HDD access` (all **On** by
+default; status bits 5, 40, 41) switch each part of the access overlay;
+`Access icons: Off` (status bit 42) keeps only the text captions.
+HDD sits at the lower left and the CD just left of the floppy, all on the same
+rows (the second layout was removed to free FPGA area). The
 caption `READING D0...` or `READING D1...` (with cycling dots) appears at the lower
 right while that floppy drive is accessed, and `WRITING D0...`/`WRITING D1...`
-while its image is being written back, with a short hold for visibility. It
-follows the measured active raster, leaves blanking/sync unchanged, and
-disappears when idle. After B167 the animated disk icon was removed to free FPGA
-area for EGC and the audio filter; the text remains.
+while its image is being written back, under a turning floppy icon. Next to it,
+`READING CD...` under a spinning CD icon shows CD-ROM data reads and CD audio
+playback, and `READING HDD...`/`WRITING HDD...` under a hard-disk icon shows
+IDE hard-disk access. Each has a short hold for visibility, follows the measured
+active raster, leaves blanking/sync unchanged, and disappears when idle. The
+self-drawn icons (16x16, 8 frames, shown at 2x) come from
+`scripts/make_overlay_icons.py` and use one RAM block.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

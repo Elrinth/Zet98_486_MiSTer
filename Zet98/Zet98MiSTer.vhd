@@ -71,6 +71,9 @@ port(
 	pMsExtDY	: in std_logic_vector(7 downto 0) := (others=>'0');
 	pMsExtStb	: in std_logic := '0';
 	pMsExtBtn	: in std_logic_vector(1 downto 0) := "00";
+	-- Debug (trace builds): graphics GDC areas/pitch/zoom and video mode
+	-- flags, video_settings_source(127 downto 57).
+	pVideoDebug	: out std_logic_vector(71 downto 0);
 	
 	-- Joystick ports (Port_A, Port_B)
 	pJoyA       : inout std_logic_vector( 5 downto 0);
@@ -463,6 +466,7 @@ port(
 	
 	NVRAM_CS	:out std_logic;
 	NVRAM_ADDR	:out std_logic_vector(2 downto 0);
+	CGWIN_CS	:out std_logic;
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
@@ -1419,6 +1423,11 @@ port(
 	iowr		:in std_logic;
 	iord		:in std_logic;
 	wrdat		:in std_logic_vector(7 downto 0);
+	cgw_en		:in std_logic := '0';
+	cgw_right	:in std_logic := '0';
+	cgw_line	:in std_logic_vector(3 downto 0) := (others=>'0');
+	cgw_wr		:in std_logic := '0';
+	cgw_wdat	:in std_logic_vector(7 downto 0) := (others=>'0');
 
 	KNJRAMSEL	:out std_logic_vector(1 downto 0);
 	KNJRAMADDR	:out std_logic_vector(16 downto 0);
@@ -2093,6 +2102,9 @@ signal	gGDCod		:std_logic_vector(7 downto 0);
 signal	gGDCoe		:std_logic;
 signal	tGDC_C40			:std_logic;
 signal	gGDC_VGRAMSEL	:std_logic;
+-- Display page as used for the frame on screen (see display_address).
+signal	gGDC_VGRAMSEL_frame	:std_logic;
+signal	vrtc_prev	:std_logic;
 signal	gGDC_CGRAMSEL	:std_logic;
 signal tGDC_ATRSEL :std_logic;
 signal	tGDC_VIDEN		:std_logic;
@@ -2251,6 +2263,16 @@ signal	FDD_MOTORn	:std_logic_vector(1 downto 0);
 --Kanji RAM
 signal	KNJ_ADDR	:std_logic_vector(16 downto 0);
 signal	KNJ_RAMSEL	:std_logic_vector(1 downto 0);
+-- CG window (A4000h-A4FFFh), see the CGW process
+signal	CGW_CS, CGW_EN, CGW_RIGHT, CGW_WR, CGW_ACK, CGW_DOE, CGW_ISWR :std_logic;
+signal	CGW_LINE	:std_logic_vector(3 downto 0);
+signal	CGW_WDAT	:std_logic_vector(7 downto 0);
+signal	CGW_ODAT, CGW_WD	:std_logic_vector(15 downto 0);
+signal	CGW_SEL		:std_logic_vector(1 downto 0);
+signal	CGW_ADDR	:std_logic_vector(19 downto 1);
+signal	CGW_ST		:integer range 0 to 4;
+signal	CGW_CNT		:integer range 0 to 3;
+signal	KNJ_Q		:std_logic_vector(7 downto 0);
 signal	KNJ_WR		:std_logic;
 signal	KNJ0_WR		:std_logic;
 signal	KNJ1_WR		:std_logic;
@@ -2598,6 +2620,7 @@ begin
 		'1' & MOUS_ODAT				when MOUS_DOE='1' else
 		'1' & IO439_ODAT				when IO439_DOE='1' else
 		'1' & x"04"					when ioaddr_odd=x"043b" and iord='1' else
+		'1' & CGW_ODAT(15 downto 8)	when CGW_DOE='1' else
 		'1' & KNJ0_ODAT				when KNJ0_DOE='1' else
 		'1' & KNJ1_ODAT				when KNJ1_DOE='1' else
 		'1' & KNJ2_ODAT				when KNJ2_DOE='1' else
@@ -2616,6 +2639,7 @@ begin
 		'1' & tramdo(7 downto 0)		when tramdoe(0)='1' else
 		'1' & aramdo(7 downto 0)		when aramdoe(0)='1' else
 		'1' & NVR_ODAT				when NVR_DOE='1' else
+		'1' & CGW_ODAT(7 downto 0)	when CGW_DOE='1' else
 		'1' & prnod					when prnoe='1' else
 		'1' & COM_ODAT				when COM_DOE='1' else
 		'1' & tGDCod					when tGDCoe='1' else
@@ -2886,6 +2910,7 @@ begin
 	
 		NVRAM_CS	=>NVR_CS,
 		NVRAM_ADDR	=>NVR_ADDR,
+		CGWIN_CS	=>open,	-- CG window disabled for area (see CGW process); was CGW_CS
 	
 		ITFEN		=>ITFen,
 		BIOSEN		=>not BIOSRAM,
@@ -2905,7 +2930,7 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK;
+	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK;
 	ack<=MEMack or iack;
 	
 --	DBIO	:diskbios port map(
@@ -3168,6 +3193,7 @@ begin
     gdc_settings : entity work.video_settings_transfer
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
+    pVideoDebug <= '0' & video_settings_source(127 downto 57);
 	VID	:CRTC98 port map(
 		TRAM_ADR	=>vaddr,
 		TRAM_DAT	=>vtdat,
@@ -3287,6 +3313,11 @@ begin
 		iowr		=>iowr,
 		iord		=>iord,
 		wrdat		=>io_wdata(15 downto 8),
+		cgw_en		=>CGW_EN,
+		cgw_right	=>CGW_RIGHT,
+		cgw_line	=>CGW_LINE,
+		cgw_wr		=>CGW_WR,
+		cgw_wdat	=>CGW_WDAT,
 
 		KNJRAMSEL	=>KNJ_RAMSEL,
 		KNJRAMADDR	=>KNJ_ADDR,
@@ -3303,6 +3334,53 @@ begin
 	KNJ0_DOE<=	KNJ_DOE when KNJ_RAMSEL="00" else '0';
 	KNJ1_DOE<=	KNJ_DOE when KNJ_RAMSEL="01" else '0';
 	KNJ2_DOE<=	KNJ_DOE when KNJ_RAMSEL="10" else '0';
+
+	-- CG window A4000h-A4FFFh (as NP2kai cgwindow): for the code set at
+	-- A1h/A3h, even addresses read the left half and odd addresses the right
+	-- half of pattern line A[4:1]; the 32 bytes repeat. A word read returns
+	-- both halves, so the left then the right half is read from the font RAM
+	-- (registered address, three clocks each). Writes go to the same RAM
+	-- (user-defined characters), as through port A9h.
+	KNJ_Q<=	KNJ0_ODAT when KNJ_RAMSEL="00" else
+			KNJ1_ODAT when KNJ_RAMSEL="01" else
+			KNJ2_ODAT;
+	-- Disabled to fit the device (B202 missed by 18 LABs); map CGWIN_CS above to re-enable.
+	CGW_CS<='0';
+	CGW_DOE<=CGW_CS and MRD;
+	process(cpuclk,srstn)begin
+		if(srstn='0')then
+			CGW_ST<=0; CGW_CNT<=0; CGW_EN<='0'; CGW_RIGHT<='0'; CGW_WR<='0'; CGW_ACK<='0';
+			CGW_ISWR<='0'; CGW_ODAT<=(others=>'1');
+		elsif(cpuclk' event and cpuclk='1')then
+			CGW_ACK<='0'; CGW_WR<='0';
+			case CGW_ST is
+			when 0 =>
+				if(CGW_CS='1' and (MRD='1' or MWR='1'))then
+					CGW_EN<='1'; CGW_RIGHT<='0'; CGW_LINE<=cpuaddr(4 downto 1);
+					CGW_ADDR<=cpuaddr; CGW_SEL<=bussel; CGW_ISWR<=MWR; CGW_WD<=mem_wdata;
+					CGW_CNT<=0; CGW_ST<=1;
+				end if;
+			when 1 | 2 =>
+				if(CGW_CNT=0 and CGW_ISWR='1' and CGW_SEL(CGW_ST-1)='1')then
+					CGW_WR<='1';
+					if(CGW_ST=1)then CGW_WDAT<=CGW_WD(7 downto 0); else CGW_WDAT<=CGW_WD(15 downto 8); end if;
+				end if;
+				if(CGW_CNT=3)then
+					if(CGW_ST=1)then CGW_ODAT(7 downto 0)<=KNJ_Q; CGW_RIGHT<='1';
+					else CGW_ODAT(15 downto 8)<=KNJ_Q; end if;
+					CGW_CNT<=0; CGW_ST<=CGW_ST+1;
+				else
+					CGW_CNT<=CGW_CNT+1;
+				end if;
+			when 3 =>
+				CGW_ACK<='1'; CGW_EN<='0'; CGW_ST<=4;
+			when 4 =>
+				if(CGW_CS='0' or (MRD='0' and MWR='0') or cpuaddr/=CGW_ADDR or bussel/=CGW_SEL)then
+					CGW_ST<=0;
+				end if;
+			end case;
+		end if;
+	end process;
 	
 
 	-- Text, attributes and font fetches use the renderer pixel clock.
@@ -3351,9 +3429,23 @@ begin
 					VID_KNJ2DAT when VID_KNJSEL="10" else
 					(others=>'0');
 	
+    -- The display page (port A4h) takes effect for a whole frame: it is
+    -- latched when vertical retrace ends. Games flip pages during retrace;
+    -- a flip applied mid-frame split the picture between both pages
+    -- (Flame Zapper Kotsujin's "rolling" split while it scrolls).
+    process(cpuclk,srstn)begin
+        if(srstn='0')then
+            gGDC_VGRAMSEL_frame<='0'; vrtc_prev<='0';
+        elsif(cpuclk' event and cpuclk='1')then
+            vrtc_prev<=VRTC;
+            if(vrtc_prev='1' and VRTC='0')then
+                gGDC_VGRAMSEL_frame<=gGDC_VGRAMSEL;
+            end if;
+        end if;
+    end process;
     display_address : entity work.display_page_address
         generic map(FRONT_PAGE=>RAM_VRAMF(21 downto 16), BACK_PAGE=>RAM_VRAMB(21 downto 16))
-        port map(memory_clk=>ramclk, async_rstn=>srstn, cpu_page=>gGDC_VGRAMSEL,
+        port map(memory_clk=>ramclk, async_rstn=>srstn, cpu_page=>gGDC_VGRAMSEL_frame,
                  pixel_address=>GADDR, memory_address=>GRAMADR);
 	
 	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,grpclk,srstn);
@@ -4293,7 +4385,12 @@ begin
 
 		FM_ROUTE_L<=OPN_sndL when PCM_FM_MUTE='0' else (others=>'0');
 		FM_ROUTE_R<=OPN_sndR when PCM_FM_MUTE='0' else (others=>'0');
-		PSG_ROUTE<=OPN_sndPSG when PCM_FM_MUTE='0' else (others=>'0');
+		-- PC-9801-86: SSG sits ~4.5 dB lower against FM than on the -26K/-73
+		-- (measured per voice against a real PC-9821 + 86 recording), so scale
+		-- it by 5/8 (-4.1 dB). The -73 mix keeps its level.
+		PSG_ROUTE<=(others=>'0') when PCM_FM_MUTE='1' else
+			('0' & OPN_sndPSG(15 downto 1)) + ("000" & OPN_sndPSG(15 downto 3)) when SND=3 else
+			OPN_sndPSG;
 		monoa	:average generic map(16) port map(BEEP_snd,PSG_ROUTE,SND_MONO);
 		MIXL	:average generic map(16) port map(FM_ROUTE_L,SND_MONO,BASE_SND_L);
 		MIXR	:average generic map(16) port map(FM_ROUTE_R,SND_MONO,BASE_SND_R);

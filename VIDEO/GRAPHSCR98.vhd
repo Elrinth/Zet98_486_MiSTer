@@ -108,6 +108,15 @@ signal base0_pixel, base1_pixel : std_logic_vector(13 downto 0);
 signal length0_pixel : std_logic_vector(9 downto 0);
 signal pitch_pixel : std_logic_vector(7 downto 0);
 signal repeat_pixel : std_logic_vector(4 downto 0);
+-- Display parameters for the frame being scanned: taken at its first line so
+-- that GDC writes during the frame apply from the next frame on, like the
+-- start address (a mid-frame change split the picture while games scroll).
+signal base1_frame : std_logic_vector(13 downto 0);
+signal pitch_frame : std_logic_vector(7 downto 0);
+signal repeat_frame : std_logic_vector(4 downto 0);
+signal length0_frame : integer range 0 to 1023;
+signal frame_seen : std_logic := '0';    -- a frame start was scanned since reset
+signal frame_start : std_logic := '0';   -- one clock at the first visible line
 
 begin
 	buf0	:graphbuf816 port map(clk,WDAT0,RADR,WADR,BUFWE,RDAT0);
@@ -127,6 +136,12 @@ begin
         elsif rising_edge(clk) then
             base0_pixel<=BASEADDR0;base1_pixel<=BASEADDR1;
             length0_pixel<=LINENUM0;pitch_pixel<=PITCH;repeat_pixel<=DOTPLINE;
+            -- Until the first frame start, the frame copies follow the live
+            -- settings (reset may release in the middle of a frame).
+            if frame_seen='0' or frame_start='1' then
+                base1_frame<=base1_pixel; pitch_frame<=pitch_pixel; repeat_frame<=repeat_pixel;
+                length0_frame<=iLINENUM0;
+            end if;
         end if;
     end process;
 	
@@ -145,38 +160,47 @@ begin
 			LINEEN<='1';
 			LINENUM:=1;
             first_partition:=true;
-			LINECOUNT<="00000";
+			LINECOUNT<="00000"; frame_seen<='0'; frame_start<='0';
 		elsif(clk' event and clk='1')then
-			BUFWE<='0';
+			BUFWE<='0'; frame_start<='0';
 			case BUFSTATE is
 			when BS_IDLE =>
 				if(HUCOUNT=0 and UCOUNT=0 and VCOUNT>=VIV)then
 					if(VCOUNT=VIV)then
                         GRAMADRb<=base0_pixel;
                         C0ADDR<=base0_pixel;
+                        frame_seen<='1'; frame_start<='1';
                         LINEEN<='1';
                         LINENUM:=1;
                         first_partition:=true;
                         LINECOUNT<=repeat_pixel;
                         BUFSTATE<=BS_READ;
                         GRAMRD<='1';
-                    elsif(LINECOUNT="00000")then
-                        -- Count logical rows upwards; repeated raster lines
-                        -- neither consume a partition row nor request SDRAM.
-                        if first_partition and LINENUM=iLINENUM0 then
-                            GRAMADRb<=base1_pixel;
-                            C0ADDR<=base1_pixel;
-                            first_partition:=false;
-                        else
-                            GRAMADRb<=C0ADDR+pitch_pixel;
-                            C0ADDR<=C0ADDR+pitch_pixel;
-                        end if;
+                    elsif first_partition and LINENUM=length0_frame then
+                        -- The area length (LEN) counts raster lines, repeated
+                        -- lines included (as NP2kai's "remain"): area 2 starts
+                        -- after LEN lines with a fresh line-repeat group.
+                        -- Counting logical rows switched too late in 200-line
+                        -- modes (Flame Zapper Kotsujin's rolling split).
+                        GRAMADRb<=base1_frame;
+                        C0ADDR<=base1_frame;
+                        first_partition:=false;
                         BUFSTATE<=BS_READ;
                         GRAMRD<='1';
                         LINENUM:=(LINENUM+1) mod 1024;
-                        LINECOUNT<=repeat_pixel;
+                        LINECOUNT<=repeat_frame;
+                        LINEEN<='1';
+                    elsif(LINECOUNT="00000")then
+                        -- Repeated raster lines do not request SDRAM.
+                        GRAMADRb<=C0ADDR+pitch_frame;
+                        C0ADDR<=C0ADDR+pitch_frame;
+                        BUFSTATE<=BS_READ;
+                        GRAMRD<='1';
+                        LINENUM:=(LINENUM+1) mod 1024;
+                        LINECOUNT<=repeat_frame;
                         LINEEN<='1';
 					else
+						LINENUM:=(LINENUM+1) mod 1024;
 						LINECOUNT<=LINECOUNT-1;
 						LINEEN<='0';
 					end if;

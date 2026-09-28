@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Four-plane EGC word shifter. Native CPU byte order, not display bit order.
 // advance is one accepted source word (VRAM read or CPU write, chosen upstream).
+// byte_mode advances by one byte instead (NP2kai shiftinput_byte/egcsftb): the
+// eight pixels of lane byte_lane go in, and eight pixels come out in that lane
+// (copied to both lanes; the caller writes only the addressed byte).
 // The result/mask stays latched until the next advance or explicit reload.
 module pc98_egc_shift (
     input  wire        clk, reset, reload, advance,
+    input  wire        byte_mode, byte_lane,
     input  wire [15:0] shift_control, bit_length,
     input  wire [63:0] source_words,
     output reg  [63:0] shifted_words,
@@ -17,12 +21,17 @@ module pc98_egc_shift (
     reg [3:0] source_skip, destination_skip;
     reg [12:0] remaining;
     wire reverse = shift_control[12];
-    wire [4:0] needed = 5'd16 - {1'b0, destination_skip};
+    // Byte mode: a source skip of 8+ drops the whole input byte, a destination
+    // skip of 8+ produces an empty output byte (both then shrink by 8).
+    wire src_byte_skip = byte_mode && source_skip[3];
+    wire dst_byte_skip = byte_mode && destination_skip[3];
+    wire [4:0] width = byte_mode ? 5'd8 : 5'd16;
+    wire [4:0] needed = width - {1'b0, destination_skip};
     wire [5:0] available = {1'b0, pending_count} +
-                            (6'd16 - {2'b0, source_skip});
+                            (src_byte_skip ? 6'd0 : {1'b0, width} - {2'b0, source_skip});
     wire enough = available >= {1'b0, needed};
     wire row_done = remaining <= {8'b0, needed};
-    wire [63:0] traversed;
+    wire [63:0] traversed, traversed_word, traversed_byte;
     wire [31:0] joined [0:3];
     wire [15:0] positioned [0:3];
     wire [63:0] next_words;
@@ -35,10 +44,19 @@ module pc98_egc_shift (
             // Reverse: high byte LSB first, then low byte LSB first.
             localparam integer FORWARD_BIT = (b < 8) ? 7-b : 23-b;
             localparam integer REVERSE_BIT = (b < 8) ? b+8 : b-8;
-            assign traversed[16*p+b] = reverse ?
+            assign traversed_word[16*p+b] = reverse ?
                 source_words[16*p+REVERSE_BIT] : source_words[16*p+FORWARD_BIT];
-            assign next_words[16*p+b] = reverse ?
-                positioned[p][REVERSE_BIT] : positioned[p][FORWARD_BIT];
+            // Byte mode: forward MSB first, reverse LSB first, within the lane.
+            if (b < 8) begin: lane_bits
+                assign traversed_byte[16*p+b] = reverse ?
+                    source_words[16*p + 8*byte_lane + b] : source_words[16*p + 8*byte_lane + 7-b];
+            end else begin: lane_pad
+                assign traversed_byte[16*p+b] = 1'b0;
+            end
+            assign traversed[16*p+b] = byte_mode ? traversed_byte[16*p+b] : traversed_word[16*p+b];
+            assign next_words[16*p+b] = byte_mode ?
+                (reverse ? positioned[p][b & 7] : positioned[p][7 - (b & 7)]) :
+                (reverse ? positioned[p][REVERSE_BIT] : positioned[p][FORWARD_BIT]);
         end
         assign joined[p] = {16'b0, pending[p]} |
             ({16'b0, (traversed[16*p +:16] >> source_skip)} << pending_count);
@@ -49,8 +67,9 @@ module pc98_egc_shift (
         localparam integer REVERSE_BIT = (b < 8) ? b+8 : b-8;
         assign traversal_mask[b] = (b >= destination_skip) &&
                                    ((b - destination_skip) < remaining);
-        assign next_mask[b] = reverse ? traversal_mask[REVERSE_BIT] :
-                                      traversal_mask[FORWARD_BIT];
+        assign next_mask[b] = dst_byte_skip ? 1'b0 : byte_mode ?
+            (reverse ? traversal_mask[b & 7] : traversal_mask[7 - (b & 7)]) :
+            (reverse ? traversal_mask[REVERSE_BIT] : traversal_mask[FORWARD_BIT]);
     end endgenerate
 
     integer plane;
@@ -65,12 +84,21 @@ module pc98_egc_shift (
             clip_mask <= 0;
             result_valid <= 0;
         end else if (advance) begin
-            if (!enough) begin
+            if (dst_byte_skip) begin
+                // Empty output byte; the input byte still joins the queue.
+                for (plane=0; plane<4; plane=plane+1)
+                    pending[plane] <= joined[plane][15:0];
+                pending_count <= available[4:0];
+                source_skip <= src_byte_skip ? source_skip - 4'd8 : 4'd0;
+                destination_skip <= destination_skip - 4'd8;
+                clip_mask <= 0;
+                result_valid <= 0;
+            end else if (!enough) begin
                 // Priming read: retain all pixels and leave destination intact.
                 for (plane=0; plane<4; plane=plane+1)
                     pending[plane] <= joined[plane][15:0];
                 pending_count <= available[4:0];
-                source_skip <= 0;
+                source_skip <= src_byte_skip ? source_skip - 4'd8 : 4'd0;
                 clip_mask <= 0;
                 result_valid <= 0;
             end else begin

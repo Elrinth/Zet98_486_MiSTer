@@ -21,12 +21,15 @@ module ide_cd_tb;
     reg cd_mounted = 0;
     reg [63:0] cd_size = 0;
     wire signed [15:0] cd_audio_l, cd_audio_r;
+    wire [5:0] cd_blk_cnt;
+    wire [1:0] cd_activity;
+    wire [91:0] cd_trace;
     pc98_ide dut(.*);
 
     // CD host: sector n byte i = n ^ i (ISO layout).
     always @(posedge clk) if (cd_rd && !cd_ack) begin
         repeat (2) @(posedge clk); cd_ack <= 1;
-        for (integer i = 0; i < 512; i = i + 1) begin
+        for (integer i = 0; i < 512 * (cd_blk_cnt + 1); i = i + 1) begin
             @(posedge clk); cd_buff_addr <= i; cd_buff_dout <= ((cd_lba * 512 + i) / 2048) ^ i[7:0]; cd_buff_wr <= 1;
         end
         @(posedge clk); cd_buff_wr <= 0; @(posedge clk); cd_ack <= 0;

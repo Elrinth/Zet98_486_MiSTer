@@ -214,7 +214,14 @@ module pc98_ao486 #(
         .io_write_address(io_write_address), .io_write_length(io_write_length),
         .io_write_data(io_write_data), .io_write_done(io_write_done)
     );
+// The CPU snapshot (EIP, last I/O) also feeds the trace logger in trace builds.
 `ifdef ZET98_Z486_DEBUG
+`define ZET98_CPU_SNAPSHOT
+`endif
+`ifdef ZET98_CD_TRACE
+`define ZET98_CPU_SNAPSHOT
+`endif
+`ifdef ZET98_CPU_SNAPSHOT
     reg [15:0] debug_completed, debug_io_address, debug_io_data;
     reg debug_previous_ack;
     always @(posedge clk) begin

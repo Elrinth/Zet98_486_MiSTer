@@ -109,6 +109,10 @@ module ao486_memory_bridge_tb #(
         end
     end
 
+    function automatic bit in_vram(input reg [31:0] addr);
+        in_vram = (addr >= 32'ha8000 && addr <= 32'hbffff) ||
+                  (addr >= 32'he0000 && addr <= 32'he7fff);
+    endfunction
     task automatic enqueue(input bit wr, input reg [31:0] addr,
                            input reg [3:0] be, input reg [31:0] data,
                            input integer beats);
@@ -119,9 +123,14 @@ module ao486_memory_bridge_tb #(
             for (beat = 0; beat < beats; beat = beat + 1) begin
                 a = addr + beat * 4;
                 for (halfword = 0; halfword < 2; halfword = halfword + 1) begin
-                    sel = wr ? ((be >> (halfword * 2)) & 3) :
-                        (NARROW_READS && beats == 1 && be != 0 &&
-                         ((be >> (halfword * 2)) & 3) == 0) ? 0 : 3;
+                    // Writes carry their byte lanes; reads do too inside the
+                    // graphics VRAM windows (EGC byte shifting), where a
+                    // single-beat narrow read skips its empty half. Other
+                    // reads are full words.
+                    sel = (NARROW_READS && !wr && beats == 1 && be != 0 &&
+                           ((be >> (halfword * 2)) & 3) == 0) ? 0 :
+                          (wr || (NARROW_READS && beats == 1 && be != 0 && in_vram(a))) ?
+                              ((be >> (halfword * 2)) & 3) : 3;
                     if (sel != 0) begin
                         expected_address[bus_tail] = a + halfword * 2;
                         expected_select[bus_tail] = sel;
@@ -199,13 +208,15 @@ module ao486_memory_bridge_tb #(
         for (delay_mode = 0; delay_mode < 3; delay_mode = delay_mode + 1) begin
             stall_cycles = delay_mode * 3;
             ack_hold_cycles = delay_mode * 2;
-            for (address_case = 0; address_case < 5; address_case = address_case + 1) begin
+            for (address_case = 0; address_case < 7; address_case = address_case + 1) begin
                 case (address_case)
                     0: base = 32'h0000_0000;
                     1: base = 32'h000f_fffc;
                     2: base = 32'h0010_0000;
                     3: base = 32'hfffe_0020;
                     4: base = 32'hffff_fff0;
+                    5: base = 32'h000a_8000;      // graphics VRAM: byte-precise reads
+                    6: base = 32'h000e_7ffc;
                 endcase
                 for (be = 0; be < 16; be = be + 1) begin
                     issue(1, base, be, 32'h3c96a55a ^ (be * 32'h07030109), 1);

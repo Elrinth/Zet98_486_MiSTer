@@ -8,6 +8,9 @@ module pc98_egc_write (
     input wire [15:0] pixel_mask, clip_mask,
     input wire [3:0] plane_enable,
     input wire [1:0] byte_enable,
+    // NP2kai egc_opeb: a byte write in pattern mode with no fixed color uses
+    // the shifted source (egc_src), where a word write uses the pattern.
+    input wire byte_access,
     output wire [63:0] base_words, xor_mask_words,
     output wire load_pattern_on_write, configuration_valid
 );
@@ -22,7 +25,9 @@ module pc98_egc_write (
     wire [63:0] selected_source = write_mode == 0 ? {4{cpu_writedata}} : shifted_source;
     // NP2's ROP read-load path uses the shifted source as P. Its pattern-only
     // write path uses the retained raw pattern. Keep that distinction explicit.
+    wire byte_source_pattern = byte_access && write_mode == 2 && color_mode == 0;
     wire [63:0] selected_pattern = color_mode == 1 ? background_words :
+        byte_source_pattern ? shifted_source :
         color_mode == 2 ? foreground_words :
         (write_mode == 1 && pattern_load == 1) ? shifted_source : pattern_words;
     wire [7:0] selected_operation = write_mode == 0 ? 8'hf0 :
@@ -32,7 +37,7 @@ module pc98_egc_write (
     // SDRAMC will read, not a CPU-side word left over from a previous access.
     // Substitute P=D in the truth table before computing coefficients. This
     // keeps the current memory-side read/modify/write transaction sufficient.
-    wire destination_pattern = color_mode == 0 && pattern_load == 2;
+    wire destination_pattern = color_mode == 0 && pattern_load == 2 && !byte_source_pattern;
     wire [7:0] effective_operation = destination_pattern ?
         { {2{selected_operation[7]}}, {2{selected_operation[4]}},
           {2{selected_operation[3]}}, {2{selected_operation[0]}} } : selected_operation;

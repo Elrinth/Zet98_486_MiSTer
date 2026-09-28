@@ -14,6 +14,9 @@ module atapi_tb;
     reg [63:0] image_size = 0;
     wire [31:0] sd_lba;
     wire sd_rd;
+    wire [5:0] sd_blk_cnt;
+    wire [1:0] activity;
+    wire [91:0] trace;
     reg sd_ack = 0, sd_buff_wr = 0;
     reg [8:0] sd_buff_addr = 0;
     reg [7:0] sd_buff_dout = 0;
@@ -28,7 +31,7 @@ module atapi_tb;
         if (sd_rd && !sd_ack) begin
             repeat (3) @(posedge clk);
             sd_ack <= 1;
-            for (integer i = 0; i < 512; i = i + 1) begin
+            for (integer i = 0; i < 512 * (sd_blk_cnt + 1); i = i + 1) begin
                 @(posedge clk);
                 sd_buff_addr <= i; sd_buff_dout <= img_byte(sd_lba * 512 + i); sd_buff_wr <= 1;
             end
@@ -219,7 +222,7 @@ module atapi_tb;
             packet({8'h28, 8'h00, 32'd7, 8'h00, 16'd1, 24'h0}); data_in("pcd read", bytes);
             for (i = 0; i < 2048; i++) if (resp[i] !== data_byte(7, i)) $fatal(1, "pcd sector byte %0d", i);
             done_ok("pcd read done");
-            subq(a); if (a !== 8'h13) $fatal(1, "status after read %h", a);
+            subq(a); if (a !== 8'h15) $fatal(1, "status after read %h (no audio yet: 15h)", a);
             // PLAY AUDIO MSF in BCD: 00:02:50 (lba 50) .. 00:02:53 -> 3 sectors.
             exp_lba = 50; exp_k = 0; got = 0; last_l = 0; monitor = 1;
             packet({8'h47, 8'h00, 8'h00, 8'h00, 8'h02, 8'h50, 8'h00, 8'h02, 8'h53, 24'h0}); done_ok("play msf");
@@ -246,7 +249,7 @@ module atapi_tb;
             packet({8'h4b, 56'h0, 8'h01, 24'h0}); done_ok("resume");
             wait_status(8'h13, 400);
             if (got != 2 * 588) $fatal(1, "pause/resume played %0d samples", got);
-            // STOP PLAY and READ both end playback.
+            // STOP PLAY ends playback; a data READ does not.
             exp_lba = 55; exp_k = 0; got = 0; last_l = 0;
             packet({8'h45, 8'h00, 32'd55, 8'h00, 16'd20, 24'h0}); done_ok("play long");
             repeat (6000) @(negedge clk);
@@ -258,16 +261,31 @@ module atapi_tb;
             repeat (6000) @(negedge clk);
             if (got == 0) $fatal(1, "second play silent");
             monitor = 0;
-            packet({8'h28, 8'h00, 32'd3, 8'h00, 16'd1, 24'h0}); data_in("read stops", bytes);
+            packet({8'h28, 8'h00, 32'd3, 8'h00, 16'd1, 24'h0}); data_in("read during play", bytes);
             for (i = 0; i < 2048; i++) if (resp[i] !== data_byte(3, i)) $fatal(1, "read during play byte %0d", i);
-            done_ok("read stops done");
-            subq(a); if (a !== 8'h13) $fatal(1, "status after read-stop %h", a);
+            done_ok("read during play done");
+            subq(a); if (a !== 8'h11) $fatal(1, "status after a read during play %h", a);
+            w = dut.rp; repeat (6000) @(negedge clk); if (dut.rp == w) $fatal(1, "audio stopped by a data read");
+            packet({8'h4e, 88'h0}); done_ok("stop before resume test"); repeat (100) @(negedge clk);   // output clears at the next sample tick
+            // A data read keeps the music playing; a PLAY from the reported
+            // position then continues the stream (no repeat, no skip, no gap).
+            monitor=1; exp_lba=70; exp_k=0; got=0; last_l=0;
+            packet({8'h45, 8'h00, 32'd70, 8'h00, 16'd10, 24'h0}); done_ok("play for resume");
+            repeat (20000) @(negedge clk);
+            packet({8'h28, 8'h00, 32'd5, 8'h00, 16'd1, 24'h0}); data_in("read mid-play", bytes);
+            done_ok("read mid-play done");
+            subq(a); if (a !== 8'h11) $fatal(1, "status after mid-play read %h", a);
+            w = dut.play_pos;
+            if (w < 70 || w > 79) $fatal(1, "position after read %0d", w);
+            packet({8'h45, 8'h00, 32'(w), 8'h00, 16'(80 - w), 24'h0}); done_ok("resume play");
+            wait_status(8'h13, 400);
+            if (got != 10 * 588) $fatal(1, "resumed stream played %0d samples, want %0d", got, 10 * 588);
             // End beyond the disc is clipped to the lead-out.
             monitor = 1; exp_lba = 98; exp_k = 0; got = 0; last_l = 0;
             packet({8'h45, 8'h00, 32'd98, 8'h00, 16'd50, 24'h0}); done_ok("play past end");
             wait_status(8'h13, 400);
             if (got != 2 * 588) $fatal(1, "clipped play %0d samples", got);
-            $display("PASS: ATAPI PCD: capacity, multi-track TOC LBA/MSF/BCD/start/AA/clip, data read, PLAY MSF (BCD), PLAY(10), sub-channel, pause/resume, stop, read stops play, lead-out clip");
+            $display("PASS: ATAPI PCD: capacity, multi-track TOC LBA/MSF/BCD/start/AA/clip, data read, PLAY MSF (BCD), PLAY(10), sub-channel, pause/resume, stop, play continues through data reads, PLAY at the current position continues seamlessly, lead-out clip");
         end
     endtask
     string path;

@@ -28,10 +28,18 @@ param(
     [switch]$MidiUart,
     [switch]$PackedGraphics,
     [switch]$Z486DebugUart,
+    # CD trace debug build: CD-ROM events on the UART (replaces MIDI).
+    [switch]$CdTrace,
     [ValidateRange(1, 99)]
     [int]$Seed = 6,
     [switch]$StartOnly,
-    [switch]$PrepareOnly
+    [switch]$PrepareOnly,
+    # Analysis & Synthesis only: a quick ALM estimate (map report), no RBF.
+    [switch]$MapOnly,
+    # Minutes without Quartus output before the watchdog stops it. Debug builds
+    # route more slowly (the router can stay silent for over 25 minutes).
+    [ValidateRange(10, 120)]
+    [int]$StallMinutes = 25
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +98,7 @@ try {
     $LowMemoryCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'low-memory-cache-kb.txt')
     [bool]$RawIde | Set-Content -LiteralPath (Join-Path $buildRoot 'raw-ide.txt')
     [bool]$Z486DebugUart | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-debug-uart.txt')
+    [bool]$CdTrace | Set-Content -LiteralPath (Join-Path $buildRoot 'cd-trace.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
     [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
     $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
@@ -101,6 +110,11 @@ try {
         -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
+    }
+    if ($CdTrace) {
+        if ($MidiUart -or $Z486DebugUart) { throw 'CdTrace uses the UART: build it without MidiUart/Z486DebugUart.' }
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
+            -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_CD_TRACE=1"
     }
     if ($MidiUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
@@ -207,24 +221,26 @@ try {
     # Linux filesystem: Windows bind shares can stall these accesses in 9P.
     # Keep the source snapshot and export the complete database for TimeQuest.
     $containerName = 'zet98-' + $buildName
-    $compileCommand = 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer'
+    $compileCommand = if ($MapOnly) { 'quartus_map Zet98 -c release-Zet98MiSTer' } else { 'quartus_sh --flow compile Zet98 -c release-Zet98MiSTer' }
     if ($Cpu -eq 'z486') {
         # QSF is not parsed like a sourced Tcl script: braces can become part
         # of the target name. Verify Quartus sees the intended exact targets.
         $compileCommand = 'quartus_sh -t ../../scripts/check-z486-fit-assignments.tcl && ' + $compileCommand
     }
-    $requireUart = if ($MidiUart -or $Z486DebugUart) { 1 } else { 0 }
-    $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
-    # Physical FEC return buffers must survive fitting (as in the B161 flow).
-    $compileCommand += ' && quartus_cdb -t ../../scripts/check-fec-route.tcl'
-    # The watchdog stops Quartus after 25 silent minutes (exit 125) or 150 minutes
+    $requireUart = if ($MidiUart -or $Z486DebugUart -or $CdTrace) { 1 } else { 0 }
+    if (-not $MapOnly) {
+        $compileCommand += " && quartus_cdb -t ../../scripts/check-hps-peripherals.tcl $requireUart"
+        # Physical FEC return buffers must survive fitting (as in the B161 flow).
+        $compileCommand += ' && quartus_cdb -t ../../scripts/check-fec-route.tcl'
+    }
+    # The watchdog stops Quartus after -StallMinutes silent minutes (exit 125) or 150 minutes
     # in total (exit 124), keeping diagnostics under Zet98/v17/watchdog.
     if ((Get-Content -LiteralPath (Join-Path $sourceRoot 'scripts/quartus-watchdog.sh') -Raw).Contains("`r")) {
         throw 'scripts/quartus-watchdog.sh must use LF line endings'
     }
     $containerId = Invoke-DockerCommand -Arguments @('--context',$DockerContext,'create','--name',$containerName,
         '--cpus',"$BuildCpus",'--memory',"${BuildMemoryGB}g",'--memory-swap',"${BuildMemoryGB}g",
-        '--network','none','--workdir','/project/Zet98/v17',$Image,'bash','../../scripts/quartus-watchdog.sh',$compileCommand)
+        '--network','none','--env',"STALL_MINUTES=$StallMinutes",'--workdir','/project/Zet98/v17',$Image,'bash','../../scripts/quartus-watchdog.sh',$compileCommand)
     $containerId | Set-Content -LiteralPath (Join-Path $buildRoot 'container-id.txt')
     $containerName | Set-Content -LiteralPath (Join-Path $buildRoot 'container-name.txt')
     Invoke-DockerCommand -Arguments @('--context',$DockerContext,'cp',"$sourceRoot/.","${containerName}:/project/") -TimeoutSeconds 60 | Out-Null

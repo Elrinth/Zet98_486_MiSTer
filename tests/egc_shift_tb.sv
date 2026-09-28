@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 module egc_shift_tb;
     parameter USE_REGISTERS=0;
-    reg clk=0, reset=1, reload=0, advance=0;
+    reg clk=0, reset=1, reload=0, advance=0, byte_mode=0, byte_lane=0;
     always #5 clk=~clk;
     reg [15:0] shift_control=0, bit_length=15;
     reg [63:0] source_words=0;
@@ -20,6 +20,7 @@ module egc_shift_tb;
     );
     pc98_egc_shift dut (
         .clk(clk),.reset(reset),.reload(USE_REGISTERS ? shift_reload : reload),.advance(advance),
+        .byte_mode(byte_mode),.byte_lane(byte_lane),
         .shift_control(USE_REGISTERS ? programmed_shift : shift_control),
         .bit_length(USE_REGISTERS ? programmed_length : bit_length),.source_words(source_words),
         .shifted_words(shifted_words),.clip_mask(clip_mask),.result_valid(result_valid)
@@ -49,13 +50,14 @@ module egc_shift_tb;
             fields=$fscanf(file,"%h %h %h %h %h %h\n", reload_value, shifts, lengths,
                            input_data, expected_mask, expected_data);
             if (fields!=6) $fatal(1,"Malformed vector");
-            reload=reload_value;
+            reload=reload_value==1;
+            byte_mode=reload_value>=2; byte_lane=reload_value==3;
             // Reload must win even if a stale source completion is asserted.
             advance=1;
             shift_control=shifts;
             bit_length=lengths;
             source_words=input_data;
-            if (USE_REGISTERS && reload_value) begin
+            if (USE_REGISTERS && reload_value==1) begin
                 advance=0;
                 write_register(16'h04ac, shifts);
                 write_register(16'h04ae, lengths);

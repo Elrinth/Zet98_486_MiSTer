@@ -44,7 +44,7 @@ begin
         LINENUM1=>(others=>'0'), PITCH=>std_logic_vector(to_unsigned(STRIDE,8)),
         clk=>clk, rstn=>rstn);
     process(clk)
-        variable word_index, logical_line, expected : natural := 0;
+        variable word_index, logical_line, raster, expected : natural := 0;
     begin
         if rising_edge(clk) then
             if rstn='0' then ack<='0'; requests<=0;word_index:=0;
@@ -52,11 +52,16 @@ begin
                 if vc<VIV then
                     assert not EXPECT_BLANK_IDLE report "Graphics fetch during vertical blank" severity failure;
                 else
-                    assert (vc-VIV) mod (REPEATS+1)=0 report "Repeated line unnecessarily fetched" severity failure;
-                    logical_line:=(vc-VIV)/(REPEATS+1);
-                    if FIRST_LENGTH/=0 and logical_line>=FIRST_LENGTH then
-                        expected:=(BASE1+(logical_line-FIRST_LENGTH)*STRIDE+word_index) mod 16384;
-                    else expected:=(BASE0+logical_line*STRIDE+word_index) mod 16384; end if;
+                    -- LEN counts raster lines; area 2 restarts the repeat group.
+                    raster:=vc-VIV;
+                    if FIRST_LENGTH/=0 and raster>=FIRST_LENGTH then
+                        assert (raster-FIRST_LENGTH) mod (REPEATS+1)=0 report "Repeated line unnecessarily fetched" severity failure;
+                        logical_line:=(raster-FIRST_LENGTH)/(REPEATS+1);
+                        expected:=(BASE1+logical_line*STRIDE+word_index) mod 16384;
+                    else
+                        assert raster mod (REPEATS+1)=0 report "Repeated line unnecessarily fetched" severity failure;
+                        logical_line:=raster/(REPEATS+1);
+                        expected:=(BASE0+logical_line*STRIDE+word_index) mod 16384; end if;
                     assert to_integer(unsigned(addr))=expected
                         report "Graphics address row=" & integer'image(vc-VIV) &
                             " word=" & integer'image(word_index) & " expected=" & integer'image(expected) &
@@ -69,7 +74,13 @@ begin
         end if;
     end process;
     process
+        -- rows fetched per frame: each area rounds its raster lines up
+        function rows(n : natural) return natural is begin return (n+REPEATS)/(REPEATS+1); end;
+        variable expected_rows : natural;
     begin
+        if FIRST_LENGTH/=0 and FIRST_LENGTH<400 then
+            expected_rows:=rows(FIRST_LENGTH)+rows(400-FIRST_LENGTH);
+        else expected_rows:=rows(400); end if;
         wait for 201 ns; rstn<='1';
         for frame in 0 to 1 loop
             for row in 0 to 524 loop
@@ -80,7 +91,7 @@ begin
             end loop;
         end loop;
         wait for 2 us;
-        assert requests=2*((399/(REPEATS+1))+1)*40 report "Unexpected number of line reads" severity failure;
+        assert requests=2*expected_rows*40 report "Unexpected number of line reads" severity failure;
         report "PASS graphics addresses: two frames, split=" & integer'image(FIRST_LENGTH) &
             ", repeat=" & integer'image(REPEATS) & ", 14-bit wrap, no blank fetches" severity note;
         stop;wait;

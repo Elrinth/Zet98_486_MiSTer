@@ -163,28 +163,19 @@ wire [11:0] aspect_y = status[2] ? 12'd0 : (status[1] ? 12'd9 : 12'd3);
 parameter CONF_STR = {
 `ifdef ZET98_Z486_DEBUG
     "PC98;UART115200;",
+`elsif ZET98_CD_TRACE
+	// Same header as the MIDI build (B193's "PC98;UART115200;" gave no HDMI
+	// with this Main); the capture tool sets 115200 itself.
+	"PC98;UART31250,MIDI31250;",
 `elsif ZET98_MPU_UART
 	"PC98;UART31250,MIDI31250;",
 `else
 	"PC98;;",
 `endif
 	"-;",
-	"O12,Aspect ratio,4:3,16:9,Full Screen;",
-	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
-	"O3,Video test,Off,Color bars;",
-	"O4,Startup mute,10s,Off;",
-	"o2,Audio filter,On,Off;",
-	"o6,SNAC PS pads,On,Off;",
-	"o7,Right stick mouse,On,Off;",
-	"O5,Show D0/D1 disk access,On,Off;",
-`ifdef ZET98_MPU_UART
-	"OQ,MPU MIDI,Off,UART;",
-	"o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
-`endif
-	"-;",
-	"R6,Reset;",
-	"OR,Empty boot,Wait for disk,Start BIOS;",
-	"-;",
+	// Everyday controls first: disk swaps, reset, video; the rest lives in
+	// sub-pages. Reset stands apart between separators, never under the
+	// cursor when the menu opens.
 	"S0,D88HDMFDI,FDD0;",
 	"S1,D88HDMFDI,FDD1;",
 `ifdef ZET98_RAW_IDE
@@ -193,27 +184,48 @@ parameter CONF_STR = {
 `else
 	"S2,HDF,SASI;",
 `endif
-	"S3,RAM,NVRAM;",
 	"-;",
-	"R7,SYNC FD0;",
-	"R8,SYNC FD1;",
+	"R6,Reset;",
 	"-;",
-	"R9,EJECT FD0;",
-	"RA,EJECT FD1;",
+	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
+	"O12,Aspect ratio,4:3,16:9,Full Screen;",
 	"-;",
-	"RB,LOAD SRAM;",
-	"RC,STORE SRAM;",
-	"-;",
-	"OD,DIP1-8 HGC,Extend,Normal;",
-	"o0,DIP1-3 Display,Normal,Plasma;",
-	"OF,DIP2-1 NOP,0,1;",
-	"OG,DIP2-2 Basic mode,Terminal,Basic;",
-	"OH,DIP2-3 Cols,80,40;",
-	"OI,DIP2-4 Lines,25,20;",
-	"OJ,DIP2-5 Memory SW,Keep,Clear;",
-	"OK,DIP2-6 Int.HDD,Disconnect,Connect;",
-	"OL,DIP2-7 FDD Motor,Control,ON;",
-	"o1,DIP2-8 GDC clock,2.5MHz,5MHz;",
+	"P1,Audio & Video;",
+	"P1O3,Video test,Off,Color bars;",
+	"P1O4,Startup mute,10s,Off;",
+	"P1o2,Audio filter,On,Off;",
+`ifdef ZET98_MPU_UART
+	"P1OQ,MPU MIDI,Off,UART;",
+	"P1o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
+`endif
+	"P2,Access indicators;",
+	"P2O5,Show D0/D1 disk access,On,Off;",
+	"P2o8,Show CD access,On,Off;",
+	"P2o9,Show HDD access,On,Off;",
+	"P2oA,Access icons,On,Off;",
+	"P3,Input;",
+	"P3o6,SNAC PS pads,On,Off;",
+	"P3o7,Right stick mouse,On,Off;",
+	"P4,Boot & storage;",
+	"P4OR,Empty boot,Wait for disk,Start BIOS;",
+	"P4R9,Eject FD0;",
+	"P4RA,Eject FD1;",
+	"P4S3,RAM,NVRAM;",
+	"P4R7,Sync FD0;",
+	"P4R8,Sync FD1;",
+	"P4RB,Load SRAM;",
+	"P4RC,Store SRAM;",
+	"P5,DIP switches;",
+	"P5OD,DIP1-8 HGC,Extend,Normal;",
+	"P5o0,DIP1-3 Display,Normal,Plasma;",
+	"P5OF,DIP2-1 NOP,0,1;",
+	"P5OG,DIP2-2 Basic mode,Terminal,Basic;",
+	"P5OH,DIP2-3 Cols,80,40;",
+	"P5OI,DIP2-4 Lines,25,20;",
+	"P5OJ,DIP2-5 Memory SW,Keep,Clear;",
+	"P5OK,DIP2-6 Int.HDD,Disconnect,Connect;",
+	"P5OL,DIP2-7 FDD Motor,Control,ON;",
+	"P5o1,DIP2-8 GDC clock,2.5MHz,5MHz;",
 	"J,Fire 1,Fire 2,Mouse L,Mouse R;",
 	"V,v",`BUILD_DATE
 };
@@ -300,6 +312,10 @@ wire [63:0] status;
 wire [15:0] core_snd_l, core_snd_r;
 // CD audio (PCD images) joins the mix at half scale, saturating.
 wire signed [15:0] cd_audio_l, cd_audio_r;
+wire  [1:0] cd_activity;
+wire [91:0] cd_trace;                    // CD trace builds (ZET98_CD_TRACE)
+wire native_ce, native_hs, native_vs, native_de;
+wire [71:0] video_debug;                 // GDC areas and video mode (trace builds)
 reg  [15:0] snd_mix_l, snd_mix_r;
 function automatic [15:0] mix_sat(input [15:0] a, input signed [15:0] b);
 	reg signed [16:0] sum;
@@ -326,12 +342,13 @@ wire [15:0] joystick_0, joystick_1;
 wire  [5:0] snac_joy1, snac_joy2;
 wire  [1:0] snac_analog, snac_mbtn1, snac_mbtn2;
 wire [15:0] snac_right1, snac_right2;
+wire [63:0] snac_raw1;
 wire [15:0] joystick_r0, joystick_r1;
 snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
 	.clk(clk_sys), .enable(!status[38]), .user_in(USER_IN), .user_out(USER_OUT),
 	.joy1(snac_joy1), .joy2(snac_joy2),
 	.analog(snac_analog), .right1(snac_right1), .right2(snac_right2),
-	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2)
+	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2), .raw1(snac_raw1)
 );
 // Right stick of USB controllers or SNAC DualShocks moves the PC-98 mouse;
 // buttons "Mouse L/R" (USB) and L3/L1, R3/R1 (SNAC) click. A USB mouse
@@ -439,7 +456,8 @@ generate for (hslot = 0; hslot < 4; hslot = hslot + 1) begin : hps_slots
 end endgenerate
 assign hps_lba[4] = cd_lba;
 assign hps_buff_din[4] = 8'h00;
-assign hps_blk_cnt[4] = 6'd0;
+wire  [5:0] cd_blk_cnt;
+assign hps_blk_cnt[4] = cd_blk_cnt;
 assign sd_ack = hps_ack[3:0];
 assign img_mounted = hps_mounted[3:0];
 
@@ -454,14 +472,16 @@ generate if(RAW_IDE) begin : raw_ide
 		.sd_buff_addr(core_buff_addr[2]), .sd_buff_dout(core_buff_dout[2]),
 		.sd_buff_din(ide_buff_din), .sd_buff_wr(core_buff_wr[2]),
 		.cd_mounted(hps_mounted[4]), .cd_size(img_size),
-		.cd_lba(cd_lba), .cd_rd(cd_rd), .cd_ack(hps_ack[4]),
+		.cd_lba(cd_lba), .cd_rd(cd_rd), .cd_blk_cnt(cd_blk_cnt), .cd_ack(hps_ack[4]),
 		.cd_buff_addr(sd_buff_addr), .cd_buff_dout(sd_buff_dout), .cd_buff_wr(sd_buff_wr),
-		.cd_audio_l(cd_audio_l), .cd_audio_r(cd_audio_r)
+		.cd_audio_l(cd_audio_l), .cd_audio_r(cd_audio_r), .cd_activity(cd_activity),
+		.cd_trace(cd_trace)
 	);
 end else begin : no_raw_ide
+	assign cd_trace=0;
 	assign {ide_lba,ide_rd,ide_wr,ide_buff_din,ide_oe,ide_irq}=0;
-	assign {cd_lba,cd_rd}=0;
-	assign {cd_audio_l,cd_audio_r}=0;
+	assign {cd_lba,cd_rd,cd_blk_cnt}=0;
+	assign {cd_audio_l,cd_audio_r,cd_activity}=0;
 	assign ide_readdata=16'hffff;
 end endgenerate
 
@@ -492,6 +512,95 @@ assign {mpu_oe,mpu_irq}=0;
 `ifdef ZET98_Z486_DEBUG
 // Debug builds: the z486 crash recorder's UART rides bit 0 of the snapshot.
 assign UART_TXD = cpu_debug_snapshot[0];
+`elsif ZET98_CD_TRACE
+// CD trace builds: CD-ROM command/audio events as text at 115200 baud.
+// Graphics GDC display areas as the game programs them, snooped from its
+// port writes (A2h command, A0h parameter): PRAM bytes 0-7 (area 1/2 start
+// address and line count) and the PITCH parameter, logged as "G pp s7..s0".
+reg [7:0] gdc_pram [0:7];
+reg [7:0] gdc_pitch = 0;
+reg [3:0] gdc_ptr = 0;
+reg gdc_mode_pram = 0, gdc_mode_pitch = 0, gdc_wr_d = 0;
+wire gdc_wr = ide_write && ide_select[0] && (ide_address == 16'h00a0 || ide_address == 16'h00a2);
+always @(posedge clk_sys) begin
+	gdc_wr_d <= gdc_wr;
+	if (gdc_wr && !gdc_wr_d) begin
+		if (ide_address == 16'h00a2) begin
+			gdc_mode_pram <= ide_writedata[7:4] == 4'h7;
+			gdc_mode_pitch <= ide_writedata[7:0] == 8'h47;
+			gdc_ptr <= ide_writedata[3:0];
+		end else if (gdc_mode_pram) begin
+			if (gdc_ptr < 8) gdc_pram[gdc_ptr[2:0]] <= ide_writedata[7:0];
+			gdc_ptr <= gdc_ptr + 1'b1;
+		end else if (gdc_mode_pitch) begin
+			gdc_pitch <= ide_writedata[7:0]; gdc_mode_pitch <= 0;
+		end
+	end
+end
+// PC-9801-86 PCM port writes (A466h-A46Ch), one strobe per CPU write.
+reg pcm_wr_d = 0;
+wire pcm_wr = ide_write && ide_select[0] && ide_address[15:4] == 12'ha46 &&
+              (ide_address[3:0] == 4'h6 || ide_address[3:0] == 4'h8 ||
+               ide_address[3:0] == 4'ha || ide_address[3:0] == 4'hc);
+always @(posedge clk_sys) pcm_wr_d <= pcm_wr;
+wire pcm_ctl_stb = pcm_wr && !pcm_wr_d && ide_address[3:0] != 4'hc;
+wire pcm_push_stb = pcm_wr && !pcm_wr_d && ide_address[3:0] == 4'hc;
+// Graphics register writes: EGC 4A0h-4AEh (words), GRCG 7Ch/7Eh, 6Ah, A4h, A6h.
+reg gfx_wr_d = 0;
+wire gfx_egc = ide_address[15:4] == 12'h04a;
+wire gfx_hit = ide_write && (gfx_egc || ide_address == 16'h007c || ide_address == 16'h007e ||
+               ide_address == 16'h006a || ide_address == 16'h00a4 || ide_address == 16'h00a6);
+always @(posedge clk_sys) gfx_wr_d <= gfx_hit;
+wire gfx_wr_stb = gfx_hit && !gfx_wr_d;
+wire [3:0] gfx_reg = gfx_egc ? {1'b0, ide_address[3:1]} :
+                     ide_address == 16'h007c ? 4'h8 : ide_address == 16'h007e ? 4'h9 :
+                     ide_address == 16'h006a ? 4'ha : ide_address == 16'h00a4 ? 4'hb : 4'hc;
+wire [15:0] gfx_data = gfx_egc ? {ide_select[1] ? ide_writedata[15:8] : 8'h00,
+                                  ide_select[0] ? ide_writedata[7:0] : 8'h00} : {8'h00, ide_writedata[7:0]};
+// Per-frame display state (V events): at each vertical sync, the pages and
+// when the game last wrote the display page (A4h) and started a PRAM write.
+reg [2:0] vs_sync = 0;
+always @(posedge clk_sys) vs_sync <= {vs_sync[1:0], native_vs};
+wire frame_tick = vs_sync[1] && !vs_sync[2];
+reg [9:0] vdiv = 0;
+reg [15:0] since_vs = 0, a4_time = 16'hffff, pram_time = 16'hffff;
+reg [7:0] frame_no = 0;
+reg a4_val = 0, a6_val = 0, frame_ev = 0;
+reg [71:0] frame_data = 0;
+reg page_wr_d = 0;
+wire page_wr = ide_write && ide_select[0] && (ide_address == 16'h00a4 || ide_address == 16'h00a6);
+always @(posedge clk_sys) begin
+	frame_ev <= 0;
+	page_wr_d <= page_wr;
+	vdiv <= vdiv + 1'b1;
+	if (vdiv == 10'h3ff && since_vs != 16'hfffe) since_vs <= since_vs + 1'b1;
+	if (page_wr && !page_wr_d) begin
+		if (ide_address == 16'h00a4) begin a4_val <= ide_writedata[0]; a4_time <= since_vs; end
+		else a6_val <= ide_writedata[0];
+	end
+	if (gdc_wr && !gdc_wr_d && ide_address == 16'h00a2 && ide_writedata[7:4] == 4'h7)
+		pram_time <= since_vs;
+	if (frame_tick) begin
+		frame_ev <= 1;
+		frame_data <= {frame_no, 6'b0, a6_val, a4_val, a4_time, pram_time,
+		               gdc_pram[0], gdc_pram[1], gdc_pram[2]};
+		frame_no <= frame_no + 1'b1;
+		since_vs <= 0; a4_time <= 16'hffff; pram_time <= 16'hffff;
+	end
+end
+wire [71:0] gdc_shadow = {gdc_pitch, gdc_pram[7], gdc_pram[6], gdc_pram[5], gdc_pram[4],
+                          gdc_pram[3], gdc_pram[2], gdc_pram[1], gdc_pram[0]};
+pc98_cd_trace #(.CLK_HZ(SYS_CLK_KHZ*1000)) cd_trace_uart (
+	.clk(clk_sys), .trace(92'd0), .hdd_busy(1'b0),   // CD events off: frees logic (stutter is PCM)
+	.fdd_busy(1'b0), .pad1(64'd0), .video(72'h0),
+	// PCM, EGC and sampled GDC logging off in this build (area): per-frame V only.
+	.pcm_ctl(1'b0), .pcm_port(8'h0), .pcm_data(8'h0),
+	.pcm_push(1'b0), .gfx_wr(1'b0), .gfx_reg(4'h0), .gfx_data(16'h0),
+	.frame_ev(frame_ev), .frame_data(frame_data),
+	// {EIP, last I/O port, last I/O data} from the CPU snapshot
+	.cpu_sample({cpu_debug_snapshot[127:96], cpu_debug_snapshot[63:48], cpu_debug_snapshot[47:32]}),
+	.tx(UART_TXD)
+);
 `else
 assign UART_TXD=1'b1;
 `endif
@@ -593,7 +702,7 @@ boot_media_control #(.RAW_IDE(RAW_IDE)) boot_control (
     .image_mounted(core_img_mounted), .image_size(core_img_size),
     .hold_boot(boot_hold), .prompt(boot_prompt)
 );
-wire native_ce, native_hs, native_vs, native_de;
+// (native_ce/hs/vs/de are declared above, with the trace wires)
 wire [7:0] native_r, native_g, native_b;
 wire output_ce, output_hs, output_vs, output_de;
 wire [7:0] output_r, output_g, output_b;
@@ -608,7 +717,9 @@ video_output video_out (
 );
 floppy_overlay floppy_icon (
 	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
-	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]), .writing(sd_wr[1:0]),
+	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]), .writing(sd_wr[1:0]), .cd_activity(cd_activity),
+	.cd_enabled(!status[40]), .hdd_enabled(!status[41]), .icons_enabled(!status[42]),
+	.hdd_activity(ide_rd | ide_wr), .hdd_writing(ide_wr),
 	.crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
 	.crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
 	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),

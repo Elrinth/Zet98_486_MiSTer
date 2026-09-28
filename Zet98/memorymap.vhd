@@ -35,6 +35,8 @@ port(
 	
 	NVRAM_CS	:out std_logic;
 	NVRAM_ADDR	:out std_logic_vector(2 downto 0);
+	-- CG window A4000h-A4FFFh (font pattern of the code set at A1h/A3h)
+	CGWIN_CS	:out std_logic;
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
@@ -69,6 +71,7 @@ type sel_t is(
 	sel_TRAM,
 	sel_ARAM,
 	sel_NVRAM,
+	sel_CGWIN,
 	sel_BIOS,
 	sel_ITF,
 	sel_SOUND,
@@ -119,6 +122,8 @@ begin
 		sel_VRAM2	when CPUSEG>=ADDR_VRAM2 and CPUSEG<(ADDR_VRAM2+WIDTH_VRAM2) else
 		sel_VRAM3	when CPUSEG>=ADDR_VRAM3 and CPUSEG<(ADDR_VRAM3+WIDTH_VRAM3) else
 		sel_NVRAM	when CPUSEG>=ADDR_NVRAM and CPUSEG<(ADDR_NVRAM+WIDTH_NVRAM) else
+		-- CG window disabled for area (see Zet98MiSTer CGW process):
+		-- sel_CGWIN	when CPUSEG>=x"a400" and CPUSEG<x"a500" else
 		sel_TRAM	when CPUSEG>=ADDR_TRAM and CPUSEG<(ADDR_TRAM+WIDTH_TRAM) else
 		sel_ARAM	when CPUSEG>=ADDR_ARAM and CPUSEG<(ADDR_ARAM+WIDTH_ARAM) else
 		sel_EMS0	when CPUSEG>=ADDR_EMS0 and CPUSEG<(ADDR_EMS0+WIDTH_EMS0) and EMSEN='1' else
@@ -156,6 +161,7 @@ begin
 				'0' when MSEL=sel_TRAM else
 				'0' when MSEL=sel_ARAM else
 				'0' when MSEL=sel_NVRAM else
+				'0' when MSEL=sel_CGWIN else
 				'1';
 	
 	GRAM_CS<=	'0' when CPUTGA='1'  and DMAEN='0'else
@@ -175,6 +181,10 @@ begin
 	
 	NVRAM_CS<=	'0' when CPUTGA='1'  and DMAEN='0'else
 				'1' when MSEL=sel_NVRAM else
+				'0';
+
+	CGWIN_CS<=	'0' when CPUTGA='1' or DMAEN='1' else
+				'1' when MSEL=sel_CGWIN else
 				'0';
 				
 	DBIOS_CS<=	'0' when CPUTGA='1' and DMAEN='0' else

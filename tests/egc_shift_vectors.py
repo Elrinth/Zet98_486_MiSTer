@@ -39,10 +39,23 @@ def generate(path):
                         if length > 32:
                             data = (word() << 32) | word()
                             out.write(f'0 {shift:04x} {length_register:04x} {data:016x}\n')
+        # Byte accesses (record type 2/3 = lane 0/1). NP2 byte stepping is only
+        # meaningful for source skips below 8 and destination skips up to 8.
+        for reverse in range(2):
+            for src in range(8):
+                for dst in range(9):
+                    shift = (reverse << 12) | (dst << 4) | src
+                    for length in list(range(1, 21)) + [63, 64, 65]:
+                        out.write(f'1 {shift:04x} {length - 1:04x} 0000000000000000\n')
+                        count = (length + dst + 7) // 8 + (src > dst)
+                        for _ in range(count * 2):
+                            lane = word() & 1
+                            data = (word() << 32) | word()
+                            out.write(f'{2 + lane} {shift:04x} {length - 1:04x} {data:016x}\n')
 
 
 def verify(path):
-    records = priming = rows = reloads = 0
+    records = priming = rows = reloads = byte_records = 0
     queues = [[], [], [], []]
     for line_number, line in enumerate(path.open(encoding='ascii'), 1):
         reload, shift, length, data, expected_mask, expected_data = (
@@ -51,6 +64,42 @@ def verify(path):
         reverse = bool(shift & 0x1000)
         order = list(range(8, 16)) + list(range(8)) if reverse else (
             list(range(7, -1, -1)) + list(range(15, 7, -1)))
+        if reload >= 2:
+            # Byte step: eight pixels of the lane in, eight out (both lanes).
+            lane = reload - 2
+            border = list(range(8)) if reverse else list(range(7, -1, -1))
+            for plane in range(4):
+                pixels = [(data >> (plane * 16 + 8 * lane + bit)) & 1 for bit in border]
+                queues[plane].extend(pixels[source_skip:])
+            source_skip = 0
+            result = mask = 0
+            if dest_skip >= 8:
+                dest_skip -= 8
+            elif len(queues[0]) < 8 - dest_skip:
+                priming += 1
+            else:
+                need = 8 - dest_skip
+                take = min(need, remaining)
+                for pixel in range(take):
+                    bit = border[dest_skip + pixel]
+                    for half in (0, 8):
+                        mask |= 1 << (bit + half)
+                        for plane in range(4):
+                            result |= queues[plane][pixel] << (plane * 16 + bit + half)
+                queues = [queue[need:] for queue in queues]
+                remaining -= take
+                dest_skip = 0
+                if remaining == 0:
+                    rows += 1
+                    queues = [[], [], [], []]
+                    source_skip, dest_skip, remaining = shift & 15, (shift >> 4) & 15, length + 1
+            if (mask, result) != (expected_mask, expected_data):
+                raise AssertionError(f'NP2/pixel-list byte mismatch line={line_number} shift={shift:04x} '
+                                     f'length={length+1}: {mask:04x}/{result:016x} != '
+                                     f'{expected_mask:04x}/{expected_data:016x}')
+            records += 1
+            byte_records += 1
+            continue
         if reload:
             queues = [[], [], [], []]
             source_skip, dest_skip, remaining = shift & 15, (shift >> 4) & 15, length + 1
@@ -83,11 +132,13 @@ def verify(path):
                                  f'length={length+1}: {mask:04x}/{result:016x} != '
                                  f'{expected_mask:04x}/{expected_data:016x}')
         records += 1
-    assert reloads == 2 * 16 * 16 * 41
+    assert reloads == 2 * 16 * 16 * 41 + 2 * 8 * 9 * 23
+    assert byte_records > 0
     assert rows >= reloads * 2
     assert priming > 0
     print(f'PASS: EGC NP2/pixel-list agreement: {records} source words, '
-          f'{reloads} settings, {rows} completed rows, {priming} priming reads')
+          f'{reloads} settings, {rows} completed rows, {priming} priming reads, '
+          f'{byte_records} byte steps')
 
 
 if __name__ == '__main__':

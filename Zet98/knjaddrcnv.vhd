@@ -22,9 +22,14 @@ signal	addr	:std_logic_vector(15 downto 0);
 begin
 	
 	iskanji<='0' when kcode(15 downto 8)=x"00" else '1';
-	l_rn<=kcode(15);
+	-- Right half: bit 15 (this core's convention for the second cell of a
+	-- two-cell character) or bit 7 of the first code byte, as a PC-98 marks
+	-- the right half in text VRAM (NP2kai maketext: dat & 0x80). Bit 7 is not
+	-- part of the row. Flame Zapper Kotsujin puts user-defined characters in
+	-- cells with that bit set.
+	l_rn<=kcode(15) or kcode(7);
 	
-	mcode<=kcode(7 downto 0) & '0' & kcode(14 downto 8);
+	mcode<='0' & kcode(6 downto 0) & '0' & kcode(14 downto 8);
 	
 	process(mcode)
 	variable tmpl	:std_logic_vector(15 downto 0);

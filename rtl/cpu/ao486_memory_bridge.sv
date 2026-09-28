@@ -22,7 +22,9 @@
 module ao486_memory_bridge #(
     parameter NARROW_READS = 1'b1,
     parameter SKIP_EMPTY_HALVES = 1'b1,
-    parameter READ_MASK_ALWAYS_NONZERO = 1'b0
+    parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
+    // PC-98: byte-precise reads in the graphics VRAM windows (EGC).
+    parameter BYTE_READ_VRAM = 1'b1
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -72,7 +74,14 @@ module ao486_memory_bridge #(
     assign avm_waitrequest = reset || busy || bus_ack;
     assign bus_address = {address, high_half};
     assign bus_strobe = state == TRANSFER && !skip_half && !reset;
-    assign bus_select = !bus_strobe ? 2'b00 : write_request ? half_select : 2'b11;
+    // Reads in the graphics VRAM windows (A8000-BFFFF, E0000-E7FFF) carry
+    // their byte lanes: the EGC shifts 8 pixels for a byte read and 16 for a
+    // word read. Other reads stay full words, because the memory caches keep
+    // whole words from them.
+    wire vram_window = (address >= 30'h2a000 && address <= 30'h2ffff) ||
+                       (address >= 30'h38000 && address <= 30'h39fff);
+    assign bus_select = !bus_strobe ? 2'b00 :
+        (write_request || (BYTE_READ_VRAM && vram_window)) ? half_select : 2'b11;
     assign bus_writedata = high_half ? write_data[31:16] : write_data[15:0];
     assign bus_write = write_request;
 

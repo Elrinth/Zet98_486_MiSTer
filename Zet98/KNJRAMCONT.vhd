@@ -18,6 +18,13 @@ port(
 	iowr		:in std_logic;
 	iord		:in std_logic;
 	wrdat		:in std_logic_vector(7 downto 0);
+	-- CG window (A4000h-A4FFFh): while cgw_en, the pattern line and half
+	-- come from the window address instead of port A5h.
+	cgw_en		:in std_logic := '0';
+	cgw_right	:in std_logic := '0';
+	cgw_line	:in std_logic_vector(3 downto 0) := (others=>'0');
+	cgw_wr		:in std_logic := '0';
+	cgw_wdat	:in std_logic_vector(7 downto 0) := (others=>'0');
 
 	KNJRAMSEL	:out std_logic_vector(1 downto 0);
 	KNJRAMADDR	:out std_logic_vector(16 downto 0);
@@ -39,6 +46,7 @@ signal	JISCODE	:std_logic_vector(15 downto 0);
 signal	CGCODE	:std_logic_vector(15 downto 0);
 signal	CPOS	:std_logic_vector(7 downto 0);
 signal	KNJRAMSELb	:std_logic_vector(1 downto 0);
+signal	CLINE	:std_logic_vector(3 downto 0);
 
 
 component knjaddrcnv
@@ -78,11 +86,13 @@ begin
 	end process;
 	
 	-- ANK characters have no left/right half. Keep their high byte zero.
+	CLINE<=cgw_line when cgw_en='1' else CPOS(3 downto 0);
 	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" else
+			cgw_right & JISCODE(14 downto 0) when cgw_en='1' else     -- odd address: right half
 			not CPOS(5) & JISCODE(14 downto 0);
 	cnv	:knjaddrcnv port map(
 		kcode	=>CGCODE,
-		cline	=>CPOS(3 downto 0),
+		cline	=>CLINE,
 		
 		romsel	=>KNJRAMSELb,
 		romaddr	=>CGADDR
@@ -93,8 +103,10 @@ begin
 	
 	KNJRAMWR<=	LDR_WR	when LDR_EN='1' and LDR_EXTADDR>=LDR_BGNADDR and LDR_EXTADDR<=ENDADDR else
 				iowr	when LDR_EN='0' and ioaddr=x"00a9" else
+				cgw_wr	when LDR_EN='0' and cgw_en='1' else
 				'0';
 	KNJRAMOE<=	iord	when ioaddr=x"00a9" else '0';
 	KNJRAMWDAT<=	LDR_WDAT when LDR_EN='1' else
+					cgw_wdat when cgw_en='1' else
 					wrdat;
 	end rtl;

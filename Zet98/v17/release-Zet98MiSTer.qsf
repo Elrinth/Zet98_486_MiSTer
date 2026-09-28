@@ -98,7 +98,7 @@ set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING ON
 set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
-set_global_assignment -name ALM_REGISTER_PACKING_EFFORT LOW
+set_global_assignment -name ALM_REGISTER_PACKING_EFFORT HIGH
 set_location_assignment PIN_U9 -to ADC_CONVST
 set_location_assignment PIN_V10 -to ADC_SCK
 set_location_assignment PIN_AC4 -to ADC_SDI
@@ -561,6 +561,7 @@ set_global_assignment -name VHDL_FILE ../../rtl/reset_release.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_settings_transfer.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/display_page_address.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_cd_trace.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide_bootrom.sv
 
 # The fabric divide-by-three pixel clock must use a clock network.
@@ -577,3 +578,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/midi/pc98_mpu_uart.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_image_bridge.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_floppy_images.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_hdi_image.sv
+# The adaptive scaler filter mode is not needed; frees logic for the core.
+set_global_assignment -name VERILOG_MACRO "MISTER_DISABLE_ADAPTIVE=1"
+# PC-98 video is only upscaled; the simple downscaler frees logic.
+set_global_assignment -name VERILOG_MACRO "MISTER_DOWNSCALE_NN=1"

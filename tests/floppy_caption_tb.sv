@@ -6,12 +6,14 @@ module floppy_caption_tb;
     always #5 clk=~clk;
     reg [1:0] activity=0;
     reg [1:0] writing=0;
+    reg [1:0] cd_activity=0;
+    reg cd_enabled=1,hdd_enabled=1,hdd_activity=0,hdd_writing=0,icons_enabled=1;
     reg [11:0] crop_left=0,crop_top=0,crop_width=0,crop_height=0;
     reg in_ce=0,in_hs=0,in_vs=0,in_de=0;
     reg [7:0] in_r=0,in_g=0,in_b=0;
     wire out_ce,out_hs,out_vs,out_de;
     wire [7:0] out_r,out_g,out_b;
-    floppy_overlay #(.FONT_FILE("rtl/assets/boot-font.mem")) dut(.*);
+    floppy_overlay #(.FONT_FILE("rtl/assets/boot-font.mem"),.ICON_FILE("rtl/assets/overlay-icons.mem")) dut(.*);
     reg [11:0] test_x=0,test_right=0;
     integer i,j,offset,checks=0;
     initial begin

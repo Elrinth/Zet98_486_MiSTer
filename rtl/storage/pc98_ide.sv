@@ -28,12 +28,15 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     input wire [63:0] cd_size,
     output wire [31:0] cd_lba,
     output wire cd_rd,
+    output wire [5:0] cd_blk_cnt,
     input wire cd_ack,
     input wire [8:0] cd_buff_addr,
     input wire [7:0] cd_buff_dout,
     input wire cd_buff_wr,
     // CD audio (CD-DA), signed, 44.1 kHz
-    output wire signed [15:0] cd_audio_l, cd_audio_r
+    output wire signed [15:0] cd_audio_l, cd_audio_r,
+    output wire [1:0] cd_activity,       // for the on-screen caption
+    output wire [91:0] cd_trace          // CD trace builds (pc98_cd_trace)
 );
     localparam IDLE=0, READ_START=1, READ_WAIT=2, READ_DATA=3,
         WRITE_DATA=4, WRITE_START=5, WRITE_WAIT=6, IDENTIFY=7;
@@ -87,9 +90,10 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
         .readdata(cd_readdata), .read_alt(cd_read_done ? cd_read_alt : io_address == 16'h074c),
         .irq(cd_irq), .present(),
         .image_mounted(cd_mounted), .image_size(cd_size),
-        .sd_lba(cd_lba), .sd_rd(cd_rd), .sd_ack(cd_ack),
+        .sd_lba(cd_lba), .sd_rd(cd_rd), .sd_blk_cnt(cd_blk_cnt), .sd_ack(cd_ack),
         .sd_buff_addr(cd_buff_addr), .sd_buff_dout(cd_buff_dout), .sd_buff_wr(cd_buff_wr),
-        .audio_l(cd_audio_l), .audio_r(cd_audio_r)
+        .audio_l(cd_audio_l), .audio_r(cd_audio_r), .activity(cd_activity),
+        .trace(cd_trace)
     );
     always @(posedge clk) begin
         if (reset) cd_read_active <= 0;

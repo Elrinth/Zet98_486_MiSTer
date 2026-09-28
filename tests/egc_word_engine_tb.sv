@@ -40,6 +40,7 @@ module egc_word_engine_tb;
     reg [21:0] wanted_address;
     reg [1:0] wanted_bank;
     reg [3:0] wanted_planes;
+    reg [1:0] wanted_bytes=2'b11;
     reg [63:0] supplied_words,expected_words;
     integer activations=0,reads=0,writes=0,beats=0,burst_left=0,lane=0,requests=0;
     always @(negedge memclk) if(!reset && ready) begin
@@ -68,7 +69,7 @@ module egc_word_engine_tb;
         end else if(burst_left>0) begin lane=4-burst_left; burst_left=burst_left-1; end
         else lane=0;
         if((!cs && ras && !cas && !we) || lane>0) begin
-            if(dqm !== (wanted_planes[lane] ? 2'b00 : 2'b11))
+            if(dqm !== (wanted_planes[lane] ? ~wanted_bytes : 2'b11))
                 $fatal(1,"EGC write plane mask mismatch lane=%0d",lane);
             if(dq!==expected_words[16*lane +:16])
                 $fatal(1,"EGC write result mismatch request=%0d lane=%0d actual=%h expected=%h",
@@ -193,6 +194,44 @@ module egc_word_engine_tb;
             requests=requests+1;
         end
     endtask
+    // Byte access: request_bytes 01/10, the CPU byte on its own lane.
+    task byte_transaction(input bit wr,input [21:0] address,input bit hi,input [7:0] data,
+                          input [63:0] incoming,input [63:0] expect_words,input [15:0] expect_read);
+        integer old_writes,old_reads,watch;
+        begin
+            wanted_address={address[21:2],2'b00};wanted_bank=0;wanted_planes=~regs[0][3:0];
+            supplied_words=incoming;want_write=wr;active=1;expected_words=expect_words;
+            wanted_bytes=hi ? 2'b10 : 2'b01;
+            old_writes=writes;old_reads=reads;
+            @(negedge clk);request=1;request_write=wr;request_address=address;request_bank=0;
+            request_bytes=hi ? 2'b10 : 2'b01;request_writedata=hi ? {data,8'h5a} : {8'ha5,data};
+            watch=0;
+            while(!acknowledge && watch<1000) begin @(negedge clk);watch=watch+1;end
+            if(!acknowledge || fault) $fatal(1,"EGC byte request did not complete normally");
+            if(wr) begin
+                watch=0;
+                while(busy && watch<1000) begin @(negedge clk);watch=watch+1;end
+                if(writes!=old_writes+1) $fatal(1,"EGC byte write did not complete");
+                if(memory_bytes!==(hi ? 2'b10 : 2'b01)) $fatal(1,"EGC byte write lane mismatch");
+            end else if(readdata!==expect_read)
+                $fatal(1,"EGC byte read mismatch actual=%h expected=%h",readdata,expect_read);
+            if(reads!=old_reads+1) $fatal(1,"EGC byte memory transaction count mismatch");
+            @(negedge clk);request=0;repeat(3) @(negedge clk);active=0;wanted_bytes=2'b11;
+            if(busy) $fatal(1,"EGC failed to rearm after a byte access");
+            requests=requests+1;
+        end
+    endtask
+    function automatic [63:0] lane_merge(input [63:0] old,input bit hi,input [7:0] mask,input [7:0] value);
+        reg [15:0] m,v;
+        begin
+            m=hi ? {mask,8'h00} : {8'h00,mask};
+            v=hi ? {value,8'h00} : {8'h00,value};
+            lane_merge=(old & ~{4{m}}) | ({4{v}} & {4{m}});
+        end
+    endfunction
+    function automatic [15:0] lane_read(input [63:0] words,input bit hi);
+        lane_read=hi ? {2{words[15:8]}} : {2{words[7:0]}};
+    endfunction
     function automatic [63:0] varying(input integer seed);
         varying={16'(seed*919+16'h93ed),16'(seed*237+16'ha732),16'(seed*41+16'h60c5),16'(seed*811+16'h715e)};
     endfunction
@@ -294,11 +333,27 @@ module egc_word_engine_tb;
         end
         abort_transaction(0,0);abort_transaction(0,1);
         abort_transaction(1,0);abort_transaction(1,1);
-        // Byte accesses are explicitly rejected while this engine is word-only.
-        @(negedge clk);request=1;request_write=1;request_bytes=1;
-        wait(acknowledge);#1;
-        if(!fault || memory_read4 || memory_rmw4) $fatal(1,"EGC byte access was silently accepted");
-        @(negedge clk);request=0;repeat(3) @(negedge clk);
+        // Byte accesses (NP2kai egc_writebyte/egc_readbyte). Plain CPU data
+        // (mode 0) replaces only the addressed byte of every enabled plane.
+        program_register(0,16'h0000);program_register(1,16'h0000);program_register(4,16'hffff);
+        program_register(2,16'h2000);
+        byte_transaction(1,22'h31000,1,8'h3c,varying(5),lane_merge(varying(5),1,8'hff,8'h3c),0);
+        byte_transaction(1,22'h31004,0,8'hc3,varying(6),lane_merge(varying(6),0,8'hff,8'hc3),0);
+        // A plain byte read returns the lane byte (in both halves).
+        byte_transaction(0,22'h31008,1,0,varying(7),0,lane_read(varying(7),1));
+        byte_transaction(0,22'h3100c,0,0,varying(8),0,lane_read(varying(8),0));
+        // ROP source copy through the shifter, one byte per row.
+        program_register(6,16'h0000);program_register(7,16'h0007);program_register(2,16'h0cf0);
+        byte_transaction(1,22'h31010,0,8'h96,varying(9),lane_merge(varying(9),0,8'hff,8'h96),0);
+        byte_transaction(1,22'h31014,1,8'h69,varying(10),lane_merge(varying(10),1,8'hff,8'h69),0);
+        // Destination skip 3: five pixels, then three carried pixels finish the row.
+        program_register(6,16'h0030);program_register(7,16'h0007);
+        byte_transaction(1,22'h31018,0,8'hb5,varying(11),lane_merge(varying(11),0,8'h1f,8'hb5 >> 3),0);
+        byte_transaction(1,22'h3101c,0,8'h00,varying(12),lane_merge(varying(12),0,8'he0,8'hb5 << 5),0);
+        // The same in the reverse direction (LSB first within the byte).
+        program_register(6,16'h1030);program_register(7,16'h0007);
+        byte_transaction(1,22'h31020,1,8'hb5,varying(13),lane_merge(varying(13),1,8'hf8,8'hb5 << 3),0);
+        byte_transaction(1,22'h31024,1,8'h00,varying(14),lane_merge(varying(14),1,8'h07,8'hb5 >> 5),0);
         $display("PASS: EGC word engine/actual SDRAMC %0d transactions at %0dMHz phase=%0d",requests,CPU_MHZ,MEM_PHASE_PS);
         $finish;
     end

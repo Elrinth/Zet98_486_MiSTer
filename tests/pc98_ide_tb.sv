@@ -24,6 +24,9 @@ module pc98_ide_tb;
     wire [31:0] cd_lba;
     wire cd_rd;
     wire signed [15:0] cd_audio_l, cd_audio_r;
+    wire [5:0] cd_blk_cnt;
+    wire [1:0] cd_activity;
+    wire [91:0] cd_trace;
     pc98_ide dut(.*);
     // The shared RAM port depends on mutually exclusive command ownership.
     always @(posedge clk) if(dut.cpu_buffer_write && dut.host_buffer_write)

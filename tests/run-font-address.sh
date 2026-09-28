@@ -58,3 +58,15 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=e
 fi
 grep -q 'Font loader lost a bank boundary or the third bank' "$out/bad-loader.log" || { cat "$out/bad-loader.log"; exit 1; }
 echo 'PASS: original two-bank font loader rejected'
+
+# Text-VRAM right halves marked by bit 7 of the first code byte must not be
+# ignored (Flame Zapper Kotsujin's user-defined characters showed left halves).
+sed 's/l_rn<=kcode(15) or kcode(7);/l_rn<=kcode(15);/' Zet98/knjaddrcnv.vhd > "$out/bad-lr.vhd"
+! cmp -s Zet98/knjaddrcnv.vhd "$out/bad-lr.vhd"
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/bad-lr.vhd" Zet98/KNJRAMCONT.vhd tests/font_address_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" font_address_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=error > "$out/negative-lr.log" 2>&1; then
+    echo 'FAIL: ignoring the low-byte right-half flag passed' >&2; exit 1
+fi
+grep -q 'low-byte bit 7 right half wrong' "$out/negative-lr.log" || { cat "$out/negative-lr.log"; exit 1; }
+echo 'PASS: ignoring the low-byte right-half flag rejected'

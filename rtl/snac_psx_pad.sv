@@ -5,11 +5,16 @@
 //   USER_OUT[2] CMD, USER_OUT[5] CLK, USER_IN[4] DAT, USER_IN[3] ACK (unused)
 // Polls both ports alternately (~60 Hz each) with the standard 0x01 0x42 read
 // at 250 kHz: CMD/DAT change on the falling clock edge and are sampled on the
-// rising edge, bytes LSB first, a fixed gap instead of waiting for ACK.
+// rising edge, bytes LSB first, a fixed gap instead of waiting for ACK
+// (waiting for USER_IN[3] corrupted a DualShock 2's 5Ah byte on hardware).
 // Reports MiSTer joystick bits: 0 right, 1 left, 2 down, 3 up, 4 fire 1,
 // 5 fire 2. D-pad plus the left stick (analog mode) give the directions;
 // Cross/Square are fire 1, Circle/Triangle fire 2. A missing pad reads as
 // 0xFF/ID 0xFF and reports nothing pressed.
+// A pad that answers in digital mode (ID 41h) is switched to analog once per
+// plug-in, as analog PlayStation games do: 43h enter config, 44h analog
+// (unlocked, so the ANALOG button still toggles it), 43h exit. The right
+// stick (PC-98 mouse) needs analog mode. A digital-only pad ignores this.
 module snac_psx_pad #(
     parameter CLK_HZ = 90000000
 ) (
@@ -23,7 +28,10 @@ module snac_psx_pad #(
     // analog mode, and mouse buttons {right, left} = {R3|R1, L3|L1}.
     output reg [1:0] analog = 0,
     output reg [15:0] right1 = 16'h8080, right2 = 16'h8080,
-    output reg [1:0] mbtn1 = 0, mbtn2 = 0
+    output reg [1:0] mbtn1 = 0, mbtn2 = 0,
+    // Debug (trace builds): port 1's last read, {ID, 5Ah, buttons lo/hi,
+    // right X/Y, left X/Y}.
+    output reg [63:0] raw1 = 0
 );
     localparam integer HALF = CLK_HZ / 500000;        // 2 us: 250 kHz clock
     localparam integer GAP = CLK_HZ / 50000;          // 20 us between bytes
@@ -46,9 +54,19 @@ module snac_psx_pad #(
     reg [7:0] tx = 0, rx = 0;
     reg [7:0] id, handshake, buttons_lo, buttons_hi, left_x, left_y, right_x, right_y;
     reg att = 1, cmd = 1, sclk = 1;
+    // Per port: setup step to send next (0 = plain read) and whether this
+    // plug-in has been set up already.
+    reg [1:0] step1 = 0, step2 = 0, step = 0;
+    reg [1:0] configured = 0;
 
-    function automatic [7:0] command(input [3:0] index);
-        command = index == 0 ? 8'h01 : index == 1 ? 8'h42 : 8'h00;
+    function automatic [7:0] command(input [1:0] st, input [3:0] index);
+        case (st)
+            2'd1: command = index == 0 ? 8'h01 : index == 1 ? 8'h43 : index == 3 ? 8'h01 : 8'h00;
+            2'd2: command = index == 0 ? 8'h01 : index == 1 ? 8'h44 : index == 3 ? 8'h01 :
+                            index == 4 ? 8'h02 : 8'h00;
+            2'd3: command = index == 0 ? 8'h01 : index == 1 ? 8'h43 : index >= 4 ? 8'h5a : 8'h00;
+            default: command = index == 0 ? 8'h01 : index == 1 ? 8'h42 : 8'h00;
+        endcase
     endfunction
 
     // Stick outside the centre third counts as a direction.
@@ -75,15 +93,17 @@ module snac_psx_pad #(
             state <= IDLE; timer <= 0; att <= 1; cmd <= 1; sclk <= 1;
             joy1 <= 0; joy2 <= 0; user_out <= 7'h7f;
             analog <= 0; mbtn1 <= 0; mbtn2 <= 0;
+            step1 <= 0; step2 <= 0; configured <= 0;
         end else begin
             user_out <= {1'b1, sclk, 1'b1, 1'b1, cmd, port ? 1'b1 : att, port ? att : 1'b1};
             if (timer != 0) timer <= timer - 1'b1;
             else case (state)
                 IDLE: begin
                     att <= 0; byte_index <= 0; state <= SELECT; timer <= GAP;
+                    step <= port ? step2 : step1;
                 end
                 SELECT: begin
-                    tx <= command(byte_index); bit_index <= 0; state <= LOW;
+                    tx <= command(step, byte_index); bit_index <= 0; state <= LOW;
                 end
                 LOW: begin                      // falling edge: present CMD bit
                     sclk <= 0; cmd <= tx[bit_index]; timer <= HALF; state <= HIGH;
@@ -95,7 +115,7 @@ module snac_psx_pad #(
                 end
                 NEXT: begin
                     cmd <= 1;
-                    case (byte_index)
+                    if (step == 0) case (byte_index)
                         1: id <= rx;
                         2: handshake <= rx;
                         3: buttons_lo <= rx;
@@ -111,10 +131,21 @@ module snac_psx_pad #(
                 end
                 DONE: begin
                     att <= 1;
-                    if (port) begin
+                    if (step != 0) begin
+                        // Setup transaction: outputs keep the last read.
+                        if (port) step2 <= step + 1'b1; else step1 <= step + 1'b1;
+                        if (step == 3) configured[port] <= 1;
+                    end else begin
+                        if (!present) configured[port] <= 0;
+                        else if (!configured[port] && id == 8'h41) begin
+                            if (port) step2 <= 1; else step1 <= 1;
+                        end
+                    end
+                    if (step == 0 && port) begin
                         joy2 <= mapped; mbtn2 <= mouse_buttons;
                         analog[1] <= present && analog_mode; right2 <= {right_y, right_x};
-                    end else begin
+                    end else if (step == 0) begin
+                        raw1 <= {id, handshake, buttons_lo, buttons_hi, right_x, right_y, left_x, left_y};
                         joy1 <= mapped; mbtn1 <= mouse_buttons;
                         analog[0] <= present && analog_mode; right1 <= {right_y, right_x};
                     end

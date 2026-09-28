@@ -101,7 +101,13 @@ signal	ROTINAEOI	:std_logic;
 signal	ROTONSEOI	:std_logic;
 signal	INTb		:std_logic;
 signal	ISnum		:integer range 0 to 8;
-signal	mISnum		:integer range 0 to 8;
+-- Priority ranks (0 = highest, 8 = none) of the top pending request and of
+-- the top level in service; PRI is the level with the highest priority.
+signal	IRRrank		:integer range 0 to 8;
+signal	IRRtop		:integer range 0 to 7;
+signal	ISRrank		:integer range 0 to 8;
+signal	ISRtop		:integer range 0 to 7;
+signal	ISReff		:std_logic_vector(7 downto 0);
 signal	lEOI		:integer range 5 downto 0;
 signal	INTAm		:std_logic;
 
@@ -281,25 +287,30 @@ begin
 	
 	IRR<=(IRL and (not IMR)) when L_En='0' else IRM;
 	
-	process(clk,rstn)
-	variable vISnum	:integer range 0 to 15;
+	-- Fully nested mode (8259A datasheet): a request interrupts when it has a
+	-- higher priority than every level in service. In special fully nested
+	-- mode a slave input may re-enter at its own level; in special mask mode
+	-- masked levels in service do not block. Requiring an empty ISR instead
+	-- let one unfinished handler block every IRQ: after Mime's drivers load
+	-- the master's cascade level stays in service and the keyboard (IRQ1)
+	-- never reached the BIOS, so the key-state table stayed empty.
+	ISReff<=(ISR and (not IMR)) when SMMODE='1' else ISR;
+
+	process(IRR,ISReff,PRI)
+	variable lvl	:integer range 0 to 7;
 	begin
-		if(rstn='0')then
-			mISnum<=8;
-		elsif(clk' event and clk='1')then
-			if(ISnum=8)then
-				mISnum<=8;
-			else
-				vISnum:=ISnum+PRI;
-				if(vISnum>7)then
-					mISnum<=vISnum-8;
-				else
-					mISnum<=vISnum;
-				end if;
+		IRRrank<=8; IRRtop<=0; ISRrank<=8; ISRtop<=0;
+		for k in 7 downto 0 loop
+			lvl:=(k+PRI) mod 8;
+			if(IRR(lvl)='1')then
+				IRRrank<=k; IRRtop<=lvl;
 			end if;
-		end if;
+			if(ISReff(lvl)='1')then
+				ISRrank<=k; ISRtop<=lvl;
+			end if;
+		end loop;
 	end process;
-	
+
 	process(clk,rstn)
 	variable INTv	:std_logic;
 	begin
@@ -307,13 +318,12 @@ begin
 			INTb<='0';
 		elsif(clk' event and clk='1')then
 			INTv:='0';
-			for i in 0 to 7 loop
-				if(i<mISnum)then
-					INTv:=INTv or IRR(i);
-				end if;
-			end loop;
---			if((ISR=x"00" and lEOI=0) or SFNM='1')then
-			if(ISR=x"00" and lEOI=0)then
+			if(IRRrank<ISRrank)then
+				INTv:='1';
+			elsif(IRRrank/=8 and IRRrank=ISRrank and SFNM='1' and M_Sn='1' and TOSLAVE(IRRtop)='1')then
+				INTv:='1';
+			end if;
+			if(lEOI=0)then
 				INTb<=INTv;
 			else
 				INTb<='0';
@@ -383,16 +393,17 @@ begin
 --					end if;
 --					ISR(LCx)<='1';
 --	--				end if;
-			elsif(command=cmd_NSEOI or command=cmd_SEOI or lEOI=3)then
-				if(command=cmd_NSEOI or lEOI=1)then
-					if(SMMODE='1')then
-						ISR<=ISR and IMR;
-					else
-						ISR<=(others=>'0');
-					end if;
-				else
+			elsif(command(0)='1' or lEOI=3)then
+				-- EOI (OCW2 001/011/101/111; lEOI=3 is the automatic EOI):
+				-- non-specific clears only the highest-priority level in
+				-- service, specific (SL) clears the named level.
+				if(command(0)='1' and command(1)='1')then
 					isel:=conv_integer(S_LEV);
 					ISR(isel)<='0';
+				elsif(command(0)='1')then
+					if(ISRrank/=8)then
+						ISR(ISRtop)<='0';
+					end if;
 				end if;
 				lEOI<=2;
 			elsif(lEOI=1)then
@@ -422,14 +433,15 @@ begin
 		if(rstn='0')then
 			PRI<=0;
 		elsif(clk' event and clk='1')then
-			if(command=CMD_SETPRIO)then
-				PRI<=conv_integer(S_LEV);
-			elsif(command=cmd_SEOI and ROTONSEOI='1')then
-				PRI<=7-INTnum;
-			elsif(command=cmd_NSEOI and ROTONSEOI='0')then
-				PRI<=7-INTnum;
+			-- The named or serviced level becomes the lowest priority.
+			if(command=cmd_SETPRIO or command=cmd_ROTONSEOI)then
+				PRI<=(conv_integer(S_LEV)+1) mod 8;
+			elsif(command=cmd_ROTONNSEOI)then
+				if(ISRrank/=8)then
+					PRI<=(ISRtop+1) mod 8;
+				end if;
 			elsif(ROTINAEOI='1' and lINTA='1' and INTAm='0')then
-				PRI<=7-LCx;
+				PRI<=(LCx+1) mod 8;
 			end if;
 		end if;
 	end process;

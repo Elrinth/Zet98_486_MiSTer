@@ -330,7 +330,10 @@ class JobCard:Panel{
   string title=j.Kind+(j.Number>0?" #"+j.Number:"")+(j.Release!=""?" · "+j.Release:"")+" · "+(stale?"Status unknown · last seen ":"")+j.Status;
   string stall=MonitorForm.StallText(j);
   string reason=j.Reason!=""&&j.Status.StartsWith("Failed")?"Cause: "+j.Reason:"";
-  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+j.Id+"\n"+(stall!=""?stall+"\n":"")+(reason!=""?reason:j.Log);
+  const string stamp="yyyy-MM-dd HH:mm:ss";
+  string when=j.Start==DateTime.MinValue?"":"Started "+j.Start.ToLocalTime().ToString(stamp)+
+      (!j.Running&&j.End!=DateTime.MinValue&&j.End>=j.Start?"   Ended "+j.End.ToLocalTime().ToString(stamp):"");
+  string content=title+"\n"+j.Config+(stale?"   Last elapsed ":"   Elapsed ")+time+"   "+Estimate+"\n"+(when!=""?when+"\n":"")+j.Id+"\n"+(stall!=""?stall+"\n":"")+(reason!=""?reason:j.Log);
   if(!text.SetLiveText(content))return;
   text.SelectAll();text.SelectionFont=normal;text.SelectionColor=Color.Gainsboro;
   text.Select(0,title.Length);text.SelectionFont=bold;

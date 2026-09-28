@@ -14,7 +14,13 @@ architecture test of font_address_tb is
     signal load_address : std_logic_vector(19 downto 0) := (others=>'0');
     signal load_enable, load_write, font_write : std_logic := '0';
     signal font_data : std_logic_vector(7 downto 0);
+    -- Text-VRAM style codes straight into the converter (right-half flags).
+    signal tcode : std_logic_vector(15 downto 0) := (others=>'0');
+    signal tsel : std_logic_vector(1 downto 0);
+    signal taddr : std_logic_vector(16 downto 0);
 begin
+    tconv : entity work.knjaddrcnv port map(kcode=>tcode, cline=>"0101", mon=>open,
+        romsel=>tsel, romaddr=>taddr);
     clk<=not clk after 5 ns;
     dut : entity work.KNJRAMCONT generic map(LDR_AWIDTH=>20) port map(
         LDR_ADDR=>load_address, LDR_EN=>load_enable, LDR_WR=>load_write, LDR_WDAT=>x"a5",
@@ -22,6 +28,8 @@ begin
         KNJRAMSEL=>bank, KNJRAMADDR=>address, KNJRAMWDAT=>font_data,
         KNJRAMWR=>font_write, KNJRAMOE=>open, clk=>clk, rstn=>rstn);
     process
+        variable left_sel : std_logic_vector(1 downto 0);
+        variable left_addr : std_logic_vector(16 downto 0);
         procedure output(port_value, data_value : natural) is
         begin
             wait until falling_edge(clk);
@@ -95,6 +103,25 @@ begin
                 end loop;
             end loop;
         end loop;
+        -- A PC-98 marks a right half in text VRAM with bit 7 of the first code
+        -- byte (the low byte); this core also uses bit 15. Both must select the
+        -- same right-half address, which differs from the left half and keeps
+        -- the row (Flame Zapper Kotsujin's user-defined characters, row 56h).
+        for row in 16#01# to 16#5d# loop
+            for cell in 16#21# to 16#7e# loop
+                tcode<=std_logic_vector(to_unsigned(cell*256+row,16)); wait for 1 ns;
+                    left_sel:=tsel; left_addr:=taddr;
+                    tcode<=std_logic_vector(to_unsigned(cell*256+row+128,16)); wait for 1 ns;
+                    assert left_addr(4)='0' and taddr(4)='1' and tsel=left_sel and
+                           taddr(16 downto 5)=left_addr(16 downto 5)
+                        report "low-byte bit 7 right half wrong for row " & integer'image(row) &
+                               " cell " & integer'image(cell) severity failure;
+                    tcode<=std_logic_vector(to_unsigned(32768+cell*256+row,16)); wait for 1 ns;
+                    assert taddr(4)='1' and tsel=left_sel and taddr(16 downto 5)=left_addr(16 downto 5)
+                        report "bit 15 right half wrong" severity failure;
+            end loop;
+        end loop;
+        report "PASS: text-VRAM right halves by low-byte bit 7 and by bit 15, all rows";
         report "PASS: 8192 ANK addresses and 282624 FONT.ROM addresses across 92 JIS rows";
         report "PASS: full FONT.ROM loader bank boundaries, range limits and write strobe";
         finish;

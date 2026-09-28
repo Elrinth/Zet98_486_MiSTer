@@ -11,3 +11,7 @@ done
 for repeat in 1 3 31; do
     ghdl -r --std=08 -fsynopsys --workdir="$out" graphics_address_tb -gREPEATS="$repeat" --assert-level=error
 done
+# LEN counts raster lines with doubled lines too (Flame Zapper: 2 x rows), odd splits included
+for length in 2 7 398; do
+    ghdl -r --std=08 -fsynopsys --workdir="$out" graphics_address_tb -gREPEATS=1 -gFIRST_LENGTH="$length" --assert-level=error
+done

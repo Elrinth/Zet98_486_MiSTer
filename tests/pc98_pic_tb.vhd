@@ -129,6 +129,32 @@ begin
         await_irq; acknowledge(true,x"14"); sirq(4)<='0';
         write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
         assert mint='0' report "Simultaneous MIDI/sound interrupts did not clear" severity failure;
+        -- Fully nested priority. Mime's drivers leave the master's cascade
+        -- level (IRQ7) in service; the keyboard (IRQ1) outranks it and must
+        -- still interrupt, and a non-specific EOI ends only IRQ1.
+        sirq(4)<='1'; cycles(2); sirq(4)<='0'; await_irq;
+        acknowledge(true,x"14"); write_pic(true,'0',x"20"); cycles(12);
+        mirq(1)<='1'; cycles(2); mirq(1)<='0'; await_irq;
+        acknowledge(false,x"09"); write_pic(false,'0',x"20"); cycles(4);
+        write_pic(false,'0',x"0b"); addr<='0'; cycles(2);
+        assert mdout=x"80" report "non-specific EOI did not end only the highest level" severity failure;
+        write_pic(false,'0',x"0a");
+        -- Without special fully nested mode the cascade level blocks itself.
+        sirq(4)<='1'; cycles(2); sirq(4)<='0'; cycles(20);
+        assert mint='0' report "request re-entered the level in service" severity failure;
+        write_pic(false,'0',x"20"); await_irq;
+        acknowledge(true,x"14"); write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "cascade request repeated after EOI" severity failure;
+        -- A higher level nests into a lower handler; lower levels wait.
+        mirq(6)<='1'; await_irq; acknowledge(false,x"0e"); mirq(6)<='0';
+        mirq(1)<='1'; cycles(2); mirq(1)<='0'; await_irq;
+        acknowledge(false,x"09"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "IRQ6 re-entered after the nested IRQ1 ended" severity failure;
+        write_pic(false,'0',x"20"); cycles(12);
+        write_pic(false,'0',x"0b"); addr<='0'; cycles(2);
+        assert mdout=x"00" report "nested handlers left a level in service" severity failure;
+        write_pic(false,'0',x"0a");
+        report "PASS: fully nested priority: IRQ1 over an unfinished cascade level, EOI ends the highest level";
         report "PASS: 32 MPU IRQ6 vectors/EOIs and simultaneous MIDI + cascaded IRQ12";
         report "PASS: polled MIDI withdrawal, reassertion, masking and held-level EOI";
         report "PASS: existing PC-98 PICs: master/slave vectors, one-cycle acknowledge, masking and EOI";

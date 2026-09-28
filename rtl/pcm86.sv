@@ -19,6 +19,11 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     reg [1:0] board_control;
     reg [3:0] volume;
     reg mute, irq_pending, write_seen;
+    // Last bit 4 written to A468h. As in NP2kai pcm86_oa468, the refill
+    // interrupt is acknowledged only by a 1 -> 0 change of that bit; other
+    // A468h writes with bit 4 clear must not drop a pending request (a lost
+    // request lets the FIFO run dry: ~0.1 s gaps in Policenauts' title music).
+    reg ack_bit;
     reg [15:0] threshold, count;
     reg [14:0] rdptr, wrptr;
     reg [7:0] fifo [0:32767];
@@ -77,7 +82,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     always @(posedge clk) begin
         if(reset) begin
             control<=0; format<=8'h32; board_control<=0; volume<=0; mute<=0;
-            irq_pending<=0; write_seen<=0; threshold<=128;
+            irq_pending<=0; write_seen<=0; threshold<=128; ack_bit<=0;
             count<=0; rdptr<=0; wrptr<=0; phase<=0;
             state<=IDLE; bytes_left<=0; byte_index<=0; active_format<=0;
             sample_bytes<=0; sample_l<=0; sample_r<=0; sample_valid<=0;
@@ -131,7 +136,8 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
                 16'ha468:begin
                     control<=writedata & 8'hef;
                     if(writedata[2:0]!=control[2:0]) phase<=0;
-                    if(!writedata[4]) irq_pending<=0;
+                    if(ack_bit && !writedata[4]) irq_pending<=0;
+                    ack_bit<=writedata[4];
                 end
                 16'ha46a:if(control[5]) threshold<=writedata==255 ? 16'h7ffc : ({8'b0,writedata}+16'd1)<<7;
                     else format<=writedata;

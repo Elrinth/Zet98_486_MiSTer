@@ -29,7 +29,7 @@ for mhz in 20 60 100; do
 done
 for mutation in retained_pattern replay read_shift early_ack reset_early; do
     case "$mutation" in
-        retained_pattern) sed 's/if (load_on_write) pattern_latch<=memory_readdata;/if (load_on_write) pattern_latch<=memory_base;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
+        retained_pattern) sed 's/if (load_on_write) pattern_latch<=pattern_merge;/if (load_on_write) pattern_latch<=memory_base;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
         replay) sed 's/RELEASE: if (!request || reset_pending) state<=IDLE;/RELEASE: state<=IDLE;/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
         read_shift) sed 's/state == READ_MEMORY \&\& memory_acknowledge \&\& !transfer_operation\[10\]/state == READ_MEMORY \&\& !transfer_operation[10]/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;
         early_ack) sed 's/WRITE_MEMORY: if (memory_acknowledge)/WRITE_MEMORY: if (1\x27b1)/' rtl/graphics/pc98_egc_word_engine.sv > "$out/bad.sv" ;;

@@ -40,10 +40,15 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
     input wire [63:0] image_size,
     output reg [31:0] sd_lba = 0,
     output reg sd_rd = 0,
+    output reg [5:0] sd_blk_cnt = 0,     // blocks-1 per request (CD audio streams 8)
     input wire sd_ack,
     input wire [8:0] sd_buff_addr,
     input wire [7:0] sd_buff_dout,
-    input wire sd_buff_wr
+    input wire sd_buff_wr,
+    output wire [1:0] activity,          // [0] data read in progress, [1] CD audio playing
+    // Debug trace (CD trace builds): {host_req, audio_status, starving, a_req,
+    // CDB bytes 9..0, command dispatch strobe}. Unused outputs are removed.
+    output wire [91:0] trace
 );
     assign present = 1'b1;
 
@@ -252,6 +257,18 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
         else all_pages = page_byte(6'h2a, i - 52);
     endfunction
 
+    function automatic [7:0] inquiry_byte(input [5:0] n);
+        begin
+            inquiry_byte = 0;
+            case (n)
+                        0: inquiry_byte = 8'h05; 1: inquiry_byte = 8'h80; 3: inquiry_byte = 8'h21; 4: inquiry_byte = 8'h1f;
+                        // "NEC     CD-ROM DRIVE:98 1.0 " as a table
+                        8: inquiry_byte = 8'h4e; 9: inquiry_byte = 8'h45; 10: inquiry_byte = 8'h43; 11: inquiry_byte = 8'h20; 12: inquiry_byte = 8'h20; 13: inquiry_byte = 8'h20; 14: inquiry_byte = 8'h20; 15: inquiry_byte = 8'h20; 16: inquiry_byte = 8'h43; 17: inquiry_byte = 8'h44; 18: inquiry_byte = 8'h2d; 19: inquiry_byte = 8'h52; 20: inquiry_byte = 8'h4f; 21: inquiry_byte = 8'h4d; 22: inquiry_byte = 8'h20; 23: inquiry_byte = 8'h44; 24: inquiry_byte = 8'h52; 25: inquiry_byte = 8'h49; 26: inquiry_byte = 8'h56; 27: inquiry_byte = 8'h45; 28: inquiry_byte = 8'h3a; 29: inquiry_byte = 8'h39; 30: inquiry_byte = 8'h38; 31: inquiry_byte = 8'h20; 32: inquiry_byte = 8'h31; 33: inquiry_byte = 8'h2e; 34: inquiry_byte = 8'h30; 35: inquiry_byte = 8'h20;
+                        default: ;
+                    endcase
+        end
+    endfunction
+
     reg [9:0] resp_len;                  // bytes this command returns (before alloc clip)
     always @* begin
         case (op)
@@ -272,14 +289,7 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
             b = 0;
             len2 = resp_len - 2'd2;
             case (op)
-                8'h12: begin // INQUIRY
-                    case (n)
-                        0: b = 8'h05; 1: b = 8'h80; 3: b = 8'h21; 4: b = 8'h1f;
-                        // "NEC     CD-ROM DRIVE:98 1.0 " as a table
-                        8: b = 8'h4e; 9: b = 8'h45; 10: b = 8'h43; 11: b = 8'h20; 12: b = 8'h20; 13: b = 8'h20; 14: b = 8'h20; 15: b = 8'h20; 16: b = 8'h43; 17: b = 8'h44; 18: b = 8'h2d; 19: b = 8'h52; 20: b = 8'h4f; 21: b = 8'h4d; 22: b = 8'h20; 23: b = 8'h44; 24: b = 8'h52; 25: b = 8'h49; 26: b = 8'h56; 27: b = 8'h45; 28: b = 8'h3a; 29: b = 8'h39; 30: b = 8'h38; 31: b = 8'h20; 32: b = 8'h31; 33: b = 8'h2e; 34: b = 8'h30; 35: b = 8'h20;
-                        default: ;
-                    endcase
-                end
+                // INQUIRY (12h) and MODE SENSE pages come from the reply ROM.
                 8'h03: case (n) 0: b = 8'h70; 2: b = resp_key; 7: b = 8'h0a; 12: b = resp_asc; default: ; endcase
                 8'h25: begin
                     case (n)
@@ -291,7 +301,7 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
                     case (n)
                         0: b = len2[9:8]; 1: b = len2[7:0];
                         2: b = media ? 8'h01 : 8'h70;
-                        default: if (n >= 8) b = page == 6'h3f ? all_pages(n - 8) : page_byte(page, n - 8);
+                        default: ;          // page bytes: reply ROM
                     endcase
                 end
                 8'h42: case (n) // READ SUB-CHANNEL, format 1 (current position), MSF
@@ -346,7 +356,9 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
     reg [7:0] buf_q_lo, buf_q_hi;
     reg host_req = 0;
     wire host_write = sd_buff_wr && sd_ack && state == FETCH && host_req;
-    wire [10:0] host_waddr = {blk, sd_buff_addr[8:1]} ;
+    // One multi-block request per sector: the byte count gives the position.
+    reg [11:0] h_bcount;
+    wire [10:0] host_waddr = h_bcount[11:1];
     // Reply builder: one byte (or IDENTIFY word) per clock. READ TOC
     // descriptors read hdr, so the buffer write is one clock behind.
     wire [1:0] toc_table = toc_msf ? (bcd_mode ? 2'd3 : 2'd2) : 2'd1;
@@ -356,20 +368,40 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
     // READ TOC descriptor byte 2: the track number (AAh for the lead-out).
     wire [7:0] build_byte = op == 8'h43 && build_n >= 4 && toc_desc_k == 2 ?
                             (toc_desc_idx == trk_n ? 8'haa : trk_first + toc_desc_idx) : resp_byte(build_n);
-    wire [15:0] build_word = ident_word(build_n[7:0]);
+    // Reply ROM (one M10K instead of wide constant multiplexers): IDENTIFY
+    // words at 0-255, INQUIRY bytes at 256, mode pages (01h 0Dh 0Eh 0Fh 2Ah,
+    // concatenated as for 3Fh) at 320. Read like the builder's other inputs:
+    // the value for build_n arrives one clock later, with b_byte.
+    (* ramstyle="M10K" *) reg [15:0] crom[0:511];
+    integer ci;
+    initial begin
+        for (ci = 0; ci < 512; ci = ci + 1) crom[ci] = 0;
+        for (ci = 0; ci < 256; ci = ci + 1) crom[ci] = ident_word(ci);
+        for (ci = 0; ci < 36; ci = ci + 1) crom[256 + ci] = {8'h00, inquiry_byte(ci)};
+        for (ci = 0; ci < 72; ci = ci + 1) crom[320 + ci] = {8'h00, all_pages(ci)};
+    end
+    wire [6:0] page_base = page == 6'h0d ? 7'd12 : page == 6'h0e ? 7'd20 :
+                           page == 6'h0f ? 7'd36 : page == 6'h2a ? 7'd52 : 7'd0;
+    wire [9:0] page_off = build_n - 10'd8;
+    wire [8:0] crom_addr = build_ident ? {1'b0, build_n[7:0]} :
+                           op == 8'h12 ? 9'd256 + build_n[5:0] : 9'd320 + page_base + page_off[6:0];
+    wire crom_byte = !build_ident && (op == 8'h12 || (op == 8'h5a && build_n >= 8));
+    reg [15:0] crom_q;
+    always @(posedge clk) crom_q <= crom[crom_addr];
     reg b_we = 0, b_ident, b_hdr, b_odd;
     reg [10:0] b_waddr, b_haddr;
     reg [7:0] b_byte;
-    reg [15:0] b_word;
-    wire [7:0] b_final = !b_hdr ? b_byte : pcd ? hdr_q : hdr_synth(b_haddr);
+    reg b_rom;
+    wire [15:0] b_word = crom_q;
+    wire [7:0] b_final = b_rom ? crom_q[7:0] : !b_hdr ? b_byte : pcd ? hdr_q : hdr_synth(b_haddr);
     always @(posedge clk) begin
         b_we <= state == BUILD;
         b_ident <= build_ident; b_odd <= build_n[0];
         b_hdr <= toc_from_hdr; b_haddr <= hdr_raddr;
         b_waddr <= build_ident ? {3'b0, build_n[7:0]} : {1'b0, build_n[9:1]};
-        b_byte <= build_byte; b_word <= build_word;
+        b_byte <= build_byte; b_rom <= crom_byte;
         if (host_write) begin
-            if (sd_buff_addr[0]) buf_hi[host_waddr] <= sd_buff_dout;
+            if (h_bcount[0]) buf_hi[host_waddr] <= sd_buff_dout;
             else buf_lo[host_waddr] <= sd_buff_dout;
         end else if (b_we) begin
             if (b_ident || !b_odd) buf_lo[b_waddr] <= b_ident ? b_word[7:0] : b_final;
@@ -390,22 +422,31 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
     // (4 bytes each: left, right, little-endian) whenever there is room, and
     // one sample leaves it every 1/44100 s while playing. 588 samples make a
     // sector; play_pos counts sectors played.
-    (* ramstyle="M10K, no_rw_check" *) reg [31:0] afifo[0:2047];
+    // 4096 samples (93 ms), kept nearly full: HPS requests can stall.
+    (* ramstyle="M10K, no_rw_check" *) reg [31:0] afifo[0:4095];
     reg [31:0] afifo_q;
-    reg [11:0] wp = 0, rp = 0;
-    wire [11:0] level = wp - rp;
+    reg [12:0] wp = 0, rp = 0;
+    reg primed = 0;                      // output waits for a pre-filled buffer
+    reg hold_valid = 0;                  // stopped by READ/SEEK, buffer kept for a resume
+    wire [12:0] level = wp - rp;
+    assign trace = {host_req, audio_status, audio_status == AS_PLAY && primed && level == 0, a_req,
+                    cdb[9], cdb[8], cdb[7], cdb[6], cdb[5], cdb[4], cdb[3], cdb[2], cdb[1], cdb[0],
+                    state == IDLE && cdb_words == 6};
     reg a_req = 0, a_drop = 0, a_we_d = 0;
     reg [1:0] a_cnt = 0;
     reg [23:0] a_word;
     reg [8:0] a_skip;
     reg [21:0] fetch_blk, fetch_last;
+    reg [3:0] a_nblk;                    // blocks in the request in flight
+    reg [12:0] a_bcount;                 // byte position within that request
+    wire [21:0] fetch_left = fetch_last - fetch_blk;
     reg [9:0] samp;
     wire audio_active = audio_status == AS_PLAY || audio_status == AS_PAUSE;
-    wire a_byte = a_req && !a_drop && sd_ack && sd_buff_wr && sd_buff_addr >= a_skip;
+    wire a_byte = a_req && !a_drop && sd_ack && sd_buff_wr && a_bcount >= {4'd0, a_skip};
     wire a_we = a_byte && a_cnt == 3;
     always @(posedge clk) begin
-        if (a_we) afifo[wp[10:0]] <= {sd_buff_dout, a_word};
-        afifo_q <= afifo[rp[10:0]];
+        if (a_we) afifo[wp[11:0]] <= {sd_buff_dout, a_word};
+        afifo_q <= afifo[rp[11:0]];
         a_we_d <= a_we;
     end
     reg [31:0] tick_acc = 0;
@@ -472,12 +513,31 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
     endtask
     task automatic flush_audio;
         begin
-            wp <= 0; rp <= 0; a_cnt <= 0; samp <= 0;
+            wp <= 0; rp <= 0; a_cnt <= 0; samp <= 0; primed <= 0; hold_valid <= 0;
             if (a_req) a_drop <= 1;
+        end
+    endtask
+    // A new PLAY while audio plays: if it starts where playback already is,
+    // PLAYSET continues the stream instead of flushing and refilling it.
+    task automatic play_again;
+        begin
+            if (audio_status == AS_PLAY) hold_valid <= 1;
+            if (audio_active) audio_status <= AS_DONE;
         end
     endtask
     task automatic stop_audio;        // as NP2kai: status "completed", position 0
         begin audio_status <= AS_DONE; play_pos <= 0; flush_audio(); end
+    endtask
+    // SEEK stops playback as on a real drive, but keeps the position and the
+    // buffered audio: a PLAY from that position resumes without a refill gap.
+    // READ(10) does not stop CD audio at all: games such as Policenauts load
+    // data while the music plays (a real PC-98 setup does not stutter there,
+    // and emulators keep playing); data reads just take the SD card first.
+    task automatic hold_audio;
+        begin
+            if (audio_status == AS_PLAY || audio_status == AS_PAUSE) hold_valid <= 1;
+            audio_status <= AS_DONE;
+        end
     endtask
     wire [9:0] clipped = (alloc10[15:10] != 0 || resp_len < alloc10[9:0]) ? resp_len : alloc10[9:0];
     wire [9:0] clipped6 = resp_len < {2'b0, cdb[4]} ? resp_len : {2'b0, cdb[4]};
@@ -503,7 +563,7 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
             endcase
         end
         if (probe_pending && !probing && state == IDLE && !sd_rd && !sd_ack && !host_req && !a_req) begin
-            probing <= 1; sync_ok <= 1; magic_ok <= 1; pblk <= 0; sd_lba <= 0; sd_rd <= 1;
+            probing <= 1; sync_ok <= 1; magic_ok <= 1; pblk <= 0; sd_lba <= 0; sd_rd <= 1; sd_blk_cnt <= 0;
         end else if (probing && sd_rd && sd_ack) sd_rd <= 0;
         else if (probing && !sd_rd && !sd_ack) begin
             if (pblk == 3) begin probing <= 0; probe_pending <= 0; probe_done <= 1; end
@@ -512,19 +572,27 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
         // ---- CD audio: fetch, FIFO, 44.1 kHz output ----------------------------
         tick_acc <= tick ? tick_next - CLK_HZ : tick_next;
         if (audio_active && !a_req && !host_req && !sd_rd && !sd_ack && !probing && !probe_pending &&
-            state != FETCH && fetch_blk <= fetch_last && level < 12'd1900) begin
-            sd_lba <= {10'b0, fetch_blk}; sd_rd <= 1; a_req <= 1;
+            state != FETCH && fetch_blk <= fetch_last && level <= 13'd3072) begin
+            // Up to 8 blocks (4 KiB, 1024 samples) per request: one HPS round
+            // trip per ~23 ms of audio instead of one per 2.9 ms.
+            sd_lba <= {10'b0, fetch_blk}; sd_rd <= 1; a_req <= 1; a_bcount <= 0;
+            sd_blk_cnt <= fetch_left >= 7 ? 6'd7 : fetch_left[5:0];
+            a_nblk <= fetch_left >= 7 ? 4'd8 : fetch_left[3:0] + 1'b1;
         end else if (a_req && sd_rd && sd_ack) sd_rd <= 0;
         else if (a_req && !sd_rd && !sd_ack) begin
             a_req <= 0; a_drop <= 0;
-            if (!a_drop) begin fetch_blk <= fetch_blk + 1'b1; a_skip <= 0; end
+            if (!a_drop) begin fetch_blk <= fetch_blk + a_nblk; a_skip <= 0; end
         end
+        if (a_req && sd_ack && sd_buff_wr) a_bcount <= a_bcount + 1'b1;
         if (a_byte) begin
             a_cnt <= a_cnt + 1'b1; a_word <= {sd_buff_dout, a_word[23:8]};
             if (a_cnt == 3) wp <= wp + 1'b1;
         end
+        // Only while playing: an idle drive's stale fetch pointers would otherwise
+        // prime the next stream before its first sample is in the buffer.
+        if (audio_status == AS_PLAY && (level >= 13'd1024 || (fetch_blk > fetch_last && !a_req))) primed <= 1;
         if (tick) begin
-            if (audio_status == AS_PLAY && level != 0 && (level > 1 || !a_we_d)) begin
+            if (audio_status == AS_PLAY && primed && level != 0 && (level > 1 || !a_we_d)) begin
                 audio_l <= afifo_q[15:0]; audio_r <= afifo_q[31:16]; rp <= rp + 1'b1;
                 if (samp == 587) begin
                     samp <= 0; play_pos <= play_pos + 1'b1;
@@ -616,15 +684,16 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
                            else if (!media) check(2, 8'h3a);
                            else begin stop_audio(); complete(); end
                     8'h1e: complete();
-                    8'h2b, 8'h4e: if (!media) check(2, 8'h3a); else begin stop_audio(); complete(); end
+                    8'h2b: if (!media) check(2, 8'h3a); else begin hold_audio(); complete(); end
+                    8'h4e: if (!media) check(2, 8'h3a); else begin stop_audio(); complete(); end
                     8'h45: if (!media) check(2, 8'h3a);
                            else begin
                                p_start <= {1'b0, cdb[3][3:0], cdb[4], cdb[5]};
                                p_end <= {1'b0, cdb[3][3:0], cdb[4], cdb[5]} + {5'b0, cdb[7], cdb[8]};
-                               state <= PLAYSET; ps <= 2; if (audio_active) audio_status <= AS_DONE;
+                               state <= PLAYSET; ps <= 2; play_again();
                            end
                     8'h47: if (!media) check(2, 8'h3a);
-                           else begin state <= PLAYSET; ps <= 0; if (audio_active) audio_status <= AS_DONE; end
+                           else begin state <= PLAYSET; ps <= 0; play_again(); end
                     8'h4b: if (!media) check(2, 8'h3a);
                            else begin
                                if (cdb[8][0] && audio_status == AS_PAUSE) audio_status <= AS_PLAY;
@@ -637,7 +706,7 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
                            else if ({cdb[2], cdb[3][7:4]} != 0 ||
                                     {1'b0, cdb[3][3:0], cdb[4], cdb[5]} + {5'b0, cdb[7], cdb[8]} > {1'b0, total}) check(5, 8'h21);
                            else begin
-                               stop_audio();
+                               // CD audio keeps playing (see hold_audio).
                                read_lba <= {cdb[3][3:0], cdb[4], cdb[5]};
                                read_left <= {cdb[7], cdb[8]};
                                state <= FETCH; blk <= 0; host_req <= 0;
@@ -669,11 +738,22 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
                 3'd0: begin p_start <= msf_lba; ps <= 1; end
                 3'd1: begin p_end <= msf_lba; ps <= 2; end
                 3'd2: if (!a_req) begin
-                    flush_audio();
-                    if (p_end_c <= p_start) begin audio_status <= AS_DONE; complete(); end
-                    else begin p_end <= p_end_c; read_lba <= p_start[19:0]; ps <= 3; end
+                    if (hold_valid && p_start[19:0] <= play_pos && p_start[19:0] + 20'd2 >= play_pos &&
+                        p_end_c > p_start) begin
+                        // Resume after a SEEK, or a PLAY from (within 2 sectors of)
+                        // the current position: keep the buffer and stream position.
+                        p_end <= p_end_c; read_lba <= p_end_c[19:0]; ps <= 5;
+                    end else begin
+                        flush_audio();
+                        if (p_end_c <= p_start) begin audio_status <= AS_DONE; complete(); end
+                        else begin p_end <= p_end_c; read_lba <= p_start[19:0]; ps <= 3; end
+                    end
                 end
                 3'd3: begin fetch_blk <= sector_base[30:9]; a_skip <= sector_base[8:0]; read_lba <= p_end[19:0]; ps <= 4; end
+                3'd5: begin
+                    fetch_last <= sector_base_m1[30:9]; play_end <= p_end[19:0]; hold_valid <= 0;
+                    audio_status <= AS_PLAY; complete();
+                end
                 default: begin
                     fetch_last <= sector_base_m1[30:9];
                     play_pos <= p_start[19:0]; play_end <= p_end[19:0]; samp <= 0;
@@ -713,19 +793,17 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
                     first_block <= sector_byte[30:9];
                     start_off <= sector_byte[8:0];
                     blocks <= sector_byte[8:0] == 0 ? 3'd4 : 3'd5;
-                    sd_lba <= {10'b0, sector_byte[30:9]};
-                    sd_rd <= 1; host_req <= 1;
+                    sd_lba <= {10'b0, sector_byte[30:9]}; h_bcount <= 0;
+                    // all 4-5 blocks of the sector in one HPS request
+                    sd_rd <= 1; host_req <= 1; sd_blk_cnt <= sector_byte[8:0] == 0 ? 6'd3 : 6'd4;
                 end else if (host_req && sd_rd && sd_ack) sd_rd <= 0;
                 else if (host_req && !sd_rd && !sd_ack) begin
-                    if (blk + 1'b1 == blocks) begin
-                        host_req <= 0;
-                        state <= SECTOR_IN; rd_word <= {3'b0, start_off[8:1]}; words_left <= 1024;
-                        read_lba <= read_lba + 1'b1; read_left <= read_left - 1'b1;
-                        {cyl_hi, cyl_lo} <= 16'h0800; count <= 8'h02; status <= 8'h58; pending_irq <= 1;
-                    end else begin
-                        blk <= blk + 1'b1; sd_lba <= {10'b0, first_block + blk + 1'b1}; sd_rd <= 1;
-                    end
+                    host_req <= 0;
+                    state <= SECTOR_IN; rd_word <= {3'b0, start_off[8:1]}; words_left <= 1024;
+                    read_lba <= read_lba + 1'b1; read_left <= read_left - 1'b1;
+                    {cyl_hi, cyl_lo} <= 16'h0800; count <= 8'h02; status <= 8'h58; pending_irq <= 1;
                 end
+                if (host_write) h_bcount <= h_bcount + 1'b1;
             end
         end
         // A mount can arrive while the IDE channel is held in reset (MGL
@@ -736,4 +814,5 @@ module pc98_atapi #(parameter integer CLK_HZ = 90000000) (
             audio_status <= AS_NONE; play_pos <= 0; flush_audio();
         end
     end
+    assign activity = {audio_status == AS_PLAY, host_req || state == FETCH};
 endmodule

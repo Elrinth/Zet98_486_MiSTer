@@ -4,6 +4,7 @@ module egc_write_tb;
     reg [63:0] shifted_source,pattern_words,foreground_words,background_words;
     reg [3:0] plane_enable;
     reg [1:0] byte_enable;
+    reg byte_access=0;          // word writes (byte mode: engine test)
     wire [63:0] base_words,xor_mask_words;
     wire load_pattern_on_write,configuration_valid;
     pc98_egc_write dut(.*);

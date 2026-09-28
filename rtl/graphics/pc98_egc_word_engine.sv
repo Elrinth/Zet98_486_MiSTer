@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Experimental aligned-word EGC client for SDRAMC's CPU read4/affine-RMW4 port.
-// Not in the active QSF. Byte transactions report a fault without issuing SDRAM.
+// Byte transactions follow NP2kai egc_readbyte/egc_writebyte: the shifter steps
+// by one byte of the addressed lane and only that byte is written.
 module pc98_egc_word_engine #(
     parameter integer ADDRESS_WIDTH = 22
 ) (
@@ -54,22 +55,37 @@ module pc98_egc_word_engine #(
     reg [15:0] transfer_operation, transfer_color, transfer_pixel_mask, transfer_cpu;
     reg [63:0] transfer_foreground, transfer_background;
     reg [1:0] transfer_plane;
+    reg transfer_byte, transfer_lane;   // byte access, lane 1 = odd address
+    reg transfer_clip;                  // write uses the shifter clip mask
     reg [63:0] pattern_latch, returned_words, retained_source;
     reg source_advanced;
     wire source_from_read = state == READ_MEMORY && memory_acknowledge && !transfer_operation[10];
     wire shift_advance = state == WRITE_SHIFT || source_from_read;
     wire [63:0] shift_input = state == WRITE_SHIFT ? {4{transfer_cpu}} : memory_readdata;
+    wire [7:0] request_byte = request_bytes[1] ? request_writedata[15:8] : request_writedata[7:0];
+    wire request_is_byte = request_bytes == 2'b01 || request_bytes == 2'b10;
+    // Byte writes shift only in ROP mode and in pattern mode without a fixed
+    // color, and only with a CPU source (EGCOPE_SHIFTB); word writes always do
+    // outside ROP mode (EGCOPE_SHIFTW2).
+    wire byte_write_shift = operation[10] &&
+        (operation[12:11] == 1 || (operation[12:11] == 2 && color_select[14:13] == 0));
+    wire word_write_shift = operation[12:11] != 1 || operation[10];
     wire [63:0] shifted_words;
     wire [15:0] shifted_clip;
     pc98_egc_shift shifter (
         .clk(clk), .reset(state_reset), .reload(shift_reload), .advance(shift_advance),
+        .byte_mode(transfer_byte), .byte_lane(transfer_lane),
         .shift_control(shift_control), .bit_length(bit_length), .source_words(shift_input),
         .shifted_words(shifted_words), .clip_mask(shifted_clip), .result_valid()
     );
     // Register reload restarts alignment but does not discard the previously
     // latched source. The shifter's first real transfer may then prime a row.
     wire [63:0] selected_source = source_advanced ? shifted_words : retained_source;
-    wire [15:0] selected_clip = source_advanced ? shifted_clip : 16'hffff;
+    wire [15:0] selected_clip = source_advanced && transfer_clip ? shifted_clip : 16'hffff;
+    wire [63:0] lane_bytes = {4{{8{transfer_lane}}, {8{!transfer_lane}}}};
+    // A byte access loads only its lane of the pattern register.
+    wire [63:0] pattern_merge = transfer_byte ?
+        (pattern_latch & ~lane_bytes) | (memory_readdata & lane_bytes) : memory_readdata;
     wire [63:0] next_base, next_mask;
     wire load_on_write, valid_configuration;
     pc98_egc_write write_operands (
@@ -78,9 +94,15 @@ module pc98_egc_word_engine #(
         .pattern_words(pattern_latch), .foreground_words(transfer_foreground),
         .background_words(transfer_background), .pixel_mask(transfer_pixel_mask),
         .clip_mask(selected_clip), .plane_enable(memory_planes), .byte_enable(memory_bytes),
+        .byte_access(transfer_byte),
         .base_words(next_base), .xor_mask_words(next_mask),
         .load_pattern_on_write(load_on_write), .configuration_valid(valid_configuration)
     );
+    // A byte read returns the addressed lane's byte in both halves.
+    function automatic [15:0] lane_word(input [15:0] word);
+        lane_word = !transfer_byte ? word :
+            transfer_lane ? {2{word[15:8]}} : {2{word[7:0]}};
+    endfunction
     assign busy = state != IDLE || reset_pending || soft_reset;
     assign memory_read4 = state == READ_MEMORY;
     assign memory_rmw4 = state == WRITE_MEMORY;
@@ -97,6 +119,7 @@ module pc98_egc_word_engine #(
             transfer_operation<=0; transfer_color<=0; transfer_pixel_mask<=0;
             transfer_cpu<=0; transfer_foreground<=0; transfer_background<=0;
             transfer_plane<=0; pattern_latch<=0; returned_words<=0;
+            transfer_byte<=0; transfer_lane<=0; transfer_clip<=0;
             retained_source<=0; source_advanced<=0;
         end else begin
             acknowledge<=0; fault<=0;
@@ -112,11 +135,16 @@ module pc98_egc_word_engine #(
                     memory_bytes<=request_bytes;
                     memory_planes<=~access_control[3:0];
                     transfer_plane<=request_address[1:0];
-                    transfer_cpu<=request_writedata;
+                    transfer_cpu<=request_is_byte ? {2{request_byte}} : request_writedata;
+                    transfer_byte<=request_is_byte; transfer_lane<=request_bytes[1];
+                    // Byte writes are clipped by the shifter (mask2 &= srcmask)
+                    // only in ROP mode and in pattern mode without a fixed color.
+                    transfer_clip<=!request_is_byte || operation[12:11] == 1 ||
+                        (operation[12:11] == 2 && color_select[14:13] == 0);
                     transfer_operation<=operation; transfer_color<=color_select;
                     transfer_pixel_mask<=pixel_mask;
                     transfer_foreground<=foreground_words; transfer_background<=background_words;
-                    if (!egc_enable || request_bytes != 2'b11) begin
+                    if (!egc_enable || !(request_bytes == 2'b11 || request_is_byte)) begin
                         posted<=0; state<=REJECT;
                     end else if (!request_write) begin
                         posted<=0; state<=READ_MEMORY;
@@ -124,23 +152,23 @@ module pc98_egc_word_engine #(
                         // Posted write: release the CPU now; the RMW follows.
                         posted<=1; held_request<=1;
                         acknowledge<=!reset_pending && !soft_reset;
-                        if (operation[12:11] != 1 || operation[10]) state<=WRITE_SHIFT;
+                        if (request_is_byte ? byte_write_shift : word_write_shift) state<=WRITE_SHIFT;
                         else state<=WRITE_BUILD;
                     end
                 end
                 READ_MEMORY: if (memory_acknowledge) begin
                     returned_words<=memory_readdata;
-                    if (transfer_operation[9:8] == 1) pattern_latch<=memory_readdata;
+                    if (transfer_operation[9:8] == 1) pattern_latch<=pattern_merge;
                     state<=READ_RESULT;
                 end
                 READ_RESULT: begin
                     // NP2's native word-read convention. Compare-mode behavior
                     // differs in other references and remains an integration gate.
                     if (transfer_operation[13])
-                        readdata<=returned_words[16*transfer_plane +:16];
+                        readdata<=lane_word(returned_words[16*transfer_plane +:16]);
                     else if (transfer_operation[10])
-                        readdata<=returned_words[16*transfer_color[9:8] +:16];
-                    else readdata<=selected_source[16*transfer_color[9:8] +:16];
+                        readdata<=lane_word(returned_words[16*transfer_color[9:8] +:16]);
+                    else readdata<=lane_word(selected_source[16*transfer_color[9:8] +:16]);
                     if (!transfer_operation[10]) retained_source<=shifted_words;
                     acknowledge<=!reset_pending && !soft_reset; state<=RELEASE;
                 end
@@ -155,7 +183,7 @@ module pc98_egc_word_engine #(
                 WRITE_MEMORY: if (memory_acknowledge) begin
                     // SDRAMC returns the old destination used for this RMW,
                     // including when every byte/plane was masked from writing.
-                    if (load_on_write) pattern_latch<=memory_readdata;
+                    if (load_on_write) pattern_latch<=pattern_merge;
                     if (posted) begin posted<=0; state<=IDLE; end
                     else begin acknowledge<=!reset_pending && !soft_reset; state<=RELEASE; end
                 end
