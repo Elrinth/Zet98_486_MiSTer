@@ -236,8 +236,20 @@ reg  io_ack;
 reg  rack;
 wire io_strobe = ~rack & io_clk;
 
+// The HPS host bus is slow (each word waits for io_ack), but clk_sys is the
+// core clock. Run the host-command receiver at half rate: every register it
+// owns updates only on io_ce edges, so their mutual paths get two clk_sys
+// periods (pc98-host-io.sdc). A late write-enable here once shifted the HDMI
+// timing words (HEIGHT took HBP) depending on the fitter's placement.
+reg io_ce = 0;
+always @(posedge clk_sys) io_ce <= ~io_ce;
+// io_strobe now stays high for one io_ce period (two clk_sys cycles). hps_io
+// acts on the strobe level, so everything outside this receiver gets the
+// stock one-cycle pulse: the second cycle, just before rack follows io_clk.
+wire io_strobe_bus = io_strobe & io_ce;
+
 always @(posedge clk_sys) begin
-	if(~(io_wait | vs_wait) | io_strobe) begin
+	if(io_ce && (~(io_wait | vs_wait) | io_strobe)) begin
 		rack <= io_clk;
 		io_ack <= rack;
 	end
@@ -246,7 +258,7 @@ end
 reg [31:0] gp_outr;
 always @(posedge clk_sys) begin
 	reg [31:0] gp_outd;
-	gp_outr <= gp_outd;
+	if(io_ce) gp_outr <= gp_outd;
 	gp_outd <= gp_out;
 end
 
@@ -342,12 +354,15 @@ always@(posedge clk_sys) begin
 	reg        vs_d0,vs_d1,vs_d2;
 	reg  [4:0] acx_att;
 
-	old_strobe <= io_strobe;
+	// Write pulses stay one clk_sys cycle (shadowmask auto-increments).
 	coef_wr <= 0;
 
 `ifndef MISTER_DEBUG_NOHDMI
 	shadowmask_wr <= 0;
 `endif
+
+	if(io_ce) begin
+	old_strobe <= io_strobe;
 
 	if(~io_uio) begin
 		has_cmd <= 0;
@@ -476,6 +491,7 @@ always@(posedge clk_sys) begin
 
 	vs_d2 <= vs_d1;
 	if(~vs_d2 & vs_d1) vs_wait <= 0;
+	end
 end
 
 cyclonev_hps_interface_peripheral_uart uart
@@ -1152,7 +1168,7 @@ osd hdmi_osd
 	.clk_sys(clk_sys),
 
 	.io_osd(io_osd_hdmi),
-	.io_strobe(io_strobe),
+	.io_strobe(io_strobe_bus),
 	.io_din(io_din),
 
 	.clk_video(clk_hdmi),
@@ -1303,7 +1319,7 @@ osd vga_osd
 	.clk_sys(clk_sys),
 
 	.io_osd(io_osd_vga),
-	.io_strobe(io_strobe),
+	.io_strobe(io_strobe_bus),
 	.io_din(io_din),
 	.osd_status(osd_status),
 
@@ -1612,7 +1628,7 @@ emu emu
 	.HPS_BUS({fb_en, sl, f1, HDMI_TX_VS, 
 				 clk_100m, clk_ihdmi,
 				 ce_hpix, hde_emu, hhs_fix, hvs_fix, 
-				 io_wait, clk_sys, io_fpga, io_uio, io_strobe, io_wide, io_din, io_dout}),
+				 io_wait, clk_sys, io_fpga, io_uio, io_strobe_bus, io_wide, io_din, io_dout}),
 
 	.VGA_R(r_out),
 	.VGA_G(g_out),

@@ -15,5 +15,6 @@ source [file join [file dirname [info script]] pc98-read-transfer.sdc]
 source [file join [file dirname [info script]] pc98-sdram-control.sdc]
 source [file join [file dirname [info script]] pc98-host-video-settings.sdc]
 source [file join [file dirname [info script]] pc98-video-status.sdc]
+source [file join [file dirname [info script]] pc98-host-io.sdc]
 
 derive_clock_uncertainty

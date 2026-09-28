@@ -118,6 +118,7 @@ module z486
     output     [31:0]  dbg_walk_pde,
     output     [31:0]  dbg_walk_pte,
     output     [31:0]  dbg_cr3,
+    output     [15:0]  dbg_SP,          // PC98 crash recorder: stack pointer (low word)
 
     // A fault while delivering #DF shuts down the 386 and requests reset.
     output reg          triple_fault_reset
@@ -259,6 +260,7 @@ end
 
 assign dbg_CS  = CS;
 assign dbg_EIP = EIP;
+assign dbg_SP  = ESP[15:0];
 assign dbg_CS_base = CS_base;
 assign dbg_pe  = pe;
 assign dbg_vm  = vm;

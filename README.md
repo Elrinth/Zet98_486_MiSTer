@@ -133,13 +133,15 @@ reach their menus and play on the 90 MHz z486 test build B164 (see below); sound
 - Copy the core `.rbf` to `/media/fat/_Computer/`.
 - Put `boot.rom` and your disk images in `/media/fat/games/PC98/` (builds after
   B165; earlier builds use `/games/Zet98/`). Settings are saved as `PC98.CFG`.
+- `boot.rom`: either the free **[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)**
+  (download its release zip; no NEC ROM needed), or a `boot.rom` built from
+  your own PC-9801VM BIOS set (see `docs/OPEN_BIOS_NOTES.md`).
 - `DEVICE=HIMEM.SYS` works without any extra driver since B165: the core's disk
   extension ROM publishes the extended RAM and clears the V30 flag that the
   PC-9801VM BIOS always sets. `Z98MEM.SYS`/`Z98FIX.SYS` are no longer needed.
 - The defaults (Display: Normal, GDC clock: 2.5MHz) suit most games. Only
   **MPU MIDI: UART** needs to be enabled for General MIDI music (below).
-- `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout and the plan for an
-  open replacement BIOS.
+- `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout.
 
 ## CD-ROM (ATAPI) and CD audio
 
@@ -256,6 +258,32 @@ DEVICE=A:\DOS\HIMEM.SYS /TESTMEM:OFF
   ![Doom SETUP: choose 5, E0D0H, as the MPU-PC98(II) base address](docs/images/doom-setup-mpu-address.png)
 
 Save the settings and start `DOOM` (or `DOOM2`).
+
+## Game setup notes
+
+Tested on the MiSTer with builds B207-B218 (2026-09-28/29). "Profile" is the memory
+setup in CONFIG.SYS/AUTOEXEC.BAT (the test disk's `PROFILE.BAT` numbers):
+**HIMEM** = HIMEM.SYS only, full extended memory; **EMS** = HIMEM.SYS plus
+EMM386.EXE.
+
+| Game | Needs | Notes |
+|---|---|---|
+| Doom II | HIMEM | Its DX386 extender refuses to start under EMM386 ("already in virtual 86 mode"). |
+| Ultima VIII Pagan (English, PC-98) | HIMEM, a PC-9821 BIOS | Under EMM386: "DPMI error 4002". The PC-9801VM `boot.rom` shows stripes; the open BIOS shows the title. Keyboard input at the word prompt is still being investigated. |
+| Flame Zapper Kotsujin | EMS | Returns to DOS under HIMEM only. |
+| Sorcer Kingdom | EMS | Loading a save with the mouse works (B207+). |
+| Crystal Rinal | - | Asks 1/2/0 at start: 1 is the normal version. |
+| E.V.O. Theory of Evolution | LIO graphics BIOS | Works with the PC-9801VM `boot.rom` and with the open BIOS (LIO directory at F990:0000). |
+| Steam Heart's | HIMEM | Start with **Z** (Return does nothing on the title). The original release plays. The English translation (Psyklax v0.99) crashes on any machine whose memory layout differs from the translator's; use the [crash-fix IPS](https://github.com/Elrinth/SteamHearts_EN_CrashFix). Some graphics noise in the intro cutscene playfield (all builds). |
+| Black Thorne (16 and 256 colours) | EMS | Dialogue text needs B215+ (CG window at A400:0000). |
+| Mime | - | Keyboard works from B207 (8259 priority fix). |
+| Touhou 1-5 (Japanese originals) | - | All start; the English-patched 4 and 5 on the test disk show a black screen. |
+| Rusty, Nightslave, Bomber Quest, Brandish 2, Briganty, Branmarker 2, Dead of the Brain, Gate of Souls, Groundseed, Harlem Blade, Lemmings, Star Cruiser II, Starfire, The Screamer, Xenon, Yu-No | - | Reach the title or gameplay with either BIOS. |
+
+BIOS: the known-working `boot.rom` is built from MAME's PC-9801VM set (see
+`docs/OPEN_BIOS_NOTES.md`). The PC-9801UX, PC-9821, PC-9821Ce2, PC-9821V13 and
+PC-9821V20 sets (NP2-style `bios.rom`/`itf.rom`/`font.rom`) do not start on the
+core yet. The [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS) boots MS-DOS and the games above.
 
 ## Priorities
 

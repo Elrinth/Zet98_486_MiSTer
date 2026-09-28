@@ -11,6 +11,9 @@ module z486_xms_resident_tb;
     parameter PM_PAYLOAD_TEST=0;
     parameter PM_MIN_DDR=1000;
     parameter WATCHDOG_NS=50000000;
+    // RANDOM_WAIT>0: each bus access waits a random 0..RANDOM_WAIT-1 clocks
+    // (SDRAM refresh/video contention on hardware) instead of 0..2.
+    parameter RANDOM_WAIT=0;
     reg clk=0,reset=1;
     always #5 clk=!clk;
     wire cache_invalidate=0;
@@ -159,7 +162,7 @@ module z486_xms_resident_tb;
             0: if(bus_strobe) begin
                 held_address={bus_address,1'b0}; held_data=bus_writedata;
                 held_select=bus_select; held_write=bus_write; held_io=bus_io;
-                wait_left=legacy_commands%3; phase=1;
+                wait_left=RANDOM_WAIT>0 ? $urandom%RANDOM_WAIT : legacy_commands%3; phase=1;
             end
             1: if(wait_left!=0) wait_left=wait_left-1;
             else begin

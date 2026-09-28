@@ -11,7 +11,7 @@ module crash_recorder_tb;
     z486_crash_recorder #(.CLOCK_HZ(1152000)) dut(.clk(clk), .gate_read(gate_read), .gate_addr(gate_addr),
         .cs(cs), .eip(eip), .eflags(eflags), .pe(pe), .vm(vm), .pf_code(3'd6), .pf_addr(32'h31000),
         .triple_fault(triple), .port_f0_write(f0), .port_f0_data(8'h00), .page_fault(1'b0),
-        .walk_pde(32'h0), .walk_pte(32'h0), .cr3(32'h0), .a20(1'b1),
+        .walk_pde(32'h0), .walk_pte(32'h0), .cr3(32'h0), .a20(1'b1), .sp(16'h0),
         .mem_write(1'b0), .mem_addr(32'h0), .mem_data(32'h0), .mem_be(4'h0),
         .io_wr(1'b0), .io_rd(1'b0), .io_addr(16'h0), .io_wdata(32'h0), .io_rdata(32'h0), .tx(tx));
     // UART receiver

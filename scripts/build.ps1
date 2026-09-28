@@ -28,6 +28,9 @@ param(
     [switch]$MidiUart,
     [switch]$PackedGraphics,
     [switch]$Z486DebugUart,
+    # With -Z486DebugUart: the crash recorder freezes on the first real-mode
+    # divide error (INT 0) and logs real-mode interrupts.
+    [switch]$RecorderDivide,
     # CD trace debug build: CD-ROM events on the UART (replaces MIDI).
     [switch]$CdTrace,
     [ValidateRange(1, 99)]
@@ -108,8 +111,12 @@ try {
     $BuildMemoryGB | Set-Content -LiteralPath (Join-Path $buildRoot 'build-memory-gb.txt')
     Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
         -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
+    if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
+        if ($RecorderDivide) {
+            Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_DE=1"
+        }
     }
     if ($CdTrace) {
         if ($MidiUart -or $Z486DebugUart) { throw 'CdTrace uses the UART: build it without MidiUart/Z486DebugUart.' }

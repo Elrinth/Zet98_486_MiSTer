@@ -19,10 +19,26 @@
 // 642h/644h reads) and dumps every 10 s without freezing for good.
 //   [123:108] CS  [107:76] EIP  [75:44] payload (gate address, EFLAGS, data)
 //   [43:41] #PF code  [40:9] CR2  [8] VM  [7] PE  [6:0] sequence
+// DE_TRIGGER=1 (-RecorderDivide): armed from power-on, real-mode vector reads
+// are logged too, and the first divide error (vector 0) freezes the ring
+// instead of reset-type events: the last entry is the faulting CS:EIP. I/O
+// accesses are logged as types 10/11 (a trail of CS:IP), except the busiest
+// ports: GDC status polling (60h/A0h reads), FM data (188h-18Eh), PCM FIFO
+// (A46Ch) and the CPU's own I/O-delay port 5Fh. Every CS change is logged
+// as type 12: CS/EIP fields = the new CS:EIP, payload = {old CS, old IP}.
+// Memory writes whose data holds DE_MATCH or DE_MATCH2 in either 16-bit half
+// are type 13. Types 12/13 carry SP: type 12 = {12, CS, IP, SP, old CS,
+// old IP, 32'd0, ...}; type 13 = {13, CS, IP, SP, data, byte enables,
+// address, vm, pe, seq}. Every write to DE_STACK (a 256-byte block, e.g. a
+// game's stack) is logged the same way, whatever its data.
 // It is never reset (only by loading the core) so it survives CPU resets.
 module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
-                             parameter IO_MODE = 0) (
+                             parameter IO_MODE = 0,
+                             parameter DE_TRIGGER = 0,
+                             parameter [15:0] DE_MATCH = 16'h0e62,
+                             parameter [15:0] DE_MATCH2 = 16'h0058,
+                             parameter [23:0] DE_STACK = 24'h000351) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -38,6 +54,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     input wire page_fault,
     input wire [31:0] walk_pde, walk_pte, cr3,
     input wire a20,
+    input wire [15:0] sp,
     input wire mem_write,            // one pulse per accepted memory write
     input wire [31:0] mem_addr, mem_data,
     input wire [3:0] mem_be,
@@ -58,27 +75,42 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg [31:0] ev_payload;
     reg ev_valid;
     reg pause = 0;                   // IO_MODE: recording paused while dumping
+    reg [15:0] prev_cs = 0;
+    reg [15:0] prev_ip = 0;
+    wire de_far = DE_TRIGGER && cs != prev_cs;
+    wire de_match = DE_TRIGGER && mem_write && (mem_addr[31:8] == DE_STACK ||mem_data[15:0] == DE_MATCH || mem_data[31:16] == DE_MATCH ||
+                                                mem_data[15:0] == DE_MATCH2 || mem_data[31:16] == DE_MATCH2);
     wire ide_port = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h0432;
     wire io_wr_ev = IO_MODE && io_wr && ide_port;
     wire io_rd_ev = IO_MODE && io_rd && (io_addr == 16'h0642 || io_addr == 16'h0644);
+    wire de_busy = io_addr == 16'h005f || io_addr == 16'ha46c || (io_addr >= 16'h0188 && io_addr <= 16'h018e);
+    wire de_io_wr = DE_TRIGGER && io_wr && !de_busy;
+    wire de_io_rd = DE_TRIGGER && io_rd && !de_busy && io_addr != 16'h0060 && io_addr != 16'h00a0;
     always @* begin
         ev_valid = 1'b1; ev_type = 4'd0; ev_payload = 32'd0;
         if (IO_MODE) begin
             if (io_wr_ev) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
             else if (io_rd_ev) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
-        end else if (pf_d2) begin ev_type = 4'd7; ev_payload = cr3; end
+        end else if (gate_read && !pe && DE_TRIGGER) begin ev_type = 4'd1; ev_payload = gate_addr; end
+        else if (de_match) begin ev_type = 4'd13; ev_payload = mem_data; end
+        else if (de_far) begin ev_type = 4'd12; ev_payload = {prev_cs, prev_ip}; end
+        else if (de_io_wr) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
+        else if (de_io_rd) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
+        else if (pf_d2) begin ev_type = 4'd7; ev_payload = cr3; end
         else if (pf_d1 && pe) begin ev_type = 4'd6; ev_payload = walk_pte; end
         else if (triple_fault) begin ev_type = 4'd3; end
         else if (port_f0_write) begin ev_type = 4'd4; ev_payload = {24'd0, port_f0_data}; end
-        else if (cs == 16'hF000 && eip == 32'h0000FFF0) begin ev_type = 4'd5; end
-        else if (gate_read && pe && !gate_addr[2]) begin ev_type = 4'd1; ev_payload = gate_addr; end
+        else if (cs == 16'hF000 && eip == 32'h0000FFF0 && !DE_TRIGGER) begin ev_type = 4'd5; end
+        else if (gate_read && (pe ? !gate_addr[2] : DE_TRIGGER)) begin ev_type = 4'd1; ev_payload = gate_addr; end
         else if (pe != prev_pe || vm != prev_vm) begin ev_type = 4'd2; ev_payload = eflags; end
         else if (watch_write) begin ev_type = 4'd8; ev_payload = mem_data; end
         else if (ext_sample) begin ev_type = 4'd9; ev_payload = mem_data; end
         else ev_valid = 1'b0;
     end
-    wire [127:0] entry = ev_type >= 4'd10 ? {ev_type, io_addr, io_wr_ev ? io_wdata : io_rdata, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
+    wire [127:0] entry = ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
+                         ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
+                         ev_type >= 4'd10 ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd7 ? {ev_type, 15'd0, a20, walk_pde, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type >= 4'd8 ? {ev_type, 12'd0, mem_be, mem_addr, ev_payload, pf_code, pf_addr, vm, pe, seq}
                                          : {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq};
@@ -87,15 +119,17 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg [7:0] raddr;
     always @(posedge clk) begin
         prev_pe <= pe; prev_vm <= vm;
+        prev_cs <= cs; prev_ip <= eip[15:0];
         pf_d1 <= page_fault; pf_d2 <= pf_d1 && pe;
         if (mem_write && mem_addr[31:20] != 0) ext_writes <= ext_writes + 1'b1;
-        if (pe || IO_MODE) armed <= 1'b1;
+        if (pe || IO_MODE || DE_TRIGGER) armed <= 1'b1;
         if (armed && !frozen && !pause && ev_valid && !(ev_type == 4'd5 && !armed)) begin
             ring[wp] <= entry;
             newest <= entry;
             wp <= wp + 1'b1;
             seq <= seq + 1'b1;
-            if (ev_type >= 4'd3 && ev_type <= 4'd5) frozen <= 1'b1;
+            if (DE_TRIGGER ? (ev_type == 4'd1 && !pe && gate_addr == 32'd0)
+                           : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
         end
         ring_q <= ring[raddr];
     end

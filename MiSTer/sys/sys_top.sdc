@@ -28,7 +28,6 @@ set_false_path -to   [get_ports {VGA_*}]
 set_false_path -to   [get_ports {AUDIO_SPDIF}]
 set_false_path -to   [get_ports {AUDIO_L}]
 set_false_path -to   [get_ports {AUDIO_R}]
-set_false_path -to   {cfg[*]}
 set_false_path -from {cfg[*]}
 set_false_path -from {VSET[*]}
 set_false_path -to   {wcalc[*] hcalc[*]}
@@ -48,11 +47,11 @@ set_false_path -from {*_osd|rot*}
 set_false_path -from {*_osd|dsp_width*}
 set_false_path -to   {*_osd|half}
 
-set_false_path -to   {WIDTH[*] HFP[*] HS[*] HBP[*] HEIGHT[*] VFP[*] VS[*] VBP[*]}
+# The host receiver writes are timed (half rate, pc98-host-io.sdc); only the
+# reads by other clock domains are asynchronous.
 set_false_path -from {WIDTH[*] HFP[*] HS[*] HBP[*] HEIGHT[*] VFP[*] VS[*] VBP[*]}
-set_false_path -to   {FB_BASE[*] FB_BASE[*] FB_WIDTH[*] FB_HEIGHT[*] LFB_HMIN[*] LFB_HMAX[*] LFB_VMIN[*] LFB_VMAX[*]}
+set_false_path -to   {FB_BASE[*] FB_WIDTH[*] FB_HEIGHT[*]}
 set_false_path -from {FB_BASE[*] FB_BASE[*] FB_WIDTH[*] FB_HEIGHT[*] LFB_HMIN[*] LFB_HMAX[*] LFB_VMIN[*] LFB_VMAX[*]}
-set_false_path -to   {vol_att[*] scaler_flt[*] led_overtake[*] led_state[*]}
 set_false_path -from {vol_att[*] scaler_flt[*] led_overtake[*] led_state[*]}
 set_false_path -from {aflt_* acx* acy* areset* arc*}
 set_false_path -from {vs_line*}

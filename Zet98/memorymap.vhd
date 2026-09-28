@@ -122,8 +122,9 @@ begin
 		sel_VRAM2	when CPUSEG>=ADDR_VRAM2 and CPUSEG<(ADDR_VRAM2+WIDTH_VRAM2) else
 		sel_VRAM3	when CPUSEG>=ADDR_VRAM3 and CPUSEG<(ADDR_VRAM3+WIDTH_VRAM3) else
 		sel_NVRAM	when CPUSEG>=ADDR_NVRAM and CPUSEG<(ADDR_NVRAM+WIDTH_NVRAM) else
-		-- CG window disabled for area (see Zet98MiSTer CGW process):
-		-- sel_CGWIN	when CPUSEG>=x"a400" and CPUSEG<x"a500" else
+		-- CG window: font pattern of the character selected at A1h/A3h/A5h
+		-- (Black Thorne and others copy text glyphs from A400:0000).
+		sel_CGWIN	when CPUSEG>=x"a400" and CPUSEG<x"a500" else
 		sel_TRAM	when CPUSEG>=ADDR_TRAM and CPUSEG<(ADDR_TRAM+WIDTH_TRAM) else
 		sel_ARAM	when CPUSEG>=ADDR_ARAM and CPUSEG<(ADDR_ARAM+WIDTH_ARAM) else
 		sel_EMS0	when CPUSEG>=ADDR_EMS0 and CPUSEG<(ADDR_EMS0+WIDTH_EMS0) and EMSEN='1' else

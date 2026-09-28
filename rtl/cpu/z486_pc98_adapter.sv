@@ -45,7 +45,7 @@ module z486_pc98_adapter #(
     wire triple_fault;
     wire [31:0] eip;
     wire protected_mode;
-    wire [15:0] dbg_cs;
+    wire [15:0] dbg_cs, dbg_sp;
     wire dbg_vm, dbg_gate_read;
     wire [31:0] dbg_gate_addr, dbg_pf_addr, dbg_eflags;
     wire [2:0] dbg_pf_code;
@@ -123,7 +123,7 @@ module z486_pc98_adapter #(
         .dbg_CS(dbg_cs), .dbg_EIP(eip), .dbg_CS_base(), .dbg_pe(protected_mode), .dbg_vm(dbg_vm), .dbg_x87_state(),
         .dbg_gate_read(dbg_gate_read), .dbg_gate_addr(dbg_gate_addr), .dbg_pf_code(dbg_pf_code),
         .dbg_pf_addr(dbg_pf_addr), .dbg_eflags(dbg_eflags), .dbg_page_fault(dbg_page_fault),
-        .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3),
+        .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3), .dbg_SP(dbg_sp),
         .triple_fault_reset(triple_fault)
     );
 `ifdef ZET98_Z486_DEBUG
@@ -133,12 +133,18 @@ module z486_pc98_adapter #(
 `else
     localparam RECORDER_IO = 0;
 `endif
-    z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO)) crash_recorder (
+`ifdef ZET98_RECORDER_DE
+    localparam RECORDER_DE = 1;   // freeze on the first real-mode divide error
+`else
+    localparam RECORDER_DE = 0;
+`endif
+    z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO),
+                          .DE_TRIGGER(RECORDER_DE)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
         .port_f0_data(io_write_data[7:0]), .page_fault(dbg_page_fault), .walk_pde(dbg_walk_pde),
-        .walk_pte(dbg_walk_pte), .cr3(dbg_cr3), .a20(a20_enable),
+        .walk_pte(dbg_walk_pte), .cr3(dbg_cr3), .a20(a20_enable), .sp(dbg_sp),
         .mem_write(avm_write && !avm_waitrequest), .mem_addr({address, 2'b00}), .mem_data(write_data),
         .mem_be(byte_enable), .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
         .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),

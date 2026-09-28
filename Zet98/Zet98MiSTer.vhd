@@ -2910,7 +2910,7 @@ begin
 	
 		NVRAM_CS	=>NVR_CS,
 		NVRAM_ADDR	=>NVR_ADDR,
-		CGWIN_CS	=>open,	-- CG window disabled for area (see CGW process); was CGW_CS
+		CGWIN_CS	=>CGW_CS,
 	
 		ITFEN		=>ITFen,
 		BIOSEN		=>not BIOSRAM,
@@ -3344,8 +3344,6 @@ begin
 	KNJ_Q<=	KNJ0_ODAT when KNJ_RAMSEL="00" else
 			KNJ1_ODAT when KNJ_RAMSEL="01" else
 			KNJ2_ODAT;
-	-- Disabled to fit the device (B202 missed by 18 LABs); map CGWIN_CS above to re-enable.
-	CGW_CS<='0';
 	CGW_DOE<=CGW_CS and MRD;
 	process(cpuclk,srstn)begin
 		if(srstn='0')then
