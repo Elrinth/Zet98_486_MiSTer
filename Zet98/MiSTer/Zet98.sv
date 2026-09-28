@@ -592,7 +592,7 @@ wire [71:0] gdc_shadow = {gdc_pitch, gdc_pram[7], gdc_pram[6], gdc_pram[5], gdc_
                           gdc_pram[3], gdc_pram[2], gdc_pram[1], gdc_pram[0]};
 pc98_cd_trace #(.CLK_HZ(SYS_CLK_KHZ*1000)) cd_trace_uart (
 	.clk(clk_sys), .trace(92'd0), .hdd_busy(1'b0),   // CD events off: frees logic (stutter is PCM)
-	.fdd_busy(1'b0), .pad1(64'd0), .video(72'h0),
+	.fdd_busy(1'b0), .pad1(snac_raw1), .video(72'h0),
 	// PCM, EGC and sampled GDC logging off in this build (area): per-frame V only.
 	.pcm_ctl(1'b0), .pcm_port(8'h0), .pcm_data(8'h0),
 	.pcm_push(1'b0), .gfx_wr(1'b0), .gfx_reg(4'h0), .gfx_data(16'h0),

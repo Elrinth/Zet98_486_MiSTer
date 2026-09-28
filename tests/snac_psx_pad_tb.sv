@@ -130,15 +130,15 @@ module snac_psx_pad_tb;
         wait_polls(2);
         check_joy(0, 0, "no 5Ah handshake");
         resp1[2] = 8'h5a; resp1[3] = 8'hff; resp1[4] = 8'hff;
-        // Losing the handshake counts as unplugging: set up once more, then no more.
+        // A brief misread is not an unplug: no second setup.
         wait_polls(5);
         base1 = setup1;
         wait_polls(4);
-        if (base1 != 6 || setup1 != base1) $fatal(1, "digital-only pad setups %0d/%0d (want 6)", base1, setup1);
+        if (base1 != 3 || setup1 != base1) $fatal(1, "digital-only pad setups %0d/%0d after a misread (want 3)", base1, setup1);
         // A DualShock plugged into port 1 in digital mode is switched to
         // analog, unlocked, once; the ANALOG button then stays in charge.
         present1 = 0;
-        wait_polls(2);
+        wait_polls(70);                 // unplugged for ~0.6 s
         ds1 = 1; cfg1 = 0; mode1 = 0;
         for (i=5;i<9;i=i+1) resp1[i]=8'h80;
         present1 = 1;
@@ -152,6 +152,10 @@ module snac_psx_pad_tb;
         mode1 = 0;                      // user presses ANALOG: back to digital
         wait_polls(4);
         if (setup1 != base1 + 3 || analog[0] !== 0) $fatal(1, "ANALOG toggle overridden: setups=%0d analog=%b", setup1, analog);
+        // A misread right after the ANALOG press must not force analog again.
+        resp1[2] = 8'h00; wait_polls(2); resp1[2] = 8'h5a;
+        wait_polls(6);
+        if (setup1 != base1 + 3 || mode1) $fatal(1, "misread re-ran the setup after ANALOG: setups=%0d mode=%b", setup1, mode1);
         ds1 = 0; resp1[5] = 8'h80; resp1[6] = 8'h80;
         // Unplugged ports read FFh (pull-up) and report nothing.
         present1 = 0; present2 = 0;
@@ -159,8 +163,8 @@ module snac_psx_pad_tb;
         check_joy(0, 0, "no pads");
         enable = 0; repeat (10) @(posedge clk);
         if (user_out !== 7'h7f || joy1 !== 0 || joy2 !== 0) $fatal(1, "disable did not release port");
-        $display("PASS: SNAC PlayStation pads: ACK ignored, 01/42 polling, DualShock analog setup once per plug-in (unlocked), digital+analog mapping, 5Ah handshake, right stick/mouse buttons, both ports, unplugged, off");
+        $display("PASS: SNAC PlayStation pads: ACK ignored, 01/42 polling, DualShock analog setup once per plug-in (unlocked, misreads ignored), digital+analog mapping, 5Ah handshake, right stick/mouse buttons, both ports, unplugged, off");
         $finish;
     end
-    initial begin #2000000000; $fatal(1, "SNAC timeout"); end
+    initial begin #6000000000; $fatal(1, "SNAC timeout"); end
 endmodule

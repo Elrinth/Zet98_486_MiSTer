@@ -15,6 +15,8 @@
 // plug-in, as analog PlayStation games do: 43h enter config, 44h analog
 // (unlocked, so the ANALOG button still toggles it), 43h exit. The right
 // stick (PC-98 mouse) needs analog mode. A digital-only pad ignores this.
+// A pad counts as unplugged only after 32 missing reads in a row (~0.5 s):
+// one misread used to repeat the setup and undo an ANALOG button press.
 module snac_psx_pad #(
     parameter CLK_HZ = 90000000
 ) (
@@ -58,6 +60,8 @@ module snac_psx_pad #(
     // plug-in has been set up already.
     reg [1:0] step1 = 0, step2 = 0, step = 0;
     reg [1:0] configured = 0;
+    reg [4:0] missing1 = 0, missing2 = 0;
+    wire [4:0] missing = port ? missing2 : missing1;
 
     function automatic [7:0] command(input [1:0] st, input [3:0] index);
         case (st)
@@ -93,7 +97,7 @@ module snac_psx_pad #(
             state <= IDLE; timer <= 0; att <= 1; cmd <= 1; sclk <= 1;
             joy1 <= 0; joy2 <= 0; user_out <= 7'h7f;
             analog <= 0; mbtn1 <= 0; mbtn2 <= 0;
-            step1 <= 0; step2 <= 0; configured <= 0;
+            step1 <= 0; step2 <= 0; configured <= 0; missing1 <= 0; missing2 <= 0;
         end else begin
             user_out <= {1'b1, sclk, 1'b1, 1'b1, cmd, port ? 1'b1 : att, port ? att : 1'b1};
             if (timer != 0) timer <= timer - 1'b1;
@@ -136,8 +140,14 @@ module snac_psx_pad #(
                         if (port) step2 <= step + 1'b1; else step1 <= step + 1'b1;
                         if (step == 3) configured[port] <= 1;
                     end else begin
-                        if (!present) configured[port] <= 0;
-                        else if (!configured[port] && id == 8'h41) begin
+                        if (!present) begin
+                            if (missing == 5'd31) configured[port] <= 0;
+                            else if (port) missing2 <= missing2 + 1'b1;
+                            else missing1 <= missing1 + 1'b1;
+                        end else begin
+                            if (port) missing2 <= 0; else missing1 <= 0;
+                        end
+                        if (present && !configured[port] && id == 8'h41) begin
                             if (port) step2 <= 1; else step1 <= 1;
                         end
                     end
