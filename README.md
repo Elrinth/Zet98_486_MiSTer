@@ -1,132 +1,49 @@
-# Zet98-486 for MiSTer â€” experimental development
+# PC98 (Zet98-486) for MiSTer
 
-A PC-98 core development project based on **Puu's Zet/98**. The primary
-acceptance target is smoother **Rusty** gameplay on MiSTer-compatible hardware,
-initially a SuperStation One with SuperDock. A faster CPU must preserve game,
-video, timer, sound and disk timing.
+A NEC PC-9801/PC-9821-style computer for MiSTer, based on Puu's Zet/98 with a
+486 CPU. It runs MS-DOS and standard PC-98 games from hard-disk images,
+floppies and CD-ROM.
 
-**Experimental: the default build still uses Zet.** The optional ao486 build
-runs on the SuperStation One and has passed hardware CPU, 64 MB physical-memory,
-XMS, disk and interrupt diagnostics at 50 MHz. Rusty reaches its title, intro
-and first-stage graphics; Nightslave reaches its title menu. Gameplay frame
-rate has not yet been measured; JT08 listening results are recorded below. This is not a
-complete PC-9821 implementation or a DX4/Pentium performance claim.
+## Features
 
-The current tested z486 candidate is **#139: 90 MHz / 64 MB / JT08**, with
-bank-aware upper-conventional instruction caching and native VHD/IMG boot.
-The user reports correct Rusty gameplay speed on #138 and correct C-LAB speech
-pitch after #139's PIT clock correction. #139 passes CPU, RAM, FM IRQ and OPNA
-diagnostics plus full saved-result disk audits. Worst setup slack is -6.434 ns,
-within the user's experimental allowance; hold/recovery/removal pass. This is
-not timing closure or a measured historical-CPU performance equivalence.
+- **CPU:** z486 (486-class) at 90 MHz, **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
+- **Graphics:** 640x400 16 colours from 4096, GRCG and EGC, 256-colour PEGC,
+  hardware scrolling and split screens, Kanji text with the character generator.
+- **Sound:** PC-9801-86 board: YM2608 OPNA (FM, SSG, rhythm) and 86 PCM, plus the beeper.
+- **MIDI:** MPU-PC98II UART to MiSTer MidiLink (FluidSynth, MUNT or USB MIDI):
+  General MIDI music in Doom, Nightslave and others.
+- **CD-ROM:** ATAPI drive with **CD audio** (ISO, BIN, or CUE/BIN converted to one
+  `.pcd` file). Policenauts plays with its CD music.
+- **Hard disk:** IDE with VHD/IMG and HDI images (512-byte sectors), bootable directly.
+- **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only).
+- **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
+  (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
+- **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
+  right analog stick as mouse.
+- **Video:** scaled HDMI (native aspect or integer), and the native 24.8 kHz RGB
+  signal on VGA/SCART for multisync monitors and scalers.
+- Disk activity overlay (floppy, CD, HDD).
 
-Build #142 adds native HDM/FDI/NFD/HDI loading, CPU speed selection and MPU
-MIDI. Full90 diagnostics pass and the user confirms NightSlave MIDI music.
-**Use Full speed:**60/30 selections stall during DOS startup. Popful Mail has
-striped graphics; Metal Force and Burning Dragon remain unresolved. A revised
-disk ROM boots the previously failing Xanadu HDI into user-confirmed gameplay
-and Lemmings into its intro through a temporary loader on #142. The integrated
-#143R2 revision remains to be hardware-tested. MiSTer Main intercepts PC-98 `.fdi` files as Spectrum images; a
-byte-identical `.hdm` copy bypasses that host bug. It is not fully qualified
-yet. See [format limits](rtl/storage/README.md) and [CPU speed control](rtl/Z486_PC98.md).
-Native HDM/FDI mounts are read-only; D88 supports saving as before. Native NFD
-loading was removed after B167 to free FPGA area; convert NFD images to D88 with
-`scripts/import_disk_image.py`.
+## Quick start
 
-The development features and earlier qualification history include:
+1. Download the `.rbf` from [Releases](https://github.com/Elrinth/Zet98_486_MiSTer/releases)
+   and copy it to `/media/fat/_Computer/` (an SDRAM module is required).
+2. Copy a `boot.rom` to `/media/fat/games/PC98/`: the
+   [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS/releases) is free.
+3. Put your PC-98 disk images in `/media/fat/games/PC98/`. Load the core and open
+   the menu (F12): mount a DOS hard-disk image under **IDE hard disk**, or a
+   floppy game under **FDD0**, and reset.
+4. Optional: **MPU MIDI: UART** plus MidiLink for General MIDI music
+   ([Doom setup](#playing-doom-with-general-midi-music)), a `.pcd` or `.iso` under
+   **CD-ROM** ([CD-ROM setup](#cd-rom-atapi-and-cd-audio)).
+5. Some games need a particular memory setup (HIMEM only or EMM386): see the
+   [game setup notes](#game-setup-notes). Known issues are listed with each release.
 
-- **ao486 and memory:** optional 16/64 MB DDR-backed RAM and a conventional-RAM
-  cache. The 50 MHz hardware benchmark is about 2.31x faster for arithmetic and
-  2.13x for RAM copy than the matching 20 MHz build. Actual XMS allocation,
-  copy and free pass with both the limited and full-memory DOS profiles.
-  Completed-word cache allocation raises the hardware stack benchmark from
-  80 to 102 blocks per ten seconds at the same 50 MHz (27.5%); this is not a
-  measured Rusty frame-rate gain.
-- **PC-9801-86 sound:** OPNA/FM plus experimental PCM/FIFO/IRQ support. A lost
-  FM timer-clear write was fixed; Native50 and Bundle50 pass 100 consecutive
-  timer-B IRQ12 deliveries and cascaded PIC EOI. These silent diagnostics do
-  not certify musical timing or sound quality.
-- **Alternative OPNA engine:** `-OpnaBackend JT08` selects the
-  [PC88 JT08 adaptation of Jotego JT12](rtl/OPNA_JT08.md), retaining the separate
-  86-board PCM engine. All six FM voices, three PSG voices, six rhythm sounds,
-  stereo panning, LFO, SSG envelopes and bus/timer behavior pass simulation at
-  75/100 MHz. Build #115 passes actual hardware CPU, 64 MB map, FM interrupts
-  and Rusty's original OPNA-detection procedure. Its worst reported slack is
-  -5.783 ns at 100 MHz. The user reports much better Rusty intro music and
-  authentic-sounding drums. The later #139 PIT correction is now user-confirmed to fix C-LAB speech pitch.
-- **Hard disk:** a raw `.vhd`/`.img` controller and DOS disk service support
-  file persistence, independently checked against the resulting FAT and data
-  sectors. New `-RawIde` builds include a [native disk option ROM](software/DISK_BIOS.md)
-  with common PC-98 DOS geometry discovery and an empty-media prompt. Build
-  #137R3 boots DOS 6.20 directly from both raw VHD and IMG on hardware, with
-  70,001-byte file persistence and complete image audits passing. Earlier
-  builds through #136 require the helper floppy.
-- **Display:** native-aspect fit, exact integer fit and HDMI-only integer crop,
-  plus the supplied animated floppy indicator with D0/D1 captions. Hardware
-  reports 1728x1080 fit, 1280x800 integer fit and a centered 1920x1080 crop.
-  Standard 15 kHz SCART conversion is not implemented.
+## Not supported
 
-The PlaneAligned60 build has no negative slack in the reported timing checks
-(minimum +0.061 ns) and runs on the SuperStation One. Fresh hardware tests pass
-the CPU checksums, 64 MB physical-memory map, graphics-plane alias checks and
-100 FM timer-B IRQ12 deliveries. Its benchmark reports 286 ALU, 152 RAM-copy
-and 114 stack blocks per ten DOS seconds. Rusty's title and intro display;
-gameplay frame rate and audible music quality remain unmeasured. External
-board-I/O constraints, including SDRAM, remain incomplete.
-
-Experimental 75 MHz build #111 has now passed the hardware CPU checksums,
-64 MB physical-memory map, both graphics-plane diagnostics, and 100 FM
-timer-B interrupts. Its benchmark scores 345 ALU, 176 RAM-copy and 127 stack
-blocks per ten DOS seconds, compared with 286/152/114 at 60 MHz. Rusty's
-opening and title menu display. This build still has -2.352 ns worst reported
-CPU setup slack; these board tests do not establish timing closure or complete
-game/audio stability. See [hardware evidence and limitations](HARDWARE_TESTING.md).
-
-Experimental build #113 runs at **100 MHz with 64 MB RAM**, using ao486,
-PC-9801-86 audio, an 8 KB conventional-memory cache, upper-RAM instruction
-cache, raw IDE and MIDI UART. It passes the hardware CPU, physical-memory,
-graphics alias, GRCG comparison and FM interrupt diagnostics. DOS 6.20 also
-passes direct XMS allocation/copy/free with 63,424 KB free and a 17 MB block
-above 16 MB (NEC MEM's display still misreports XMS with HIMEMX). The benchmark
-scores 429 ALU / 193 RAM-copy / 163 stack blocks per ten DOS seconds: 24.3% /
-9.7% / 28.3% above the tested 75 MHz build. Rusty reaches its title menu and
-responds to Enter. Worst reported slack is -6.063 ns; sustained gameplay FPS
-and audible music quality remain unmeasured.
-Build it with:
-
-```powershell
-./scripts/build.ps1 -SystemClockMHz 100 -Cpu ao486 -ExtendedRamMB 64 -SoundBoard PC9801_86 -LowMemoryCache -LowMemoryCacheKB 8 -UpperRamICache -RawIde -MidiUart -BuildCpus 8 -BuildMemoryGB 8 -StartOnly
-```
-
-The system clock changes while SDRAM remains at 100 MHz and video at 75 MHz.
-The user-approved experimental limit is -12 ns worst reported slack; this
-does not change the timing constraints or establish timing closure. Board
-diagnostics must pass before evaluating game performance. The current historical
-performance target is NEC's
-[PC-9821Xa10](https://support.nec-lavie.jp/support/product/data/spec/cpu/95110022-1.html)
-with its 100 MHz Pentium, configured with 64 MB RAM. This supersedes the earlier
-DX4/Ap3 preference. The current CPU is z486, with ao486 retained as an alternative; matching clock frequency and
-RAM capacity does not establish Pentium performance or full-machine compatibility.
-
-An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
-`-MidiUart`, passes serial, bus and interrupt simulations, 200 guest IRQ6
-acknowledgements and exact capture of a 134-byte packet on HPS ttyS1 in hardware.
-The first capture exposed a missing HPS UART1 location assignment; correcting
-and verifying that placement fixed the transport. Local MidiLink/FluidSynth
-starts with GeneralUser GS. The corrected MIDI build passes polled-ACK
-withdrawal, 200 IRQ acknowledgements and the 134-byte UART capture on hardware.
-Nightslave progresses into its intro with MIDI selected; its instrument
-programs, ongoing UART traffic and changing FluidSynth voice counts confirm
-active software synthesis. TV audio quality and complete soundtrack timing
-remain unverified. It is off by default and does not implement intelligent-mode
-sequencing. A private Nightslave UART trace passes RTL replay; that alone does
-not establish hardware music compatibility.
-
-DOS, BIOS ROMs, games and prepared private disk packages are not distributed
-in this repository. Complete intelligent-mode MPU-401 and optical-drive support remain pending.
-Native HDI/HDM/FDI/NFD loading is implemented in the next candidate and awaits
-hardware qualification; the import utility remains available for writable D88 copies. Original PC-98 Doom and Doom II
-reach their menus and play on the 90 MHz z486 test build B164 (see below); sound and long play are still being checked.
+- Sound Blaster 16 (and other PC-98 sound cards besides the PC-9801-86)
+- Faster CPU speeds (no Pentium-class performance beyond the 90 MHz 486)
+- More RAM than 64 MB
 
 ## Installing on MiSTer
 
@@ -284,6 +201,136 @@ BIOS: the known-working `boot.rom` is built from MAME's PC-9801VM set (see
 `docs/OPEN_BIOS_NOTES.md`). The PC-9801UX, PC-9821, PC-9821Ce2, PC-9821V13 and
 PC-9821V20 sets (NP2-style `bios.rom`/`itf.rom`/`font.rom`) do not start on the
 core yet. The [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS) boots MS-DOS and the games above.
+
+## Development history
+
+A PC-98 core development project based on **Puu's Zet/98**. The primary
+acceptance target is smoother **Rusty** gameplay on MiSTer-compatible hardware,
+initially a SuperStation One with SuperDock. A faster CPU must preserve game,
+video, timer, sound and disk timing.
+
+**Experimental: the default build still uses Zet.** The optional ao486 build
+runs on the SuperStation One and has passed hardware CPU, 64 MB physical-memory,
+XMS, disk and interrupt diagnostics at 50 MHz. Rusty reaches its title, intro
+and first-stage graphics; Nightslave reaches its title menu. Gameplay frame
+rate has not yet been measured; JT08 listening results are recorded below. This is not a
+complete PC-9821 implementation or a DX4/Pentium performance claim.
+
+The current tested z486 candidate is **#139: 90 MHz / 64 MB / JT08**, with
+bank-aware upper-conventional instruction caching and native VHD/IMG boot.
+The user reports correct Rusty gameplay speed on #138 and correct C-LAB speech
+pitch after #139's PIT clock correction. #139 passes CPU, RAM, FM IRQ and OPNA
+diagnostics plus full saved-result disk audits. Worst setup slack is -6.434 ns,
+within the user's experimental allowance; hold/recovery/removal pass. This is
+not timing closure or a measured historical-CPU performance equivalence.
+
+Build #142 adds native HDM/FDI/NFD/HDI loading, CPU speed selection and MPU
+MIDI. Full90 diagnostics pass and the user confirms NightSlave MIDI music.
+**Use Full speed:**60/30 selections stall during DOS startup. Popful Mail has
+striped graphics; Metal Force and Burning Dragon remain unresolved. A revised
+disk ROM boots the previously failing Xanadu HDI into user-confirmed gameplay
+and Lemmings into its intro through a temporary loader on #142. The integrated
+#143R2 revision remains to be hardware-tested. MiSTer Main intercepts PC-98 `.fdi` files as Spectrum images; a
+byte-identical `.hdm` copy bypasses that host bug. It is not fully qualified
+yet. See [format limits](rtl/storage/README.md) and [CPU speed control](rtl/Z486_PC98.md).
+Native HDM/FDI mounts are read-only; D88 supports saving as before. Native NFD
+loading was removed after B167 to free FPGA area; convert NFD images to D88 with
+`scripts/import_disk_image.py`.
+
+The development features and earlier qualification history include:
+
+- **ao486 and memory:** optional 16/64 MB DDR-backed RAM and a conventional-RAM
+  cache. The 50 MHz hardware benchmark is about 2.31x faster for arithmetic and
+  2.13x for RAM copy than the matching 20 MHz build. Actual XMS allocation,
+  copy and free pass with both the limited and full-memory DOS profiles.
+  Completed-word cache allocation raises the hardware stack benchmark from
+  80 to 102 blocks per ten seconds at the same 50 MHz (27.5%); this is not a
+  measured Rusty frame-rate gain.
+- **PC-9801-86 sound:** OPNA/FM plus experimental PCM/FIFO/IRQ support. A lost
+  FM timer-clear write was fixed; Native50 and Bundle50 pass 100 consecutive
+  timer-B IRQ12 deliveries and cascaded PIC EOI. These silent diagnostics do
+  not certify musical timing or sound quality.
+- **Alternative OPNA engine:** `-OpnaBackend JT08` selects the
+  [PC88 JT08 adaptation of Jotego JT12](rtl/OPNA_JT08.md), retaining the separate
+  86-board PCM engine. All six FM voices, three PSG voices, six rhythm sounds,
+  stereo panning, LFO, SSG envelopes and bus/timer behavior pass simulation at
+  75/100 MHz. Build #115 passes actual hardware CPU, 64 MB map, FM interrupts
+  and Rusty's original OPNA-detection procedure. Its worst reported slack is
+  -5.783 ns at 100 MHz. The user reports much better Rusty intro music and
+  authentic-sounding drums. The later #139 PIT correction is now user-confirmed to fix C-LAB speech pitch.
+- **Hard disk:** a raw `.vhd`/`.img` controller and DOS disk service support
+  file persistence, independently checked against the resulting FAT and data
+  sectors. New `-RawIde` builds include a [native disk option ROM](software/DISK_BIOS.md)
+  with common PC-98 DOS geometry discovery and an empty-media prompt. Build
+  #137R3 boots DOS 6.20 directly from both raw VHD and IMG on hardware, with
+  70,001-byte file persistence and complete image audits passing. Earlier
+  builds through #136 require the helper floppy.
+- **Display:** native-aspect fit, exact integer fit and HDMI-only integer crop,
+  plus the supplied animated floppy indicator with D0/D1 captions. Hardware
+  reports 1728x1080 fit, 1280x800 integer fit and a centered 1920x1080 crop.
+  Standard 15 kHz SCART conversion is not implemented.
+
+The PlaneAligned60 build has no negative slack in the reported timing checks
+(minimum +0.061 ns) and runs on the SuperStation One. Fresh hardware tests pass
+the CPU checksums, 64 MB physical-memory map, graphics-plane alias checks and
+100 FM timer-B IRQ12 deliveries. Its benchmark reports 286 ALU, 152 RAM-copy
+and 114 stack blocks per ten DOS seconds. Rusty's title and intro display;
+gameplay frame rate and audible music quality remain unmeasured. External
+board-I/O constraints, including SDRAM, remain incomplete.
+
+Experimental 75 MHz build #111 has now passed the hardware CPU checksums,
+64 MB physical-memory map, both graphics-plane diagnostics, and 100 FM
+timer-B interrupts. Its benchmark scores 345 ALU, 176 RAM-copy and 127 stack
+blocks per ten DOS seconds, compared with 286/152/114 at 60 MHz. Rusty's
+opening and title menu display. This build still has -2.352 ns worst reported
+CPU setup slack; these board tests do not establish timing closure or complete
+game/audio stability. See [hardware evidence and limitations](HARDWARE_TESTING.md).
+
+Experimental build #113 runs at **100 MHz with 64 MB RAM**, using ao486,
+PC-9801-86 audio, an 8 KB conventional-memory cache, upper-RAM instruction
+cache, raw IDE and MIDI UART. It passes the hardware CPU, physical-memory,
+graphics alias, GRCG comparison and FM interrupt diagnostics. DOS 6.20 also
+passes direct XMS allocation/copy/free with 63,424 KB free and a 17 MB block
+above 16 MB (NEC MEM's display still misreports XMS with HIMEMX). The benchmark
+scores 429 ALU / 193 RAM-copy / 163 stack blocks per ten DOS seconds: 24.3% /
+9.7% / 28.3% above the tested 75 MHz build. Rusty reaches its title menu and
+responds to Enter. Worst reported slack is -6.063 ns; sustained gameplay FPS
+and audible music quality remain unmeasured.
+Build it with:
+
+```powershell
+./scripts/build.ps1 -SystemClockMHz 100 -Cpu ao486 -ExtendedRamMB 64 -SoundBoard PC9801_86 -LowMemoryCache -LowMemoryCacheKB 8 -UpperRamICache -RawIde -MidiUart -BuildCpus 8 -BuildMemoryGB 8 -StartOnly
+```
+
+The system clock changes while SDRAM remains at 100 MHz and video at 75 MHz.
+The user-approved experimental limit is -12 ns worst reported slack; this
+does not change the timing constraints or establish timing closure. Board
+diagnostics must pass before evaluating game performance. The current historical
+performance target is NEC's
+[PC-9821Xa10](https://support.nec-lavie.jp/support/product/data/spec/cpu/95110022-1.html)
+with its 100 MHz Pentium, configured with 64 MB RAM. This supersedes the earlier
+DX4/Ap3 preference. The current CPU is z486, with ao486 retained as an alternative; matching clock frequency and
+RAM capacity does not establish Pentium performance or full-machine compatibility.
+
+An optional [MPU-PC98II UART prototype](rtl/midi/README.md), built with
+`-MidiUart`, passes serial, bus and interrupt simulations, 200 guest IRQ6
+acknowledgements and exact capture of a 134-byte packet on HPS ttyS1 in hardware.
+The first capture exposed a missing HPS UART1 location assignment; correcting
+and verifying that placement fixed the transport. Local MidiLink/FluidSynth
+starts with GeneralUser GS. The corrected MIDI build passes polled-ACK
+withdrawal, 200 IRQ acknowledgements and the 134-byte UART capture on hardware.
+Nightslave progresses into its intro with MIDI selected; its instrument
+programs, ongoing UART traffic and changing FluidSynth voice counts confirm
+active software synthesis. TV audio quality and complete soundtrack timing
+remain unverified. It is off by default and does not implement intelligent-mode
+sequencing. A private Nightslave UART trace passes RTL replay; that alone does
+not establish hardware music compatibility.
+
+DOS, BIOS ROMs, games and prepared private disk packages are not distributed
+in this repository. Complete intelligent-mode MPU-401 and optical-drive support remain pending.
+Native HDI/HDM/FDI/NFD loading is implemented in the next candidate and awaits
+hardware qualification; the import utility remains available for writable D88 copies. Original PC-98 Doom and Doom II
+reach their menus and play on the 90 MHz z486 test build B164 (see below); sound and long play are still being checked.
 
 ## Priorities
 
@@ -529,12 +576,12 @@ semigraphics fix to remove the vertical white stripes.
   [OPNA integration notes](rtl/OPNA_JT08.md).
 - **ZOBplus Hayami** — CPUBENCH, the owner's separately supplied benchmark.
 
-- **Puu / ãƒ—ãƒ¼** â€” original Zet/98 PC-98 implementation and peripheral work.
+- **Puu / プー** — original Zet/98 PC-98 implementation and peripheral work.
   [Original development blog](https://fpga8801.seesaa.net/category/22270192-1.html).
-- **dentnz** â€” [GitHub source import and MiSTer wrapper update](https://github.com/dentnz/Zet98_MiSTer).
-- **Zeus GÃ³mez Marmolejo and the Zet contributors** â€” original Zet CPU.
-- **Alexey Melnikov / Sorgelig and MiSTer contributors** â€” MiSTer infrastructure.
-- **Aleksander Osman and ao486/MiSTer contributors** â€”
+- **dentnz** — [GitHub source import and MiSTer wrapper update](https://github.com/dentnz/Zet98_MiSTer).
+- **Zeus Gómez Marmolejo and the Zet contributors** — original Zet CPU.
+- **Alexey Melnikov / Sorgelig and MiSTer contributors** — MiSTer infrastructure.
+- **Aleksander Osman and ao486/MiSTer contributors** —
   [ao486](https://github.com/MiSTer-devel/ao486_MiSTer), the replacement CPU.
 - [X68000 for MiSTer](https://github.com/MiSTer-devel/X68000_MiSTer) and
   [MidiLink](https://github.com/MiSTer-devel/MidiLink_MiSTer) are storage/MIDI
