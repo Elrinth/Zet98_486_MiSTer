@@ -22,9 +22,10 @@ module boot_media_control_tb;
     initial begin
         check(1,1); reset=0;
         rom_ready=1; check(1,2);
-        // A valid VHD starts the native option ROM; partial sectors aren't media.
-        image_mounted=4; image_size=513; check(1,2);
-        image_size=1048576; check(1,3);
+        // A valid VHD starts the native option ROM; less than a sector isn't media,
+        // but a trailing partial sector (raw card dumps) is ignored.
+        image_mounted=4; image_size=511; check(1,2);
+        image_size=1521; check(1,3);
         image_mounted=0;
         check(0,0);
         image_mounted=4; image_size=0; check(0,0);

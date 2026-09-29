@@ -20,8 +20,10 @@ module boot_media_control #(
             hard_disk <= 0;
             loading <= 0;
         end else begin
+            // A partial last sector (raw dumps with trailing filler) is ignored,
+            // matching pc98_ide; images below one sector are not a disk.
             if (image_mounted[2])
-                hard_disk <= image_size >= 512 && image_size[8:0] == 0;
+                hard_disk <= image_size >= 512;
             for (integer drive=0; drive<2; drive=drive+1) begin
                 if (image_mounted[drive]) loading[drive] <= image_size != 0;
                 else if (floppy_ready[drive]) loading[drive] <= 0;

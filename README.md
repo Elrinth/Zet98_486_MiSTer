@@ -25,7 +25,7 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
   General MIDI music in Doom, Nightslave and others.
 - **CD-ROM:** ATAPI drive with **CD audio** (ISO, BIN, or CUE/BIN converted to one
   `.pcd` file). Policenauts plays with its CD music.
-- **Hard disk:** IDE with VHD/IMG and HDI images (512-byte sectors), bootable directly.
+- **Hard disk:** IDE with raw VHD/IMG/IMA and HDI images (512-byte sectors), bootable directly.
   Older 256-byte-sector (SASI) HDIs: [convert them](#converting-old-256-byte-sector-hdi-images)
   in your browser or with a Python script.
 - **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only).
