@@ -349,6 +349,11 @@ boot_error:
 
 ; Selected calls use a private stack; the partition IPL's SS=0/SP=028E
 ; otherwise lets the service's sector buffer overwrite interrupt vectors.
+; Interrupts run during the service when the caller had them enabled, as with
+; NEC's BIOS: a whole disk read with IF=0 held off the timer and sound IRQs
+; while each sector came from the MiSTer (Touhou 5 music stuttered on loads).
+; A call arriving on the private stack (from an interrupt handler during a
+; service) runs there directly and leaves the saved caller state alone.
 bios_stack_int1b:
     cmp al,80h
     je .selected
@@ -356,6 +361,16 @@ bios_stack_int1b:
     jz .selected
     jmp far [cs:bios_previous_vector]
 .selected:
+    push ax
+    push bx
+    mov ax,ss
+    mov bx,cs
+    cmp ax,bx
+    pop bx
+    pop ax
+    jne .switch
+    jmp far [cs:resident_handler]    ; nested: its IRET returns to the caller
+.switch:
     mov [cs:caller_ax],ax
     mov ax,ss
     mov [cs:caller_ss],ax
@@ -363,9 +378,20 @@ bios_stack_int1b:
     mov ax,cs
     mov ss,ax
     mov sp,6ffeh
+    push ds
+    push bp
+    mov ds,[cs:caller_ss]
+    mov bp,[cs:caller_sp]
+    test byte [ds:bp+5],2            ; caller's IF (FLAGS bit 9)
+    pop bp
+    pop ds
+    jz .service
+    sti
+.service:
     mov ax,[cs:caller_ax]
     pushf
     call far [cs:resident_handler]
+    cli
     pushf
     pop word [cs:result_flags]
     mov [cs:caller_ax],ax

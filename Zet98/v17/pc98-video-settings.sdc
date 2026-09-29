@@ -4,9 +4,10 @@
 # delayed-payload/early-capture regressions in tests/run-video-settings.sh.
 set settings_payload [get_registers {*|gdc_settings|held_data*}]
 set settings_capture [get_registers {*|gdc_settings|received_data*}]
-# Packed raster consumes both partition lengths, including bits95..104.
-# Check every consumed bit, including new packed-mode/base/page/clock fields;
-# aggregate counts alone could be satisfied by replicated registers.
+# The graphics raster consumes all four display areas (bits 57-104 and
+# 128-175); the packed-mode/base/page/clock fields (122-127) exist only with
+# PEGC. Check every consumed bit; aggregate counts alone could be satisfied by
+# replicated registers.
 foreach bank [list $settings_payload $settings_capture] {
     set present [dict create]
     foreach_in_collection reg $bank {
@@ -15,9 +16,8 @@ foreach bank [list $settings_payload $settings_capture] {
             dict set present $bit 1
         }
     }
-    set settings_width [expr {$pegc_enabled ? 128 : 122}]
-    for {set bit 0} {$bit < $settings_width} {incr bit} {
-        if {!$pegc_enabled && $bit>=95 && $bit<=104} {continue}
+    for {set bit 0} {$bit < 176} {incr bit} {
+        if {!$pegc_enabled && $bit>=122 && $bit<=127} {continue}
         if {![dict exists $present $bit]} {
             error "Missing consumed GDC settings snapshot bit $bit"
         }

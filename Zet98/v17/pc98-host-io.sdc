@@ -38,3 +38,47 @@ if {[get_collection_size $host_bus_users] < 1} {
 }
 set_multicycle_path -setup 2 -from $host_bus_word -to $host_bus_users
 set_multicycle_path -hold 1 -from $host_bus_word -to $host_bus_users
+
+# hps_io registers that are loaded only in the one-cycle io_strobe_bus cycle
+# (or cleared to constants while io_enable is low). Strobes are at least two
+# clk_sys periods apart (half-rate receiver) and in practice many more, and
+# the MiSTer reads io_dout only after the acknowledgement. B219 failed to boot
+# DOS because uio_block.cmd -> io_dout missed timing by 3 ns: the MiSTer read
+# wrong sector numbers. Registers written every cycle stay single-cycle: the
+# sector-buffer pipeline (b_wr, sd_buff_wr, sd_buff_addr) and the PS/2 and
+# RTC/TIMESTAMP toggle bits in the idle branch. kbd_we/mouse_we are cleared
+# every cycle and set only at the strobe (captures only, like coef_wr).
+# fio_block (file transfers such as boot.rom) is loaded the same way (B221:
+# rack -> fio_block.addr/ioctl_addr reported -1.2 ns on a one-cycle check).
+set hps_strobe_names {
+    io_dout[*] img_size[*] status[*] cfg[*] sd_ack* sdn_ack[*] sd_rrb[*]
+    img_readonly ps2_mouse_ext[*] kbd_data[*] mouse_data[*] sd_buff_dout[*]
+    joystick_0[*] joystick_1[*] joystick_2[*] joystick_3[*] joystick_4[*] joystick_5[*]
+    joystick_l_analog_*[*] joystick_r_analog_*[*] paddle_*[*] spinner_*[*]
+    uio_block.sdn_r[*] uio_block.stick_idx[*] uio_block.pdsp_idx[*]
+    kbd_we mouse_we uio_block.cmd[*] byte_cnt[*]
+    fio_block.addr[*] fio_block.cmd[*] fio_block.cnt[*] fio_block.has_cmd
+    ioctl_addr[*] ioctl_dout[*] fp_dout[*] ioctl_index[*] ioctl_file_ext[*]
+    ioctl_download ioctl_upload
+}
+set hps_strobe_regs [get_registers -nowarn {emu|hps_io|io_dout[*]}]
+foreach name $hps_strobe_names {
+    set hps_strobe_regs [add_to_collection $hps_strobe_regs [get_registers -nowarn "emu|hps_io|$name"]]
+}
+for {set bit 0} {$bit < 64} {incr bit} {
+    set hps_strobe_regs [add_to_collection $hps_strobe_regs [get_registers -nowarn "emu|hps_io|RTC\[$bit\]"]]
+}
+for {set bit 0} {$bit < 32} {incr bit} {
+    set hps_strobe_regs [add_to_collection $hps_strobe_regs [get_registers -nowarn "emu|hps_io|TIMESTAMP\[$bit\]"]]
+}
+if {[get_collection_size [get_registers -nowarn {emu|hps_io|io_dout[*]}]] < 8} {
+    error "Missing hps_io io_dout registers"
+}
+post_message "hps_io strobe-loaded registers: [get_collection_size $hps_strobe_regs]"
+set_multicycle_path -setup 2 -to $hps_strobe_regs
+set_multicycle_path -hold 1 -to $hps_strobe_regs
+# The strobe's io_ce term toggles every cycle and must reach these registers
+# within the strobe cycle itself; the more specific rule keeps it single-cycle.
+set hps_strobe_enable [get_registers {io_ce*}]
+set_multicycle_path -setup 1 -from $hps_strobe_enable -to $hps_strobe_regs
+set_multicycle_path -hold 0 -from $hps_strobe_enable -to $hps_strobe_regs

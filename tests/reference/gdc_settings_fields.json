@@ -128,5 +128,25 @@
     "PC_FAST",
     1,
     "pc_fast"
+  ],
+  [
+    "GBASEADDR2",
+    14,
+    "gGDC_BASEADDR2"
+  ],
+  [
+    "GBASEADDR3",
+    14,
+    "gGDC_BASEADDR3"
+  ],
+  [
+    "GLINENUM2",
+    10,
+    "gGDC_LINENUM2"
+  ],
+  [
+    "GLINENUM3",
+    10,
+    "gGDC_LINENUM3"
   ]
 ]

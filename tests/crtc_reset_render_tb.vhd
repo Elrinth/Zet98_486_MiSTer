@@ -45,7 +45,8 @@ begin
         GRAPHEN=>'0',DOTPLINE=>"00000",LOWBL=>'0',GCOLOR=>'1',MONOSEL=>"0000",TXTEN=>'1',
         CURADDR=>(others=>'0'),CURE=>'0',CURUPPER=>0,CURLOWER=>15,CBLINK=>'0',BLINKRATE=>"01000",
         GBASEADDR0=>(others=>'0'),GBASEADDR1=>(others=>'0'),
-        GLINENUM0=>(others=>'0'),GLINENUM1=>(others=>'0'),GPITCH=>x"28",
+        GLINENUM0=>(others=>'0'),GLINENUM1=>(others=>'0'),
+        GBASEADDR2=>(others=>'0'),GBASEADDR3=>(others=>'0'),GLINENUM2=>(others=>'0'),GLINENUM3=>(others=>'0'),GPITCH=>x"28",
         EMUMODE=>'0',VRTC=>open,HRTC=>open,GPALNO=>open,GPALR=>x"0",GPALG=>x"0",GPALB=>x"0",
         gclk=>pixel_clk,clk=>clk,rstn=>rstn,ATRSEL=>semimode);
     process

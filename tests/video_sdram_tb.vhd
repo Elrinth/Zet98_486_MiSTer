@@ -176,7 +176,8 @@ begin
         GRAPHEN=>'1', DOTPLINE=>"00000", BLANK=>'0', UCOUNT=>uc, HUCOUNT=>hc,
         VCOUNT=>vc, HCOMP=>'0', VCOMP=>'0', BASEADDR0=>(others=>'0'),
         BASEADDR1=>(others=>'0'), LINENUM0=>"0111111111",
-        LINENUM1=>(others=>'0'), PITCH=>x"28", clk=>pixelclk, rstn=>rstn);
+        LINENUM1=>(others=>'0'), BASEADDR2=>(others=>'0'), BASEADDR3=>(others=>'0'),
+        LINENUM2=>(others=>'0'), LINENUM3=>(others=>'0'), PITCH=>x"28", clk=>pixelclk, rstn=>rstn);
     process
         variable row : unsigned(12 downto 0) := (others=>'0');
         variable addr : unsigned(21 downto 0);

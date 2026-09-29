@@ -305,6 +305,10 @@ port(
 	GBASEADDR1	:in std_logic_vector(13 downto 0);
 	GLINENUM0	:in std_logic_vector(9 downto 0);
 	GLINENUM1	:in std_logic_vector(9 downto 0);
+	GBASEADDR2	:in std_logic_vector(13 downto 0);
+	GBASEADDR3	:in std_logic_vector(13 downto 0);
+	GLINENUM2	:in std_logic_vector(9 downto 0);
+	GLINENUM3	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
 
 	EMUMODE		:in std_logic;
@@ -997,6 +1001,10 @@ port(
 	BASEADDR1	:out std_logic_vector(17 downto 0);
 	SL0			:out std_logic_vector(9 downto 0);
 	SL1			:out std_logic_vector(9 downto 0);
+	BASEADDR2	:out std_logic_vector(13 downto 0);
+	BASEADDR3	:out std_logic_vector(13 downto 0);
+	SL2			:out std_logic_vector(9 downto 0);
+	SL3			:out std_logic_vector(9 downto 0);
 	IM			:out std_logic;
 	PITCH		:out std_logic_vector(7 downto 0);
 	DOTPLINE	:out std_logic_vector(4 downto 0);
@@ -1878,7 +1886,7 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
-signal video_settings_source,video_settings_received : std_logic_vector(127 downto 0);
+signal video_settings_source,video_settings_received : std_logic_vector(175 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -2127,6 +2135,8 @@ signal	gGDC_BASEADDR0	:std_logic_vector(17 downto 0);
 signal	gGDC_BASEADDR1	:std_logic_vector(17 downto 0);
 signal	gGDC_LINENUM0	:std_logic_vector(9 downto 0);
 signal	gGDC_LINENUM1	:std_logic_vector(9 downto 0);
+signal	gGDC_BASEADDR2,gGDC_BASEADDR3	:std_logic_vector(13 downto 0);
+signal	gGDC_LINENUM2,gGDC_LINENUM3	:std_logic_vector(9 downto 0);
 signal	gGDC_LINENUM	:std_logic_vector(9 downto 0);
 
 --GRCG
@@ -3190,7 +3200,13 @@ begin
     video_settings_source(125) <= pc_single;
     video_settings_source(126) <= gGDC_VGRAMSEL;
     video_settings_source(127) <= pc_fast;
+    -- Graphics display areas 3 and 4 (Steam Heart's cutscene split).
+    video_settings_source(141 downto 128) <= gGDC_BASEADDR2;
+    video_settings_source(155 downto 142) <= gGDC_BASEADDR3;
+    video_settings_source(165 downto 156) <= gGDC_LINENUM2;
+    video_settings_source(175 downto 166) <= gGDC_LINENUM3;
     gdc_settings : entity work.video_settings_transfer
+        generic map(WIDTH=>176)
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
     pVideoDebug <= '0' & video_settings_source(127 downto 57);
@@ -3259,6 +3275,10 @@ begin
 		GBASEADDR1	=>video_settings_received(84 downto 71),
 		GLINENUM0	=>video_settings_received(94 downto 85),
 		GLINENUM1	=>video_settings_received(104 downto 95),
+		GBASEADDR2	=>video_settings_received(141 downto 128),
+		GBASEADDR3	=>video_settings_received(155 downto 142),
+		GLINENUM2	=>video_settings_received(165 downto 156),
+		GLINENUM3	=>video_settings_received(175 downto 166),
 		GPITCH		=>video_settings_received(112 downto 105),
 
 		EMUMODE		=>'0',
@@ -3530,6 +3550,10 @@ begin
 		BASEADDR1	=>gGDC_BASEADDR1,
 		SL0			=>gGDC_LINENUM0,
 		SL1			=>gGDC_LINENUM1,
+		BASEADDR2	=>gGDC_BASEADDR2,
+		BASEADDR3	=>gGDC_BASEADDR3,
+		SL2			=>gGDC_LINENUM2,
+		SL3			=>gGDC_LINENUM3,
 		IM			=>open,
 		PITCH		=>gGDC_PITCH,
 		DOTPLINE	=>gGDC_DOTPLINE,

@@ -27,10 +27,17 @@ port(
 	HCOMP	:in std_logic;
 	VCOMP	:in std_logic;
 	
+	-- Four display areas (SCROLL parameter bytes 0-15), used in order and
+	-- then again from area 1, as NP2kai does for the uPD7220. LEN counts
+	-- raster lines; LEN=0 lasts to the end of the frame.
 	BASEADDR0	:in std_logic_vector(13 downto 0);
 	BASEADDR1	:in std_logic_vector(13 downto 0);
+	BASEADDR2	:in std_logic_vector(13 downto 0);
+	BASEADDR3	:in std_logic_vector(13 downto 0);
 	LINENUM0	:in std_logic_vector(9 downto 0);
 	LINENUM1	:in std_logic_vector(9 downto 0);
+	LINENUM2	:in std_logic_vector(9 downto 0);
+	LINENUM3	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
@@ -100,21 +107,20 @@ signal	MONOFL0	:std_logic_vector(7 downto 0);
 signal	MONOFL1	:std_logic_vector(7 downto 0);
 signal	MONOFL2	:std_logic_vector(7 downto 0);
 signal	C0ADDR	:std_logic_vector(13 downto 0);
-signal	iLINENUM0	:integer range 0 to 1023;
 signal	lvcount	:std_logic_vector(9 downto 0);
 -- Related system/pixel clocks remain fully timed. Register GDC settings
 -- before address/count arithmetic, without asynchronous-path exceptions.
-signal base0_pixel, base1_pixel : std_logic_vector(13 downto 0);
-signal length0_pixel : std_logic_vector(9 downto 0);
+type area_bases is array(0 to 3) of std_logic_vector(13 downto 0);
+type area_lengths is array(0 to 3) of integer range 0 to 1023;
+signal base_pixel, base_frame : area_bases;
+signal length_pixel, length_frame : area_lengths;
 signal pitch_pixel : std_logic_vector(7 downto 0);
 signal repeat_pixel : std_logic_vector(4 downto 0);
 -- Display parameters for the frame being scanned: taken at its first line so
 -- that GDC writes during the frame apply from the next frame on, like the
 -- start address (a mid-frame change split the picture while games scroll).
-signal base1_frame : std_logic_vector(13 downto 0);
 signal pitch_frame : std_logic_vector(7 downto 0);
 signal repeat_frame : std_logic_vector(4 downto 0);
-signal length0_frame : integer range 0 to 1023;
 signal frame_seen : std_logic := '0';    -- a frame start was scanned since reset
 signal frame_start : std_logic := '0';   -- one clock at the first visible line
 
@@ -128,26 +134,27 @@ begin
 	
 	GRAMADR<=GRAMADRb;
 	
-	iLINENUM0<=conv_integer(length0_pixel);
     process(clk,rstn) begin
         if rstn='0' then
-            base0_pixel<=(others=>'0');base1_pixel<=(others=>'0');
-            length0_pixel<=(others=>'0');pitch_pixel<=(others=>'0');repeat_pixel<=(others=>'0');
+            base_pixel<=(others=>(others=>'0'));length_pixel<=(others=>0);
+            pitch_pixel<=(others=>'0');repeat_pixel<=(others=>'0');
         elsif rising_edge(clk) then
-            base0_pixel<=BASEADDR0;base1_pixel<=BASEADDR1;
-            length0_pixel<=LINENUM0;pitch_pixel<=PITCH;repeat_pixel<=DOTPLINE;
+            base_pixel<=(BASEADDR0,BASEADDR1,BASEADDR2,BASEADDR3);
+            length_pixel<=(conv_integer(LINENUM0),conv_integer(LINENUM1),
+                           conv_integer(LINENUM2),conv_integer(LINENUM3));
+            pitch_pixel<=PITCH;repeat_pixel<=DOTPLINE;
             -- Until the first frame start, the frame copies follow the live
             -- settings (reset may release in the middle of a frame).
             if frame_seen='0' or frame_start='1' then
-                base1_frame<=base1_pixel; pitch_frame<=pitch_pixel; repeat_frame<=repeat_pixel;
-                length0_frame<=iLINENUM0;
+                base_frame<=base_pixel; pitch_frame<=pitch_pixel; repeat_frame<=repeat_pixel;
+                length_frame<=length_pixel;
             end if;
         end if;
     end process;
 	
 	process(clk,rstn)
-	variable LINENUM	:integer range 0 to 1023;
-    variable first_partition : boolean;
+	variable AREALINES	:integer range 0 to 1023;   -- raster lines shown in this area
+    variable AREA : integer range 0 to 3;
 	begin
 		if(rstn='0')then
 			BUFSTATE<=BS_IDLE;
@@ -158,8 +165,8 @@ begin
 			BUFWE<='0';
 			BUFCNT<=0;
 			LINEEN<='1';
-			LINENUM:=1;
-            first_partition:=true;
+			AREALINES:=1;
+            AREA:=0;
 			LINECOUNT<="00000"; frame_seen<='0'; frame_start<='0';
 		elsif(clk' event and clk='1')then
 			BUFWE<='0'; frame_start<='0';
@@ -167,27 +174,29 @@ begin
 			when BS_IDLE =>
 				if(HUCOUNT=0 and UCOUNT=0 and VCOUNT>=VIV)then
 					if(VCOUNT=VIV)then
-                        GRAMADRb<=base0_pixel;
-                        C0ADDR<=base0_pixel;
+                        GRAMADRb<=base_pixel(0);
+                        C0ADDR<=base_pixel(0);
                         frame_seen<='1'; frame_start<='1';
                         LINEEN<='1';
-                        LINENUM:=1;
-                        first_partition:=true;
+                        AREALINES:=1;
+                        AREA:=0;
                         LINECOUNT<=repeat_pixel;
                         BUFSTATE<=BS_READ;
                         GRAMRD<='1';
-                    elsif first_partition and LINENUM=length0_frame then
+                    elsif length_frame(AREA)/=0 and AREALINES=length_frame(AREA) then
                         -- The area length (LEN) counts raster lines, repeated
-                        -- lines included (as NP2kai's "remain"): area 2 starts
-                        -- after LEN lines with a fresh line-repeat group.
+                        -- lines included (as NP2kai's "remain"): the next area
+                        -- starts at its own SAD with a fresh line-repeat group.
                         -- Counting logical rows switched too late in 200-line
-                        -- modes (Flame Zapper Kotsujin's rolling split).
-                        GRAMADRb<=base1_frame;
-                        C0ADDR<=base1_frame;
-                        first_partition:=false;
+                        -- modes (Flame Zapper Kotsujin's rolling split). After
+                        -- area 4, area 1 follows again (Steam Heart's cutscene
+                        -- splits the screen into four areas).
+                        AREA:=(AREA+1) mod 4;
+                        GRAMADRb<=base_frame(AREA);
+                        C0ADDR<=base_frame(AREA);
                         BUFSTATE<=BS_READ;
                         GRAMRD<='1';
-                        LINENUM:=(LINENUM+1) mod 1024;
+                        AREALINES:=1;
                         LINECOUNT<=repeat_frame;
                         LINEEN<='1';
                     elsif(LINECOUNT="00000")then
@@ -196,11 +205,11 @@ begin
                         C0ADDR<=C0ADDR+pitch_frame;
                         BUFSTATE<=BS_READ;
                         GRAMRD<='1';
-                        LINENUM:=(LINENUM+1) mod 1024;
+                        if AREALINES/=1023 then AREALINES:=AREALINES+1; end if;
                         LINECOUNT<=repeat_frame;
                         LINEEN<='1';
 					else
-						LINENUM:=(LINENUM+1) mod 1024;
+						if AREALINES/=1023 then AREALINES:=AREALINES+1; end if;
 						LINECOUNT<=LINECOUNT-1;
 						LINEEN<='0';
 					end if;

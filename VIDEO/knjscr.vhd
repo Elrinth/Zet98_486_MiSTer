@@ -57,7 +57,7 @@ signal	C_LIN	:integer range 0 to 31;
 signal	C_COL	:integer range 0 to 127;
 signal	CURV	:std_logic;
 signal	CURF	:std_logic;
-signal	CICOUNT	:integer range 0 to 31;
+signal	CICOUNT	:integer range 0 to 63;
 signal	BLKF	:std_logic;
 signal	BICOUNT	:integer range 0 to BLINKINT-1;
 signal	CHRLINES	:integer range 1 to 32;
@@ -65,7 +65,7 @@ signal	VLINESC	:std_logic_vector(4 downto 0);
 signal	HMODEC	:std_logic;
 signal	FONTBYTE:std_logic_vector(7 downto 0);
 signal	FROMh_ln:std_logic;
-signal	CBLINKINT	:integer range 0 to 31;
+signal	CBLINKINT	:integer range 1 to 64;
 signal	C0ADDR	:std_logic_vector(12 downto 0);
 signal	wPITCH	:std_logic_vector(12 downto 0);
 signal	TRAMADRx	:std_logic_vector(12 downto 0);
@@ -196,7 +196,10 @@ begin
 		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn);
 	C_COL<=0 when HUCOUNT<HIV else HUCOUNT-HIV;
 
-	CBLINKINT<=conv_integer(cursor_rate_pixel);
+	-- The cursor is on for 2*BR frames and off for 2*BR frames (BR=0: 64),
+	-- as NP2kai's tramflag timing; toggling every BR frames blinked twice as
+	-- fast as the machine (reported on the DOS prompt).
+	CBLINKINT<=64 when conv_integer(cursor_rate_pixel)=0 else 2*conv_integer(cursor_rate_pixel);
 	
 	process(clk,rstn)begin
 		if(rstn='0')then

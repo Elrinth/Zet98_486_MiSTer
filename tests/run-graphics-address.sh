@@ -15,3 +15,10 @@ done
 for length in 2 7 398; do
     ghdl -r --std=08 -fsynopsys --workdir="$out" graphics_address_tb -gREPEATS=1 -gFIRST_LENGTH="$length" --assert-level=error
 done
+# Four areas in order, then area 1 again (Steam Heart's cutscene), with repeats
+for areas in "40 60 80 100" "16 32 48 64" "100 0 0 0" "0 5 5 5" "120 120 80 0" "7 9 11 13"; do
+    set -- $areas
+    for repeat in 0 1 2; do
+        ghdl -r --std=08 -fsynopsys --workdir="$out" graphics_address_tb -gREPEATS="$repeat"             -gFIRST_LENGTH="$1" -gSECOND_LENGTH="$2" -gTHIRD_LENGTH="$3" -gFOURTH_LENGTH="$4" --assert-level=error
+    done
+done

@@ -58,6 +58,10 @@ port(
 	GBASEADDR1	:in std_logic_vector(13 downto 0);
 	GLINENUM0	:in std_logic_vector(9 downto 0);
 	GLINENUM1	:in std_logic_vector(9 downto 0);
+	GBASEADDR2	:in std_logic_vector(13 downto 0);
+	GBASEADDR3	:in std_logic_vector(13 downto 0);
+	GLINENUM2	:in std_logic_vector(9 downto 0);
+	GLINENUM3	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
 	
 	EMUMODE		:in std_logic;
@@ -183,6 +187,10 @@ port(
 	BASEADDR1	:in std_logic_vector(13 downto 0);
 	LINENUM0	:in std_logic_vector(9 downto 0);
 	LINENUM1	:in std_logic_vector(9 downto 0);
+	BASEADDR2	:in std_logic_vector(13 downto 0);
+	BASEADDR3	:in std_logic_vector(13 downto 0);
+	LINENUM2	:in std_logic_vector(9 downto 0);
+	LINENUM3	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
@@ -307,6 +315,8 @@ signal gbaseaddr0_video : std_logic_vector(13 downto 0);
 signal gbaseaddr1_video : std_logic_vector(13 downto 0);
 signal glinenum0_video : std_logic_vector(9 downto 0);
 signal glinenum1_video : std_logic_vector(9 downto 0);
+signal gbaseaddr2_video, gbaseaddr3_video : std_logic_vector(13 downto 0);
+signal glinenum2_video, glinenum3_video : std_logic_vector(9 downto 0);
 signal gpitch_video : std_logic_vector(7 downto 0);
 signal dotpline_video : std_logic_vector(4 downto 0);
 signal graphen_video : std_logic;
@@ -326,6 +336,8 @@ signal gbaseaddr0_pixel_source : std_logic_vector(13 downto 0);
 signal gbaseaddr1_pixel_source : std_logic_vector(13 downto 0);
 signal glinenum0_pixel_source : std_logic_vector(9 downto 0);
 signal glinenum1_pixel_source : std_logic_vector(9 downto 0);
+signal gbaseaddr2_pixel_source, gbaseaddr3_pixel_source : std_logic_vector(13 downto 0);
+signal glinenum2_pixel_source, glinenum3_pixel_source : std_logic_vector(9 downto 0);
 signal gpitch_pixel_source : std_logic_vector(7 downto 0);
 signal dotpline_pixel_source : std_logic_vector(4 downto 0);
 signal graphen_pixel_source : std_logic;
@@ -369,6 +381,10 @@ begin
 			gbaseaddr1_video <= GBASEADDR1;
 			glinenum0_video <= GLINENUM0;
 			glinenum1_video <= GLINENUM1;
+			gbaseaddr2_video <= GBASEADDR2;
+			gbaseaddr3_video <= GBASEADDR3;
+			glinenum2_video <= GLINENUM2;
+			glinenum3_video <= GLINENUM3;
 			gpitch_video <= GPITCH;
 			dotpline_video <= DOTPLINE;
 			graphen_video <= GRAPHEN;
@@ -398,6 +414,10 @@ begin
             gbaseaddr1_pixel_source <= gbaseaddr1_video;
             glinenum0_pixel_source <= glinenum0_video;
             glinenum1_pixel_source <= glinenum1_video;
+            gbaseaddr2_pixel_source <= gbaseaddr2_video;
+            gbaseaddr3_pixel_source <= gbaseaddr3_video;
+            glinenum2_pixel_source <= glinenum2_video;
+            glinenum3_pixel_source <= glinenum3_video;
             gpitch_pixel_source <= gpitch_video;
             dotpline_pixel_source <= dotpline_video;
             graphen_pixel_source <= graphen_video;
@@ -554,6 +574,10 @@ begin
 		BASEADDR1=>gbaseaddr1_pixel_source,
 		LINENUM0=>glinenum0_pixel_source,
 		LINENUM1=>glinenum1_pixel_source,
+		BASEADDR2=>gbaseaddr2_pixel_source,
+		BASEADDR3=>gbaseaddr3_pixel_source,
+		LINENUM2=>glinenum2_pixel_source,
+		LINENUM3=>glinenum3_pixel_source,
 		PITCH	=>gpitch_pixel_source,
 		
 		clk		=>clk3,

@@ -233,7 +233,9 @@ wire io_fpga     = ~io_ss1 & io_ss0;
 wire io_uio      = ~io_ss1 & io_ss2;
 
 reg  io_ack;
-reg  rack;
+// rack and io_ce reach several hundred receiver/hps_io enables in the strobe
+// cycle itself; let the fitter place local copies (B220: -1.3 ns from io_ce).
+(* maxfan = 48 *) reg rack;
 wire io_strobe = ~rack & io_clk;
 
 // The HPS host bus is slow (each word waits for io_ack), but clk_sys is the
@@ -241,7 +243,7 @@ wire io_strobe = ~rack & io_clk;
 // owns updates only on io_ce edges, so their mutual paths get two clk_sys
 // periods (pc98-host-io.sdc). A late write-enable here once shifted the HDMI
 // timing words (HEIGHT took HBP) depending on the fitter's placement.
-reg io_ce = 0;
+(* maxfan = 48 *) reg io_ce = 0;
 always @(posedge clk_sys) io_ce <= ~io_ce;
 // io_strobe now stays high for one io_ce period (two clk_sys cycles). hps_io
 // acts on the strobe level, so everything outside this receiver gets the

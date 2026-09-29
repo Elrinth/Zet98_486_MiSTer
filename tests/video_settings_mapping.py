@@ -25,11 +25,12 @@ def check(source):
     assignments = [(bits(span), normalize(expression)) for span, expression in re.findall(
         r'video_settings_source\(([^)]+)\)\s*<=\s*([^;]+);', source)]
     assert len(assignments) == len(fields)
+    total = sum(width for _, width, _ in fields)
     coverage = []
     for (hi, lo), _ in assignments:
         assert hi >= lo
         coverage.extend(range(lo, hi+1))
-    assert sorted(coverage) == list(range(128)), 'Missing or overlapping GDC snapshot bits'
+    assert sorted(coverage) == list(range(total)), 'Missing or overlapping GDC snapshot bits'
     block = source.split('VID\t:CRTC98 port map(', 1)[1].split('\n\t);', 1)[0]
     outputs = {}
     for name, width, expression in fields:
@@ -43,7 +44,7 @@ def check(source):
     rng = random.Random(0x98cd121)
     # One-hot basis tests expose individual dropped/swapped bits; random words
     # exercise mixed field values. Expression names preserve original inversions.
-    vectors = [0] + [1 << i for i in range(128)] + [rng.getrandbits(128) for _ in range(10000)]
+    vectors = [0] + [1 << i for i in range(total)] + [rng.getrandbits(total) for _ in range(10000)]
     for vector in vectors:
         values = {}
         position = 0

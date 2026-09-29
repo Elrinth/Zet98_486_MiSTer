@@ -27,6 +27,12 @@ port(
 	BASEADDR1	:out std_logic_vector(17 downto 0);
 	SL0			:out std_logic_vector(9 downto 0);
 	SL1			:out std_logic_vector(9 downto 0);
+	-- Areas 3 and 4 (SCROLL parameter bytes 8-15, shared with the drawing
+	-- pattern); the display walks all four areas like NP2kai's uPD7220.
+	BASEADDR2	:out std_logic_vector(13 downto 0);
+	BASEADDR3	:out std_logic_vector(13 downto 0);
+	SL2			:out std_logic_vector(9 downto 0);
+	SL3			:out std_logic_vector(9 downto 0);
 	IM			:out std_logic;
 	PITCH		:out std_logic_vector(7 downto 0);
 	DOTPLINE	:out std_logic_vector(4 downto 0);
@@ -308,6 +314,10 @@ begin
 			BASEADDR1<=(others=>'0');
 			SL0<=(others=>'0');
 			SL1<=(others=>'0');
+			BASEADDR2<=(others=>'0');
+			BASEADDR3<=(others=>'0');
+			SL2<=(others=>'0');
+			SL3<=(others=>'0');
 			IM<='0';
 			r_PITCH<=(others=>'0');
 			DOTPLINE<=(others=>'0');
@@ -355,6 +365,10 @@ begin
 				BASEADDR1<=(others=>'0');
 				SL0<=(others=>'0');
 				SL1<=(others=>'0');
+				BASEADDR2<=(others=>'0');
+				BASEADDR3<=(others=>'0');
+				SL2<=(others=>'0');
+				SL3<=(others=>'0');
 				IM<='0';
 				r_PITCH<=(others=>'0');
 				DOTPLINE<=(others=>'0');
@@ -452,21 +466,29 @@ begin
 						when 8 =>
 							D_PTN(7 downto 0)<=FIFORDAT(7 downto 0);
 							D_TX0<=FIFORDAT(7 downto 0);
+							BASEADDR2(7 downto 0)<=FIFORDAT(7 downto 0);
 						when 9 =>
 							D_PTN(15 downto 8)<=FIFORDAT(7 downto 0);
 							D_TX1<=FIFORDAT(7 downto 0);
+							BASEADDR2(13 downto 8)<=FIFORDAT(5 downto 0);
 						when 10 =>
 							D_TX2<=FIFORDAT(7 downto 0);
+							SL2(3 downto 0)<=FIFORDAT(7 downto 4);
 						when 11 =>
 							D_TX3<=FIFORDAT(7 downto 0);
+							SL2(9 downto 4)<=FIFORDAT(5 downto 0);
 						when 12 =>
 							D_TX4<=FIFORDAT(7 downto 0);
+							BASEADDR3(7 downto 0)<=FIFORDAT(7 downto 0);
 						when 13 =>
 							D_TX5<=FIFORDAT(7 downto 0);
+							BASEADDR3(13 downto 8)<=FIFORDAT(5 downto 0);
 						when 14 =>
 							D_TX6<=FIFORDAT(7 downto 0);
+							SL3(3 downto 0)<=FIFORDAT(7 downto 4);
 						when 15 =>
 							D_TX7<=FIFORDAT(7 downto 0);
+							SL3(9 downto 4)<=FIFORDAT(5 downto 0);
 						when others =>
 						end case;
 						if(PRAMADDR<16)then

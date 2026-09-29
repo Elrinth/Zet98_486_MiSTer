@@ -31,7 +31,8 @@ architecture test of gdc_pram_tb is
     signal addr:std_logic_vector(1 downto 0):="00";
     signal din,dout,pitch:std_logic_vector(7 downto 0):=(others=>'0');
     signal b0,b1:std_logic_vector(17 downto 0);
-    signal l0,l1:std_logic_vector(9 downto 0);
+    signal l0,l1,l2,l3:std_logic_vector(9 downto 0);
+    signal b2,b3:std_logic_vector(13 downto 0);
     signal legacy_rows:std_logic_vector(4 downto 0);
     signal ma:std_logic_vector(17 downto 0);
     signal wd:std_logic_vector(15 downto 0);
@@ -51,7 +52,8 @@ begin
     end process;
     dut:entity work.GRAGDC port map(CS=>cs,ADDR=>addr,RD=>'0',WR=>wr,DIN=>din,DOUT=>dout,DOE=>open,
         LPEND=>'0',VRTC=>'0',HRTC=>'0',VRAMSEL=>open,CRAMSEL=>open,INTR=>open,GRAPHEN=>open,VZOOM=>open,
-        BASEADDR0=>b0,BASEADDR1=>b1,SL0=>l0,SL1=>l1,IM=>open,PITCH=>pitch,DOTPLINE=>legacy_rows,
+        BASEADDR0=>b0,BASEADDR1=>b1,SL0=>l0,SL1=>l1,
+        BASEADDR2=>b2,BASEADDR3=>b3,SL2=>l2,SL3=>l3,IM=>open,PITCH=>pitch,DOTPLINE=>legacy_rows,
         GDC_ADDR=>ma,GDC_RDAT=>x"0000",GDC_WDAT=>wd,GDC_RD=>mr,GDC_WR=>mw,GDC_MACK=>ack,clk=>clk,rstn=>rstn);
     -- Decoder-to-raster control: transport has its own production CDC suite.
     raster:entity work.pegc_raster port map(clk=>clk,rstn=>rstn,
@@ -91,6 +93,15 @@ begin
                 report "PRAM upper half corrupted partition0" severity failure;
             assert to_integer(unsigned(l1))=ref(6)/16+16*(ref(7) mod 64)
                 report "PRAM upper half corrupted partition1" severity failure;
+            -- Areas 3 and 4 share bytes 8-15 with the drawing pattern.
+            assert to_integer(unsigned(b2))=ref(8)+256*(ref(9) mod 64)
+                report "area 3 SAD mismatch" severity failure;
+            assert to_integer(unsigned(b3))=ref(12)+256*(ref(13) mod 64)
+                report "area 4 SAD mismatch" severity failure;
+            assert to_integer(unsigned(l2))=ref(10)/16+16*(ref(11) mod 64)
+                report "area 3 LEN mismatch" severity failure;
+            assert to_integer(unsigned(l3))=ref(14)/16+16*(ref(15) mod 64)
+                report "area 4 LEN mismatch" severity failure;
         end;
         procedure check_pattern is
             variable before,bit_value,physical_bit:natural;
