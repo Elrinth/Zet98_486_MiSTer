@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC-98 HDI Converter</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --text: #1d1d1b; --muted: #66645e;
+  --line: #d9d6cc; --accent: #2f5fb3; --ok: #1f7a3a; --warn: #a2560b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --panel: #212326; --text: #ecebe6; --muted: #a3a19a;
+    --line: #3a3c40; --accent: #7aa5f0; --ok: #6cc98a; --warn: #f0a85a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a; --panel: #212326; --text: #ecebe6; --muted: #a3a19a;
+  --line: #3a3c40; --accent: #7aa5f0; --ok: #6cc98a; --warn: #f0a85a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-size: 1.6rem; margin: 0 0 8px; }
+p { margin: 0 0 12px; color: var(--muted); }
+#drop { margin: 24px 0 16px; padding: 40px 16px; text-align: center; cursor: pointer;
+  border: 2px dashed var(--line); border-radius: 12px; background: var(--panel); }
+#drop.over { border-color: var(--accent); }
+#drop strong { display: block; font-size: 1.1rem; color: var(--text); }
+#log { list-style: none; padding: 0; margin: 0; }
+#log li { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 10px; overflow-wrap: anywhere; }
+#log .name { font-weight: 600; }
+#log pre { margin: 6px 0 0; white-space: pre-wrap; font: 13px/1.45 ui-monospace, Consolas, monospace;
+  color: var(--muted); }
+#log .warn { color: var(--warn); font-weight: 600; }
+#log a { display: inline-block; margin-top: 8px; padding: 6px 12px; border-radius: 8px;
+  background: var(--accent); color: var(--bg); text-decoration: none; font-weight: 600; }
+footer { margin-top: 32px; font-size: 0.9rem; color: var(--muted); }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>PC-98 HDI 256 → 512 converter</h1>
+  <p>Old PC-98 hard-disk images (10/20/40 MB SASI disks) use 256-byte sectors, which the
+  <a href="https://github.com/Elrinth/Zet98_486_MiSTer">Zet98 486 MiSTer core</a> cannot boot.
+  Drop an <code>.hdi</code> here to get a 512-byte-sector copy named <code>…-512b.hdi</code>.</p>
+  <p>Everything runs in your browser; the image is not uploaded anywhere.</p>
+  <label id="drop">
+    <strong>Drop .hdi files here</strong>
+    or click to choose
+    <input id="pick" type="file" accept=".hdi,.HDI" multiple hidden>
+  </label>
+  <ul id="log"></ul>
+  <footer>Same conversion as
+    <a href="https://github.com/Elrinth/Zet98_486_MiSTer/blob/main/scripts/pc98_hdi_256to512.py">scripts/pc98_hdi_256to512.py</a>
+    (Python, for the command line). GPL-3.0-or-later.</footer>
+</main>
+<script>
+"use strict";
+// Target disk: 8 heads x 17 sectors x 512 bytes, a geometry the core's IDE BIOS recognises.
+const HEADS = 8, SECTORS = 17, BPS = 512, CYL_BYTES = HEADS * SECTORS * BPS, HEADER_SIZE = 4096;
+
+class ConvertError extends Error {}
+
+function parseHdi(buf) {
+  if (buf.byteLength < 32) throw new ConvertError("file is too small to be an HDI image");
+  const v = new DataView(buf);
+  const offset = v.getUint32(8, true), size = v.getUint32(12, true), bps = v.getUint32(16, true);
+  const spt = v.getUint32(20, true), heads = v.getUint32(24, true), cyl = v.getUint32(28, true);
+  if (!(offset >= 32 && offset <= buf.byteLength && [256, 512, 1024, 2048].includes(bps) && spt && heads && cyl))
+    throw new ConvertError("not an HDI image (unknown header)");
+  const img = new Uint8Array(size);  // truncated dumps: missing tail stays zero
+  img.set(new Uint8Array(buf, offset, Math.min(size, buf.byteLength - offset)));
+  return { img, bps, spt, heads, cyl };
+}
+
+const u16 = (a, o) => a[o] | (a[o + 1] << 8);
+const u32 = (a, o) => (a[o] | (a[o + 1] << 8) | (a[o + 2] << 16) | (a[o + 3] << 24)) >>> 0;
+function put16(a, o, x) { a[o] = x & 255; a[o + 1] = (x >> 8) & 255; }
+function put32(a, o, x) { for (let i = 0; i < 4; i++) a[o + i] = (x >>> (8 * i)) & 255; }
+
+function validBpb(b, o) {
+  if (o + 64 > b.length || (b[o] !== 0xEB && b[o] !== 0xE9)) return false;
+  const bps = u16(b, o + 11), spc = b[o + 13], res = u16(b, o + 14), nf = b[o + 16];
+  const roots = u16(b, o + 17), media = b[o + 21], fsz = u16(b, o + 22);
+  const tot = u16(b, o + 19) || u32(b, o + 32);
+  return [256, 512, 1024, 2048].includes(bps) && [1, 2, 4, 8, 16, 32, 64, 128].includes(spc) &&
+    res >= 1 && (nf === 1 || nf === 2) && roots && media >= 0xF0 && fsz && tot > res + nf * fsz;
+}
+
+// Linear 256-byte sector of a (sector, head, cylinder) field of a partition entry.
+const chs = (e, at, heads, spt) => (u16(e, at + 2) * heads + e[at + 1]) * spt + e[at];
+
+function oldPartitions(img, spt, heads) {
+  let best = null;
+  for (const table of [256, 512]) {
+    const found = [];
+    for (let i = 0; i < (table === 256 ? 8 : 16); i++) {
+      const e = img.slice(table + i * 32, table + i * 32 + 32);
+      if (e.length < 32 || !e.subarray(0, 16).some(x => x)) continue;
+      if (e[8] >= spt || e[9] >= heads) continue;
+      const start = chs(e, 8, heads, spt) * 256;
+      if (start && validBpb(img, start)) found.push({ i, e, start });
+    }
+    if (found.length && (!best || found.length > best.length)) best = found;
+  }
+  if (!best) throw new ConvertError("no DOS partition found in the partition table");
+  return best;
+}
+
+// Rewrite the hidden-sector / geometry fields of a DOS partition boot record at out[o].
+function patchBpb(out, o, oldStart, newLba) {
+  const lbps = u16(out, o + 11);
+  if (lbps < 512) throw new ConvertError(`the DOS filesystem uses ${lbps}-byte sectors; ` +
+    "use scripts/pc98_hdi_to_vhd.py to copy the game onto a DOS VHD instead");
+  const old256 = oldStart / 256, oldLog = Math.floor(oldStart / lbps), newLog = Math.floor(newLba * BPS / lbps);
+  let nec = "";
+  if (u16(out, o + 0x44) === 256 && u32(out, o + 0x3E) === old256) {
+    // NEC DOS boot code after the BPB: physical partition start (3Eh), data
+    // area start in physical sectors (42h) and the physical sector size (44h)
+    const data = u16(out, o + 0x42) * 256 / BPS;
+    put32(out, o + 0x3E, newLba);
+    put16(out, o + 0x42, data);
+    put16(out, o + 0x44, BPS);
+    nec = " + NEC loader";
+  }
+  const hidden18 = u32(out, o + 0x18), hidden1c = u32(out, o + 0x1C);
+  if (u16(out, o + 0x1E) === 256 && (hidden18 === old256 || hidden18 === oldLog)) {
+    // NEC's older layout: physical hidden sectors at 18h, physical sector size at 1Eh
+    put32(out, o + 0x18, hidden18 === old256 ? newLba : newLog);
+    put16(out, o + 0x1E, BPS);
+    return "NEC" + nec;
+  }
+  put16(out, o + 0x18, SECTORS);
+  put16(out, o + 0x1A, HEADS);
+  put32(out, o + 0x1C, hidden1c === oldLog && oldLog !== old256 ? newLog : newLba);
+  return "DOS" + nec;
+}
+
+function convert(buf, log) {
+  const { img, bps, spt, heads, cyl } = parseHdi(buf);
+  if (bps === 512) throw new ConvertError("this image already uses 512-byte sectors; no conversion needed");
+  if (bps !== 256) throw new ConvertError(`this image uses ${bps}-byte sectors; only 256-byte images are converted`);
+  const mb = n => (n / 1048576).toFixed(1);
+  log(`source: ${cyl} cylinders, ${heads} heads, ${spt} sectors of 256 bytes (${mb(img.length)} MB)`);
+  const parts = oldPartitions(img, spt, heads).sort((a, b) => a.start - b.start);
+
+  const placed = [];
+  let nextCyl = 1;  // PC-98 hard disks start their partitions at cylinder 1
+  parts.forEach((p, n) => {
+    const stop = n + 1 < parts.length ? parts[n + 1].start : img.length;
+    const end = (p.e[12] === 0 && p.e[13] === 0)
+      ? (u16(p.e, 14) + 1) * heads * spt * 256        // end given as a whole (inclusive) cylinder
+      : (chs(p.e, 12, heads, spt) + 1) * 256;
+    const lbps = u16(img, p.start + 11);
+    const tot = u16(img, p.start + 19) || u32(img, p.start + 32);
+    const length = Math.min(Math.max(Math.min(end, stop) - p.start, tot * lbps), img.length - p.start);
+    const cyls = Math.ceil(length / CYL_BYTES);
+    placed.push({ ...p, length, c0: nextCyl, cyls });
+    nextCyl += cyls;
+  });
+  const totalCyl = nextCyl;
+  if (totalCyl > 65535) throw new ConvertError("image is too large");
+
+  const out = new Uint8Array(HEADER_SIZE + totalCyl * CYL_BYTES);
+  const disk = out.subarray(HEADER_SIZE);
+  // Cylinder 0 keeps its byte layout (the IPL loads its menu code from 1024 on);
+  // only the 256-byte sector holding the partition table moves up to 512.
+  disk.set(img.subarray(0, Math.min(parts[0].start, CYL_BYTES)));
+  disk.fill(0, 256, 1024);
+  for (const p of placed) {
+    const dst = p.c0 * CYL_BYTES;
+    disk.set(img.subarray(p.start, p.start + p.length), dst);
+    const ipl = dst + Math.max(chs(p.e, 4, heads, spt) * 256 - p.start, 0);
+    const iplLba = Math.floor(ipl / BPS);
+    const ne = p.e.slice();
+    ne[4] = iplLba % SECTORS; ne[5] = Math.floor(iplLba / SECTORS) % HEADS;
+    put16(ne, 6, Math.floor(iplLba / (SECTORS * HEADS)));
+    ne[8] = 0; ne[9] = 0; put16(ne, 10, p.c0);
+    ne[12] = 0; ne[13] = 0; put16(ne, 14, p.c0 + p.cyls - 1);
+    const kind = patchBpb(disk, dst, p.start, dst / BPS);
+    disk.set(ne, 512 + p.i * 32);
+    let name = "";
+    try { name = new TextDecoder("shift_jis").decode(ne.subarray(16, 32)).replace(/[\s\0]+$/, ""); } catch (_) {}
+    log(`partition ${p.i + 1} "${name}": ${mb(p.length)} MB at cylinder ${p.c0} (${kind} boot record)`);
+  }
+  disk[510] = 0x55; disk[511] = 0xAA;
+
+  const h = new DataView(out.buffer);
+  [0, 0, HEADER_SIZE, totalCyl * CYL_BYTES, BPS, SECTORS, HEADS, totalCyl]
+    .forEach((x, k) => h.setUint32(k * 4, x, true));
+  log(`output: ${totalCyl} cylinders, 8 heads, 17 sectors of 512 bytes (${mb(totalCyl * CYL_BYTES)} MB)`);
+  return out;
+}
+
+function outputName(name) {
+  const dot = name.lastIndexOf(".");
+  const root = dot > 0 ? name.slice(0, dot) : name;
+  return root + "-512b.hdi";
+}
+
+const logList = document.getElementById("log");
+async function handle(file) {
+  const li = document.createElement("li");
+  li.innerHTML = '<div class="name"></div><pre></pre>';
+  li.querySelector(".name").textContent = file.name;
+  const pre = li.querySelector("pre");
+  logList.prepend(li);
+  const log = s => { pre.textContent += s + "\n"; };
+  try {
+    const out = convert(await file.arrayBuffer(), log);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([out], { type: "application/octet-stream" }));
+    a.download = outputName(file.name);
+    a.textContent = "Save " + a.download;
+    li.append(a);
+    a.click();
+  } catch (err) {
+    const w = document.createElement("div");
+    w.className = "warn";
+    w.textContent = "Warning: " + (err instanceof ConvertError ? err.message : "could not read this file (" + err + ")");
+    li.append(w);
+  }
+}
+const drop = document.getElementById("drop");
+const pick = document.getElementById("pick");
+pick.addEventListener("change", () => { [...pick.files].forEach(handle); pick.value = ""; });
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => [...e.dataTransfer.files].forEach(handle));
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => e.preventDefault());
+</script>
+</body>
+</html>

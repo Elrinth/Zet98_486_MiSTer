@@ -213,6 +213,7 @@ initialize:
     mov word [es:1bh*4],bios_stack_int1b
     mov word [es:1bh*4+2],cs
     or word [es:055ch],0100h
+    call set_cpu_id
     mov byte [state],1
     jmp .return
 .next_candidate:
@@ -228,6 +229,17 @@ initialize:
     mov ss,ax
     mov sp,[cs:init_sp]
     retf
+
+; PC-9821 BIOSes keep the CPU's reset ID in 0:0486h; the PC-9801VM BIOS
+; leaves it 0. VEM486 (and similar 386 memory managers) then resets the CPU
+; through port F0h to read the ID and expects a shutdown return that the VM
+; BIOS does not implement, so boot hangs. Publish a 486DX ID (ES = 0).
+set_cpu_id:
+    cmp word [es:0486h],0
+    jne .done
+    mov word [es:0486h],0410h
+.done:
+    ret
 
 ; Read a single LBA at ESI into CS:DI without disturbing the scan registers.
 read_one:
@@ -305,6 +317,9 @@ boot:
     xor ax,ax
     mov ds,ax
     mov byte [0584h],80h
+    push ds
+    pop es
+    call set_cpu_id
     cld
     sti
     call 1fc0h:0

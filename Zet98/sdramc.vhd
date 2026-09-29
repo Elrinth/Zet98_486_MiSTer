@@ -10,7 +10,11 @@ ENTITY SDRAMC IS
         CPU_WRITE_BUNDLE : boolean := false;
         SUB_WRITE_BUNDLE : boolean := false;
         FLOPPY_REQUEST_BUNDLE : boolean := false;
-        CPU_AFFINE_RMW : boolean := false
+        CPU_AFFINE_RMW : boolean := false;
+        -- Posted CPU word writes: CPUWR1 without a preserve mask is acknowledged
+        -- at once from a dual-clock FIFO of 2**POSTED_WRITE_BITS entries that
+        -- the memory side drains back to back (0 disables).
+        POSTED_WRITE_BITS : integer := 0
 	);
 	port(
 		-- SDRAM PORTS
@@ -247,6 +251,21 @@ attribute altera_attribute of lFDEREQ, lFECREQ, FDEdone_sync, FECdone_sync : sig
     "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
 
 signal	isCPU		:std_logic;
+-- Posted CPU writes (POSTED_WRITE_BITS>0). Entries hold address, bank, byte
+-- select and data; pointers carry one wrap bit and cross as Gray code.
+constant PWB : integer := POSTED_WRITE_BITS;
+constant PWA : integer := PWB + boolean'pos(PWB=0);   -- array sizing, >= 1
+type pw_fifo_t is array(0 to 2**PWA-1) of std_logic_vector(ADRWIDTH+19 downto 0);
+signal pw_fifo : pw_fifo_t;
+signal pw_wbin, pw_rbin, pw_wgray, pw_rgray : std_logic_vector(PWA downto 0);
+signal pw_wbin_next, pw_rbin_next, pw_wgray_next, pw_rgray_next : std_logic_vector(PWA downto 0);
+signal pw_rgray_cpu0, pw_rgray_cpu1, pw_wgray_mem0, pw_wgray_mem1 : std_logic_vector(PWA downto 0);
+attribute preserve of pw_rgray_cpu0, pw_rgray_cpu1, pw_wgray_mem0, pw_wgray_mem1 : signal is true;
+signal pw_ack, pw_push, pw_active, pw_empty_cpu, pw_full_cpu, pw_pending_mem : std_logic;
+signal pw_head : std_logic_vector(ADRWIDTH+19 downto 0);
+signal w_address : std_logic_vector(ADRWIDTH-1 downto 0);
+signal w_bank, w_bytes : std_logic_vector(1 downto 0);
+signal w_word : std_logic_vector(15 downto 0);
 
 signal	MEMCKE		:STD_LOGIC;							-- SD-RAM CLOCK ENABLE
 signal	MEMCS_N		:STD_LOGIC;							-- SD-RAM CHIP SELECT
@@ -472,6 +491,7 @@ begin
 
 	process(memclk,rstn)
 	variable	st_next	:std_logic;
+	variable	pw_retired	:std_logic;	-- a posted write retired this edge
 	begin
 		if(rstn='0')then
 			MEMCKE		<='0';
@@ -510,13 +530,17 @@ begin
 			fdeend<='0';
 			fecend<='0';
 			mem_inidone<='0';
+			pw_rbin<=(others=>'0'); pw_rgray<=(others=>'0'); pw_active<='0';
+			pw_wgray_mem0<=(others=>'0'); pw_wgray_mem1<=(others=>'0');
 		elsif(memclk' event and memclk='1')then
+			pw_wgray_mem0<=pw_wgray; pw_wgray_mem1<=pw_wgray_mem0;
 			lCPUREQ<=lCPUREQ(1 downto 0) & CPUREQ;
 			lSUBREQ<=lSUBREQ(1 downto 0) & SUBREQ;
 			lVIDREQ<=lVIDREQ(1 downto 0) & VIDREQ;
 			lFDEREQ<=lFDEREQ(1 downto 0) & FDEREQ;
 			lFECREQ<=lFECREQ(1 downto 0) & FECREQ;
 			st_next:='0';
+			pw_retired:='0';
 			if(clkcount=0 and REFCNT>0)then
 				REFCNT<=REFCNT-1;
 			end if;
@@ -880,24 +904,24 @@ begin
 						MEMWE_N		<='1';
 						MEMUDQ		<='1';
 						MEMLDQ		<='1';
-						MEMBA1		<=cpu_bank(1);
-						MEMBA0		<=cpu_bank(0);
-						MEMADR		<=cpu_address(ADRWIDTH-1 downto ADRWIDTH-13);
+						MEMBA1		<=w_bank(1);
+						MEMBA0		<=w_bank(0);
+						MEMADR		<=w_address(ADRWIDTH-1 downto ADRWIDTH-13);
 						MEMDATOE	<='0';
-						CPUJOB<=JOB_NOP;
+						if(pw_active='0')then CPUJOB<=JOB_NOP; end if;
 					when 2 =>		--write command & send word
 						MEMCKE		<='1';
 						MEMCS_N		<='0';
 						MEMRAS_N	<='1';
 						MEMCAS_N	<='0';
 						MEMWE_N		<='0';
-						MEMUDQ		<=not cpu_bytes(1);
-						MEMLDQ		<=not cpu_bytes(0);
-						MEMBA1		<=cpu_bank(1);
-						MEMBA0		<=cpu_bank(0);
-						MEMADR(12 downto 11)	<=not cpu_bytes(1) & not cpu_bytes(0);
-						MEMADR(10 downto 0)	<='0' & cpu_address(9 downto 0);
-						MEMDAT<=cpu_write_words(0);
+						MEMUDQ		<=not w_bytes(1);
+						MEMLDQ		<=not w_bytes(0);
+						MEMBA1		<=w_bank(1);
+						MEMBA0		<=w_bank(0);
+						MEMADR(12 downto 11)	<=not w_bytes(1) & not w_bytes(0);
+						MEMADR(10 downto 0)	<='0' & w_address(9 downto 0);
+						MEMDAT<=w_word;
 						MEMDATOE	<='1';
 					when 3 =>		--break burst and precharge all
 						MEMCKE		<='1';
@@ -2267,7 +2291,16 @@ begin
 				end case;
 				if(st_next='1')then		--select next state
 					case STATE is
-					when ST_READ | ST_READ4 | ST_WRITE | ST_WRITE4 | ST_RMW | ST_RMW4 =>
+					when ST_WRITE =>
+						if(pw_active='1')then
+							pw_rbin<=pw_rbin_next;
+							pw_rgray<=pw_rgray_next;
+							pw_active<='0';
+							pw_retired:='1';
+						else
+							cpuend<=not cpuend;
+						end if;
+					when ST_READ | ST_READ4 | ST_WRITE4 | ST_RMW | ST_RMW4 =>
 						cpuend<=not cpuend;
 					when ST_SUBREAD | ST_SUBREAD4 | ST_SUBWRITE | ST_SUBWRITE4 | ST_SUBRMW | ST_SUBRMW4 =>
 						subend<=not subend;
@@ -2314,6 +2347,13 @@ begin
 							when others =>
 								STATE<=ST_REFRESH;
 							end case;
+							isCPU<='1';
+						elsif((isCPU='0' or SUBJOB=JOB_NOP) and pw_pending_mem='1' and
+							(pw_retired='0' or pw_rgray_next/=pw_wgray_mem1))then
+							-- A write retired on this edge: its pointer update is
+							-- still pending, so test the advanced pointer.
+							STATE<=ST_WRITE;
+							pw_active<='1';
 							isCPU<='1';
 						elsif((isCPU='0' or SUBJOB=JOB_NOP) and CPUJOB/=JOB_NOP)then
 							case CPUJOB is
@@ -2501,7 +2541,20 @@ begin
                 lCPUBNK<=CPUBNK; lCPUBSEL<=CPUBSEL; lCPUPSEL<=CPUPSEL;
             end if;
 --			nCPUJOB<=JOB_NOP;
-			if(CPUWR1='1')then
+			if(PWB>0 and CPUWR1='1' and CPUPRESERVE=x"0000")then
+				-- Posted: queue the word and acknowledge on the next edge. A
+				-- full FIFO leaves lcpustb clear so the request is retried.
+				if(pw_push='1')then
+					lcpustb<='1';
+					lCPUADR<=CPUADR;
+				elsif(lcpustb='1' and lCPUADR=CPUADR)then
+					lcpustb<='1';
+				end if;
+			elsif(PWB>0 and (CPUWR1 or CPUWR4 or CPURD1 or CPURD4 or CPURMW1 or CPURMW4)='1'
+				and pw_empty_cpu='0')then
+				-- Other requests follow every posted write: wait for the drain.
+				null;
+			elsif(CPUWR1='1')then
 				lcpustb<='1';
 				if(lcpustb='0' or lCPUADR/=CPUADR)then
 					lCPUADR<=CPUADR;
@@ -2693,7 +2746,47 @@ begin
         end if;
     end process;
 
-	CPUACK<=CPUACKb;
+	-- A posted write is accepted on a new CPUWR1 request with no preserve mask
+	-- while the FIFO has room; a full FIFO leaves the request waiting.
+	pw_push<='1' when PWB>0 and CPUWR1='1' and CPUPRESERVE=x"0000" and
+		(lcpustb='0' or lCPUADR/=CPUADR) and pw_full_cpu='0' else '0';
+	process(CPUCLK) begin
+		if rising_edge(CPUCLK) then
+			if pw_push='1' then
+				pw_fifo(conv_integer(pw_wbin(PWA-1 downto 0)))<=CPUADR & CPUBNK & CPUBSEL & CPUWDAT0;
+			end if;
+		end if;
+	end process;
+	process(CPUCLK,rstn) begin
+		if rstn='0' then
+			pw_wbin<=(others=>'0'); pw_wgray<=(others=>'0'); pw_ack<='0';
+			pw_rgray_cpu0<=(others=>'0'); pw_rgray_cpu1<=(others=>'0');
+		elsif rising_edge(CPUCLK) then
+			pw_rgray_cpu0<=pw_rgray; pw_rgray_cpu1<=pw_rgray_cpu0;
+			pw_ack<=pw_push;
+			if pw_push='1' then
+				pw_wbin<=pw_wbin_next;
+				pw_wgray<=pw_wgray_next;
+			end if;
+		end if;
+	end process;
+
+	-- Posted-write pointers: binary increment and Gray code for the crossing.
+	pw_wbin_next<=pw_wbin+1;
+	pw_rbin_next<=pw_rbin+1;
+	pw_wgray_next<=pw_wbin_next xor ('0' & pw_wbin_next(PWA downto 1));
+	pw_rgray_next<=pw_rbin_next xor ('0' & pw_rbin_next(PWA downto 1));
+	pw_empty_cpu<='1' when pw_wgray=pw_rgray_cpu1 else '0';
+	pw_full_cpu<='1' when pw_wgray=((not pw_rgray_cpu1(PWA downto PWA-1)) & pw_rgray_cpu1(PWA-2 downto 0)) else '0';
+	pw_pending_mem<='1' when PWB>0 and pw_rgray/=pw_wgray_mem1 else '0';
+	pw_head<=pw_fifo(conv_integer(pw_rbin(PWA-1 downto 0)));
+	-- The CPU-write state executes either the held request or the FIFO head.
+	w_address<=pw_head(ADRWIDTH+19 downto 20) when pw_active='1' else cpu_address;
+	w_bank<=pw_head(19 downto 18) when pw_active='1' else cpu_bank;
+	w_bytes<=pw_head(17 downto 16) when pw_active='1' else cpu_bytes;
+	w_word<=pw_head(15 downto 0) when pw_active='1' else cpu_write_words(0);
+
+	CPUACK<=CPUACKb or pw_ack;
 	SUBACK<=SUBACKb;
 	VIDACK<=VIDACKb;
 --	FDEACK<=FDEACKb;

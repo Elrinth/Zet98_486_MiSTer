@@ -44,8 +44,9 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     reg present = 0, readonly = 1;
     reg [27:0] capacity = 0;
     always @(posedge clk) if(image_mounted) begin
-        // Limit to LBA28 and reject partial sectors/empty images.
-        present <= image_size >= 512 && image_size[8:0] == 0;
+        // Limit to LBA28 and reject images below one sector. A partial last
+        // sector (raw dumps with trailing filler) is ignored, like emulators.
+        present <= image_size >= 512;
         readonly <= image_readonly;
         capacity <= |image_size[63:37] ? 28'hfffffff : image_size[36:9];
     end

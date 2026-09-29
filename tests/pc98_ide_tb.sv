@@ -213,7 +213,11 @@ module pc98_ide_tb;
         taskfile(20,1); outw('h64e,'h20,1); check_sector(20); await_status('h50);
         mount(0,0); inw('h430,value,1); if(value[7:0]!=0) $fatal(1,"unmount presence");
         inw('h64e,value,1); if(value[7:0]!=0) $fatal(1,"unmounted drive ready");
-        mount(513,0); inw('h430,value,1); if(value[7:0]!=0) $fatal(1,"partial image accepted");
+        mount(511,0); inw('h430,value,1); if(value[7:0]!=0) $fatal(1,"sub-sector image accepted");
+        // A trailing partial sector is ignored: 1024+497 bytes is a two-sector drive.
+        mount(1521,0); inw('h430,value,1); if(value!==16'hff01) $fatal(1,"image with partial tail rejected");
+        outw('h64e,'hec,1); await_status('h58);
+        for(int i=0;i<256;i++) begin inw('h640,value,3); if(i==60 && value!==2) $fatal(1,"partial tail capacity %0d",value); end
         $display("PASS PC98 ATA: IDENTIFY, LBA/CHS, 256 sectors, writes, IRQ, lanes, bounds, RO, reset drain (%0d reads/%0d writes)",reads,writes);
         $finish;
     end

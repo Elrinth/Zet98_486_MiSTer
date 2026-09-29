@@ -343,7 +343,8 @@ component SDRAMC
         CPU_WRITE_BUNDLE : boolean := false;
         SUB_WRITE_BUNDLE : boolean := false;
         FLOPPY_REQUEST_BUNDLE : boolean := false;
-        CPU_AFFINE_RMW : boolean := false
+        CPU_AFFINE_RMW : boolean := false;
+        POSTED_WRITE_BITS : integer := 0
 	);
 	port(
 		-- SDRAM PORTS
@@ -2444,7 +2445,7 @@ begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
 
-	ram	:SDRAMC generic map(22,100,64000/8192,true,true,true,true) port map(
+	ram	:SDRAMC generic map(22,100,64000/8192,true,true,true,true,2) port map(
 		-- SDRAM PORTS
 		PMEMCKE			=>pMemCke,
 		PMEMCS_N			=>pMemCs_n,

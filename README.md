@@ -4,6 +4,17 @@ A NEC PC-9801/PC-9821-style computer for MiSTer, based on Puu's Zet/98 with a
 486 CPU. It runs MS-DOS and standard PC-98 games from hard-disk images,
 floppies and CD-ROM.
 
+**Website: [pc98.thefirstboss.com](https://pc98.thefirstboss.com)**: the
+[game compatibility list](https://pc98.thefirstboss.com/games/) (add your own
+reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
+
+> **Does your `.hdi` show "please insert disk" or a black screen?** Many PC-98
+> hard-disk images (Dead of the Brain, YU-NO, Steam Heart's and other 10-80 MB
+> SASI disks) use 256-byte sectors, which the core cannot boot. **Convert them
+> first** with the [online HDI converter](https://pc98.thefirstboss.com/converter/)
+> (runs in your browser, nothing is uploaded) or
+> [`scripts/pc98_hdi_256to512.py`](scripts/pc98_hdi_256to512.py).
+
 ## Features
 
 - **CPU:** z486 (486-class) at 90 MHz, **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
@@ -15,8 +26,8 @@ floppies and CD-ROM.
 - **CD-ROM:** ATAPI drive with **CD audio** (ISO, BIN, or CUE/BIN converted to one
   `.pcd` file). Policenauts plays with its CD music.
 - **Hard disk:** IDE with VHD/IMG and HDI images (512-byte sectors), bootable directly.
-  Older 256-byte-sector (SASI) HDIs: copy the game onto your DOS VHD with
-  [`scripts/pc98_hdi_to_vhd.py`](#converting-old-256-byte-sector-hdi-images).
+  Older 256-byte-sector (SASI) HDIs: [convert them](#converting-old-256-byte-sector-hdi-images)
+  in your browser or with a Python script.
 - **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only).
 - **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
   (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
@@ -32,13 +43,15 @@ floppies and CD-ROM.
    and copy it to `/media/fat/_Computer/` (an SDRAM module is required).
 2. Copy a `boot.rom` to `/media/fat/games/PC98/`: the
    [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS/releases) is free.
-3. Put your PC-98 disk images in `/media/fat/games/PC98/`. Load the core and open
-   the menu (F12): mount a DOS hard-disk image under **IDE hard disk**, or a
-   floppy game under **FDD0**, and reset.
+3. Put your PC-98 disk images in `/media/fat/games/PC98/`
+   ([convert 256-byte-sector HDIs](https://pc98.thefirstboss.com/converter/) first).
+   Load the core and open the menu (F12): mount a DOS hard-disk image under
+   **IDE hard disk**, or a floppy game under **FDD0**, and reset.
 4. Optional: **MPU MIDI: UART** plus MidiLink for General MIDI music
    ([Doom setup](#playing-doom-with-general-midi-music)), a `.pcd` or `.iso` under
    **CD-ROM** ([CD-ROM setup](#cd-rom-atapi-and-cd-audio)).
 5. Some games need a particular memory setup (HIMEM only or EMM386): see the
+   [compatibility list](https://pc98.thefirstboss.com/games/) and the
    [game setup notes](#game-setup-notes). Known issues are listed with each release.
 
 ## Not supported
@@ -64,11 +77,34 @@ floppies and CD-ROM.
 
 ## Converting old 256-byte-sector HDI images
 
-Many older PC-98 hard-disk images (10-40 MB SASI disks, often from Anex86 or
-early NP2) use 256-byte sectors. The core's IDE slot needs 512-byte sectors, so
-these images do not boot. Their DOS filesystem does not depend on the sector
-size, so copy the game files onto a DOS VHD that already boots on the core
-(Python 3 on a PC, no extra modules; back up the VHD first):
+Many older PC-98 hard-disk images (10-80 MB SASI disks, often from Anex86 or
+early NP2, for example Dead of the Brain, YU-NO or Steam Heart's) use 256-byte
+sectors. The core's IDE slot needs 512-byte sectors, so these images do not boot.
+Convert them to a bootable 512-byte-sector HDI:
+
+- **In your browser:** open the [HDI converter](https://pc98.thefirstboss.com/converter/)
+  (or `docs/hdi-converter.html` from this repo) and drop the `.hdi` on it. The
+  conversion runs locally; nothing is uploaded.
+- **Command line** (Python 3 on Windows, macOS or Linux, no extra modules; on
+  Windows you can also drag the `.hdi` onto the script):
+
+  ```
+  python3 scripts/pc98_hdi_256to512.py "Game.hdi"
+  ```
+
+Both write `Game-512b.hdi` next to the original, which is not modified, and warn
+if an image already has 512-byte sectors. The DOS partition is copied unchanged;
+only the partition table, the boot record's geometry fields and the HDI header
+are rewritten (8 heads, 17 sectors per track).
+
+If a converted game stops on an empty screen right after the MS-DOS banner, check
+its `CONFIG.SYS` for `DEVICE=...VEM486.EXE`. The VEM486 memory manager works
+with the [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS). With the
+NEC PC-9801VM `boot.rom` on builds before B224 it hangs (it resets the CPU and
+that BIOS cannot resume); put `REM` in front of that line or use the Open BIOS.
+
+Alternatively, copy just the game files onto a DOS VHD that already boots on the
+core (back up the VHD first):
 
 ```
 python scripts/pc98_hdi_to_vhd.py list    "Game.hdi"
