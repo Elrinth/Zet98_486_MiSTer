@@ -15,6 +15,8 @@ floppies and CD-ROM.
 - **CD-ROM:** ATAPI drive with **CD audio** (ISO, BIN, or CUE/BIN converted to one
   `.pcd` file). Policenauts plays with its CD music.
 - **Hard disk:** IDE with VHD/IMG and HDI images (512-byte sectors), bootable directly.
+  Older 256-byte-sector (SASI) HDIs: copy the game onto your DOS VHD with
+  [`scripts/pc98_hdi_to_vhd.py`](#converting-old-256-byte-sector-hdi-images).
 - **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only).
 - **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
   (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
@@ -59,6 +61,26 @@ floppies and CD-ROM.
 - The defaults (Display: Normal, GDC clock: 2.5MHz) suit most games. Only
   **MPU MIDI: UART** needs to be enabled for General MIDI music (below).
 - `docs/OPEN_BIOS_NOTES.md` describes the `boot.rom` layout.
+
+## Converting old 256-byte-sector HDI images
+
+Many older PC-98 hard-disk images (10-40 MB SASI disks, often from Anex86 or
+early NP2) use 256-byte sectors. The core's IDE slot needs 512-byte sectors, so
+these images do not boot. Their DOS filesystem does not depend on the sector
+size, so copy the game files onto a DOS VHD that already boots on the core
+(Python 3 on a PC, no extra modules; back up the VHD first):
+
+```
+python scripts/pc98_hdi_to_vhd.py list    "Game.hdi"
+python scripts/pc98_hdi_to_vhd.py copy    "Game.hdi" PC98_DOS.vhd GAME
+python scripts/pc98_hdi_to_vhd.py extract "Game.hdi" folder     (files to a PC folder)
+```
+
+`copy` puts everything into `\GAME` on the VHD's DOS partition. The image's
+own DOS system files are skipped; its `CONFIG.SYS`/`AUTOEXEC.BAT` are kept as
+`CONFIG.ORG`/`AUTOEXEC.ORG`, which show the drivers the game expects. Start the
+game from its directory (for example its original batch file), adding those
+drivers to your own CONFIG.SYS if needed.
 
 ## CD-ROM (ATAPI) and CD audio
 
