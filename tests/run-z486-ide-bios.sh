@@ -21,7 +21,7 @@ for mode in read write; do
         -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/$mode" \
         --top-module pc98_ide_bios_tb "${params[@]}" "${sources[@]}" \
         rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv \
-        rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv \
+        rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv \
         rtl/cpu/pc98_extmem_bridge.sv rtl/cpu/pc98_lowmem_cache.sv \
         rtl/cpu/z486_pc98_adapter.sv tests/pc98_ide_bios_tb.sv \
         > "$out/$mode-compile.log" 2>&1 || { tail -n 100 "$out/$mode-compile.log"; exit 1; }

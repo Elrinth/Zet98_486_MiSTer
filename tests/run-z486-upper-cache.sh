@@ -16,7 +16,7 @@ for config in 0:0 1:0 1:1 1:2 1:3; do
       -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj-$upper-$skip" \
       --top-module ao486_upper_cache_tb -GUPPER_RAM_ICACHE="$upper" -GSKIP_INVALIDATION="$skip" \
       "${sources[@]}" "$policy" rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv \
-      rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv \
+      rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv \
       rtl/cpu/pc98_lowmem_cache.sv rtl/cpu/z486_pc98_adapter.sv tests/ao486_upper_cache_tb.sv \
       > "$out/compile-$config.log" 2>&1 || { tail -n 90 "$out/compile-$config.log"; exit 1; }
     if [ "$skip" = 0 ]; then

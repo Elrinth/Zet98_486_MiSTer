@@ -7,7 +7,10 @@
 // This is a same-clock bridge; external DMA arbitration, PC-98 address decoding
 // and interrupt acknowledgement are separate integration responsibilities.
 module ao486_bus_bridge #(
-    parameter READ_MASK_ALWAYS_NONZERO = 1'b0
+    parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
+    // >0: posted-write command queue of 2**MEMORY_QUEUE_BITS entries in front
+    // of the memory bridge (ao486_memory_queue); 0: direct, as before.
+    parameter MEMORY_QUEUE_BITS = 0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -74,13 +77,39 @@ module ao486_bus_bridge #(
     assign bus_write = bus_io ? io_write : mem_write;
     assign bus_strobe = !reset && (bus_io ? io_strobe : owner == MEMORY && mem_strobe);
 
+    wire [29:0] q_address;
+    wire [31:0] q_writedata;
+    wire [3:0] q_byteenable, q_burstcount;
+    wire q_write, q_read, q_wait, bridge_busy;
+    generate if (MEMORY_QUEUE_BITS > 0) begin : queued
+        ao486_memory_queue #(.DEPTH_BITS(MEMORY_QUEUE_BITS)) memory_queue (
+            .clk(clk), .reset(reset),
+            .up_address(avm_address), .up_writedata(avm_writedata),
+            .up_byteenable(avm_byteenable), .up_burstcount(avm_burstcount),
+            .up_write(avm_write && owner == MEMORY), .up_read(avm_read && owner == MEMORY),
+            .up_waitrequest(mem_wait), .busy(mem_busy),
+            .dn_address(q_address), .dn_writedata(q_writedata),
+            .dn_byteenable(q_byteenable), .dn_burstcount(q_burstcount),
+            .dn_write(q_write), .dn_read(q_read), .dn_waitrequest(q_wait),
+            .dn_busy(bridge_busy), .readdatavalid(avm_readdatavalid)
+        );
+    end else begin : direct
+        assign q_address = avm_address;
+        assign q_writedata = avm_writedata;
+        assign q_byteenable = avm_byteenable;
+        assign q_burstcount = avm_burstcount;
+        assign q_write = avm_write && owner == MEMORY;
+        assign q_read = avm_read && owner == MEMORY;
+        assign mem_wait = q_wait;
+        assign mem_busy = bridge_busy;
+    end endgenerate
     ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO)) memory_bridge (
-        .clk(clk), .reset(reset), .avm_address(avm_address),
-        .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
-        .avm_burstcount(avm_burstcount),
-        .avm_write(avm_write && owner == MEMORY), .avm_read(avm_read && owner == MEMORY),
-        .avm_waitrequest(mem_wait), .avm_readdatavalid(avm_readdatavalid),
-        .avm_readdata(avm_readdata), .busy(mem_busy),
+        .clk(clk), .reset(reset), .avm_address(q_address),
+        .avm_writedata(q_writedata), .avm_byteenable(q_byteenable),
+        .avm_burstcount(q_burstcount),
+        .avm_write(q_write), .avm_read(q_read),
+        .avm_waitrequest(q_wait), .avm_readdatavalid(avm_readdatavalid),
+        .avm_readdata(avm_readdata), .busy(bridge_busy),
         .bus_address(mem_address), .bus_select(mem_select),
         .bus_writedata(mem_writedata), .bus_write(mem_write), .bus_strobe(mem_strobe),
         .bus_readdata(bus_readdata), .bus_ack(bus_ack && owner == MEMORY)

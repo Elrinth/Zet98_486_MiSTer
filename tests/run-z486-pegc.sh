@@ -9,7 +9,7 @@ verilator --binary --timing -j 1 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
     -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG \
     -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj" \
     --top-module z486_xms_resident_tb -GRAM_MB=64 -GPEGC_ENABLE=1 -GTRACE_LIMIT=0 \
-    "${sources[@]}" rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_bus_bridge.sv \
+    "${sources[@]}" rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv \
     rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv rtl/cpu/pc98_lowmem_cache.sv rtl/cpu/z486_pc98_adapter.sv \
     rtl/graphics/pc98_pegc_bus.sv rtl/graphics/pc98_pegc_control.sv rtl/graphics/pc98_pegc_palette.sv \
     rtl/graphics/pc98_pegc_memory.sv rtl/graphics/pc98_pegc_ddr_arbiter.sv \

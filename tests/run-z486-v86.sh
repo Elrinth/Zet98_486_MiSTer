@@ -14,7 +14,7 @@ verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
   -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj" \
   --top-module z486_xms_resident_tb -GRAM_MB=64 -GDOS_PROBE=1 \
   -GTRACE_LIMIT=${TRACE_LIMIT:-0} -GWATCHDOG_NS=20000000 "${sources[@]}" \
-  rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_bus_bridge.sv \
+  rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv \
   rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv rtl/cpu/pc98_lowmem_cache.sv \
   rtl/cpu/z486_pc98_adapter.sv tests/z486_xms_resident_tb.sv > "$out/compile.log" 2>&1 || { tail -n 60 "$out/compile.log"; exit 1; }
 cp rtl/vendor/z486/*.hex "$out/"
@@ -35,7 +35,7 @@ grep -q 'protected-mode extended memory program failed' "$out/negative.log"
 echo 'PASS: V86 negative control (no IOPL 3) rejected'
 # Timer IRQs taken from V86 during a store loop (testbench PIT mode).
 nasm -f bin -DIRQ_TEST tests/hardware/v86_monitor.asm -o "$out/v86irq.bin"
-verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD   -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG ${V86_DEFINES:-}   -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/objirq"   --top-module z486_xms_resident_tb -GRAM_MB=64 -GDOS_PROBE=1 -GPIT_PM_TEST=1   -GTRACE_LIMIT=${TRACE_LIMIT:-0} -GWATCHDOG_NS=40000000 "${sources[@]}"   rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_bus_bridge.sv   rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv rtl/cpu/pc98_lowmem_cache.sv   rtl/cpu/z486_pc98_adapter.sv tests/z486_xms_resident_tb.sv > "$out/compileirq.log" 2>&1 || { tail -n 60 "$out/compileirq.log"; exit 1; }
+verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD   -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG ${V86_DEFINES:-}   -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/objirq"   --top-module z486_xms_resident_tb -GRAM_MB=64 -GDOS_PROBE=1 -GPIT_PM_TEST=1   -GTRACE_LIMIT=${TRACE_LIMIT:-0} -GWATCHDOG_NS=40000000 "${sources[@]}"   rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv   rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv rtl/cpu/pc98_lowmem_cache.sv   rtl/cpu/z486_pc98_adapter.sv tests/z486_xms_resident_tb.sv > "$out/compileirq.log" 2>&1 || { tail -n 60 "$out/compileirq.log"; exit 1; }
 if ! (cd "$out"; "$out/objirq/Vz486_xms_resident_tb" "+program=$out/v86irq.bin") > "$out/irq.log" 2>&1; then
   grep -v -e '^XMS EIP' -e '^V86TRACE' "$out/irq.log" | tail -n 20
   exit 1

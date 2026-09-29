@@ -12,7 +12,13 @@ module pc98_ao486 #(
     parameter LOWMEM_CACHE_KB = 8,
     parameter UPPER_RAM_ICACHE = 0,
     parameter CLOCK_RATE_MHZ = 90,
-    parameter PEGC_ENABLE = 0
+    parameter PEGC_ENABLE = 0,
+    // Posted-write memory command queue (ao486_memory_queue): 2**N entries.
+    // Off: measured on hardware (B222, 8 entries) it gave no gain for stores
+    // mixed with ALU work (7257 -> 7252 KB/s) and cost 13% on VRAM copies
+    // (3721 -> 3221 KB/s). One 16-bit fabric transfer (~22 clocks, the SDRAM
+    // controller's clock-crossing round trip) is the limit, not the queue.
+    parameter MEMORY_QUEUE_BITS = 0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -248,7 +254,7 @@ module pc98_ao486 #(
     assign debug_snapshot = 0;
 `endif
     // Proven against the vendored Avalon generator by run-memory-mask-contract.sh.
-    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (
+    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS)) bridge (
         .clk(clk), .reset(cpu_reset),
         .avm_address(avm_address), .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount), .avm_write(avm_write), .avm_read(avm_read),

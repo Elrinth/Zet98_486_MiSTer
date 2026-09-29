@@ -18,5 +18,5 @@ bash tests/run-memory-bridge.sh
 iverilog -g2012 -Wall -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
     -o "$out/integration" rtl/vendor/ao486/memory/avalon_mem.v \
     rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_io_bridge.sv \
-    rtl/cpu/ao486_bus_bridge.sv tests/ao486_memory_integration_tb.sv
+    rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv tests/ao486_memory_integration_tb.sv
 vvp "$out/integration"

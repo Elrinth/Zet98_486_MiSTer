@@ -12,7 +12,7 @@ for ram in 0 16 64; do
         -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj-$ram" \
         --top-module ao486_extmem_tb -GRAM_MB="$ram" -GDOS_PROBE=1 -GMEMORY_INIT=1 -GLOWMEM_CACHE=1 \
         "${sources[@]}" rtl/cpu/ao486_io_bridge.sv rtl/cpu/ao486_memory_bridge.sv \
-        rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv \
+        rtl/cpu/ao486_memory_queue.sv rtl/cpu/ao486_bus_bridge.sv rtl/cpu/pc98_ao486.sv rtl/cpu/pc98_extmem_bridge.sv \
         rtl/cpu/pc98_lowmem_cache.sv rtl/cpu/z486_pc98_adapter.sv tests/ao486_extmem_tb.sv \
         > "$out/compile-$ram.log" 2>&1 || { tail -n 60 "$out/compile-$ram.log"; exit 1; }
     cp rtl/vendor/z486/*.hex "$out/"

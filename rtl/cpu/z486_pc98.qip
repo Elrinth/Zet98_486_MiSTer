@@ -41,6 +41,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) .
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ao486_io_bridge.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ao486_memory_bridge.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ao486_bus_bridge.sv]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ao486_memory_queue.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) pc98_ao486.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) pc98_extmem_bridge.sv]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) pc98_lowmem_cache.sv]
