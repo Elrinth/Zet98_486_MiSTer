@@ -200,7 +200,7 @@ Save the settings and start `DOOM` (or `DOOM2`).
 
 ## Game setup notes
 
-Tested on the MiSTer with builds B207-B218 (2026-09-28/29). "Profile" is the memory
+Tested on the MiSTer with builds B207-B221 (2026-09-28/29). "Profile" is the memory
 setup in CONFIG.SYS/AUTOEXEC.BAT (the test disk's `PROFILE.BAT` numbers):
 **HIMEM** = HIMEM.SYS only, full extended memory; **EMS** = HIMEM.SYS plus
 EMM386.EXE.
@@ -213,8 +213,9 @@ EMM386.EXE.
 | Sorcer Kingdom | EMS | Loading a save with the mouse works (B207+). |
 | Crystal Rinal | - | Asks 1/2/0 at start: 1 is the normal version. |
 | E.V.O. Theory of Evolution | LIO graphics BIOS | Works with the PC-9801VM `boot.rom` and with the open BIOS (LIO directory at F990:0000). |
-| Steam Heart's | HIMEM | Start with **Z** (Return does nothing on the title). The original release plays. The English translation (Psyklax v0.99) crashes on any machine whose memory layout differs from the translator's; use the [crash-fix IPS](https://github.com/Elrinth/SteamHearts_EN_CrashFix). Some graphics noise in the intro cutscene playfield (all builds). |
+| Steam Heart's | HIMEM | Start with **Z** (Return does nothing on the title). The original release plays. The English translation (Psyklax v0.99) crashes on any machine whose memory layout differs from the translator's; use the [crash-fix IPS](https://github.com/Elrinth/SteamHearts_EN_CrashFix). The intro dialogue's split screen is correct from B221 (four display areas). |
 | Black Thorne (16 and 256 colours) | EMS | Dialogue text needs B215+ (CG window at A400:0000). |
+| EDGE | - | Disk A in FDD0. For the intro, put disk C in FDD1 and choose START. The intro's split-screen frames are correct from B221. |
 | Mime | - | Keyboard works from B207 (8259 priority fix). |
 | Touhou 1-5 (Japanese originals) | - | All start; the English-patched 4 and 5 on the test disk show a black screen. |
 | Rusty, Nightslave, Bomber Quest, Brandish 2, Briganty, Branmarker 2, Dead of the Brain, Gate of Souls, Groundseed, Harlem Blade, Lemmings, Star Cruiser II, Starfire, The Screamer, Xenon, Yu-No | - | Reach the title or gameplay with either BIOS. |
