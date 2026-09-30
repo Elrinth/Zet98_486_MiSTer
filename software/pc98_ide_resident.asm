@@ -102,8 +102,11 @@ initialize:
     mov bx,[partition]
     mov al,[bx]
     and al,7fh
-    cmp al,21h                    ; PC-98 DOS FAT partition
+    cmp al,21h                    ; PC-98 DOS FAT partition (NEC FORMAT)
+    je .dos_partition
+    cmp al,20h                    ; Windows 9x FDISK writes A0h/A1h
     jne .next_partition
+.dos_partition:
     mov word [candidate],geometries
 .candidate:
     mov bx,[candidate]

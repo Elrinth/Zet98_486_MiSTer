@@ -167,7 +167,7 @@ class Machine:
         assert struct.unpack('<H',self.u.mem_read(0x594,2))[0]==48, 'RAM above 16 MB not published'
         assert self.u.mem_read(0x501,1)[0]==0x23, 'V30 flag not cleared or other bits changed'
         assert self.u.mem_read(0x54d,1)[0]==0x58, 'EGC-present bit 6 not set or other bits changed'
-        return self.u.mem_read(0xd8008,1)[0]
+        return self.u.mem_read(0xd800a,1)[0]      # resident "state" byte
 
     def owner_boot(self):
         # Exercise the system BIOS's actual boot dispatch as well as discovery.
@@ -270,6 +270,13 @@ if __name__=='__main__':
     m.request(0x0690,512,0,0)
     assert m.chained, 'Floppy did not retain the previous BIOS'
     print('PASS: bounded partial writes, untouched sector tail, image bounds, floppy chaining')
+    # Windows 9x FDISK marks DOS partitions with mid A0h (NEC FORMAT: A1h);
+    # other partition types are skipped.
+    for mid,state in [(0xa0,1),(0x20,1),(0xa1,1),(0xb0,4),(0x14,4)]:
+        m=Machine(rom)
+        ipl=bytearray(m.disk[1]); ipl[0]=mid; m.disk[1]=bytes(ipl)
+        assert m.initialize()==state, hex(mid)
+        print('PASS: partition mid %02Xh %s'%(mid,'accepted' if state==1 else 'rejected'))
     for options,state in [({'absent':True},2),({'bad_bpb':True},4)]:
         m=Machine(rom,**options)
         assert m.initialize()==state
