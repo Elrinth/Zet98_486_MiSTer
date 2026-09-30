@@ -31,6 +31,8 @@ class Machine:
         self.u.mem_write(0xd0000, rom)
         # The legacy BIOS sets the V30 flag (bit 6) and bit 5 unconditionally.
         self.u.mem_write(0x501, bytes([0x63]))
+        # The VM BIOS leaves the CPU class (0480h bits 1-0) at 0 (V30).
+        self.u.mem_write(0x480, bytes([0x58]))
         # PRXDUPD as NP2kai's BIOS initializes it without an EGC (0x18).
         self.u.mem_write(0x54d, bytes([0x18]))
         self.original_vector = struct.pack('<HH', 0x1a82, 0xfd80)
@@ -166,6 +168,7 @@ class Machine:
         assert self.u.mem_read(0x401,1)[0]==112, 'extended RAM below 16 MB not published'
         assert struct.unpack('<H',self.u.mem_read(0x594,2))[0]==48, 'RAM above 16 MB not published'
         assert self.u.mem_read(0x501,1)[0]==0x23, 'V30 flag not cleared or other bits changed'
+        assert self.u.mem_read(0x480,1)[0]==0x5b, 'CPU class 386+ (0480h bits 1-0) not set or other bits changed'
         assert self.u.mem_read(0x54d,1)[0]==0x58, 'EGC-present bit 6 not set or other bits changed'
         return self.u.mem_read(0xd800a,1)[0]      # resident "state" byte
 

@@ -127,6 +127,9 @@ real_mode:
     ; The legacy BIOS sets the V30 flag unconditionally. Preserve its other
     ; identification bits, but do not misreport this verified 386+ CPU as V30.
     and byte [es:501h], 0bfh
+    ; 0480h bits 1-0 = CPU class (0 V30, 1 286, 3 386+). The VM BIOS leaves
+    ; 0 there; Windows 95's IO.SYS refuses to start unless both bits are set.
+    or byte [es:480h], 03h
     add al, 16
     mov [detected], al
 .done:
