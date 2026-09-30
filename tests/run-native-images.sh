@@ -10,7 +10,8 @@ for slot in 0 1; do
 done
 while read -r name reject direct; do
   case "$name" in
-    hdi*|raw) vvp "$out/hdi" "+image=$out/$name.image" "+expected=$out/$name.expected" +reject=$reject +direct=$direct ;;
+    hdi*|raw) case "$name" in hdi) info=20411;; hdi-256) info=30422;; *) info=0;; esac
+      vvp "$out/hdi" "+image=$out/$name.image" "+expected=$out/$name.expected" +reject=$reject +direct=$direct +info=$info ;;
     *) for slot in 0 1; do
          vvp "$out/floppy$slot" "+image=$out/$name.image" "+expected=$out/$name.expected" +reject=$reject +direct=$direct
        done ;;

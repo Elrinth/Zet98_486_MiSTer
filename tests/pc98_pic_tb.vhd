@@ -20,7 +20,7 @@ architecture test of pc98_pic_tb is
     signal pcm_irq :std_logic := '0';
 begin
     clk <= not clk after 5 ns;
-    master: entity work.z8259 generic map(RETRACTABLE_IRQS=>retract_mask) port map(
+    master: entity work.z8259 generic map(RETRACTABLE_IRQS=>retract_mask, LEVEL_IRQS=>x"01") port map(
         CS=>mcs, ADDR=>addr, DIN=>din, DOUT=>mdout, DOE=>mdoe, RD=>'0', WR=>wr,
         IR0=>mirq(0), IR1=>mirq(1), IR2=>mirq(2), IR3=>mirq(3),
         IR4=>mirq(4), IR5=>mirq(5), IR6=>mirq(6), IR7=>sint,
@@ -75,6 +75,15 @@ begin
         write_pic(true, '0', x"20"); write_pic(false, '0', x"20"); cycles(12);
         assert mint='0' report "slave IRQ repeated after EOI" severity failure;
         mirq(0)<='1'; cycles(2); mirq(0)<='0'; cycles(20);
+        assert mint='0' report "masked IRQ delivered" severity failure;
+        -- Masked IR0 (8253 OUT level): the IRR read-back needs no OCW3 and
+        -- follows the line (Steel Gun Nyan polls IRR bit 0 to time itself).
+        addr<='0'; cycles(2);
+        assert mdout(0)='0' report "IRR bit 0 set while the timer line is low" severity failure;
+        mirq(0)<='1'; cycles(3);
+        assert mdout(0)='1' report "masked timer request missing from the default IRR read" severity failure;
+        mirq(0)<='0'; cycles(3);
+        assert mdout(0)='0' report "IRR bit 0 did not follow the timer line" severity failure;
         assert mint='0' report "masked IRQ delivered" severity failure;
         -- IRQ12 is shared by the FM timer and PCM FIFO. Clearing one source
         -- cannot withdraw the other, and servicing both must leave no repeat.

@@ -28,5 +28,7 @@ for c,s,b in [(77,8,1024),(80,15,512),(80,18,512),(80,8,512),(80,9,512),(40,8,51
   bad=bytearray(struct.pack('<8I',0,0x90,4096,len(raw),b,s,2,c)+bytes(4064)+raw);bad[12]^=1;fixture('fdi-length',bad,d88,reject=True)
 raw=bytes((i*19+(i>>9))&255 for i in range(512*17*4*7))
 fixture('hdi',struct.pack('<8I',0,5,4096,len(raw),512,17,4,7)+bytes(4064)+raw,raw)
-fixture('hdi-256',struct.pack('<8I',0,5,4096,len(raw),256,34,4,7)+bytes(4064)+raw,raw,reject=True)
+# 256-byte-sector HDI: passed through as 512-byte blocks; the disk BIOS
+# splits them (info reports the 256-byte geometry).
+fixture('hdi-256',struct.pack('<8I',0,5,4096,len(raw),256,34,4,7)+bytes(4064)+raw,raw)
 fixture('raw',raw,raw,direct=True)

@@ -73,6 +73,15 @@ architecture test of pc98_data_bus_tb is
     signal TSTMP_ODAT : std_logic_vector(15 downto 0) := (others => '0');
     signal aramdo : std_logic_vector(15 downto 0) := (others => '0');
     signal aramdoe : std_logic_vector(1 downto 0) := (others => '0');
+    -- Sources added after the legacy reference stay inactive here: the CG
+    -- window (A4000h) and the floating unclaimed UMA (reads FFh).
+    signal CGW_ODAT : std_logic_vector(15 downto 0) := (others => '0');
+    signal CGW_DOE : std_logic := '0';
+    signal UMA_DOE : std_logic := '0';
+    signal SND_DOE : std_logic := '0';
+    signal BUF_DOE : std_logic := '0';
+    signal BUF_RDAT : std_logic_vector(15 downto 0) := (others => '0');
+    signal SND_STUB_WORD : std_logic_vector(15 downto 0) := (others => '0');
     signal bussel : std_logic_vector(1 downto 0) := (others => '0');
     signal cpuod : std_logic_vector(15 downto 0) := (others => '0');
     alias cpuoe : std_logic is enables(29);

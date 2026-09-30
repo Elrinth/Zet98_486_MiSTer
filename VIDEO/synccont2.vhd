@@ -32,7 +32,12 @@ port(
 	VRTC	:out std_logic;
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	-- Programmed active display (words, lines) inside the visible window;
+	-- ACTIVE follows VISIBLE's delay.
+	ACTW	:in integer range 0 to 127 := 80;
+	ACTL	:in integer range 0 to 1023 := 400;
+	ACTIVE	:out std_logic
 );
 end synccont2;
 
@@ -54,7 +59,13 @@ signal	HSYNCN	:std_logic;
 signal	VSYNCN	:std_logic;
 signal	VISIBLEN:std_logic;
 signal	VIDENEN:std_logic;
+signal	ACTIVEB:std_logic_vector(7 downto 0);
+signal	ACTIVEN:std_logic;
 begin
+	ACTIVEN<=	'0' when VISIBLEN='0' else
+					'0' when VCOUNT>=VIV+ACTL else
+					'0' when HUCOUNT>=HIV+ACTW else
+					'1';
 	HSYNCN<=	'0' when (HUCOUNT<HFP) else
 				'1' when (HUCOUNT<(HFP+HSY)) else
 				'0';
@@ -76,6 +87,8 @@ begin
 			VSYNCB<=(others=>'0');
 			VISIBLEB<=(others=>'0');
 			VIDENB<=(others=>'0');
+			ACTIVEB<=(others=>'0');
+			ACTIVE<='0';
 			HSYNC<='0';
 			VSYNC<='0';
 			VISIBLE<='0';
@@ -85,6 +98,8 @@ begin
 			VSYNC<=VSYNCB(0);
 			VISIBLE<=VISIBLEB(0);
 			VIDEN<=VIDENB(0);
+			ACTIVE<=ACTIVEB(0);
+			ACTIVEB(7 downto 0)<=ACTIVEN & ACTIVEB(7 downto 1);
 			VSYNCB(7 downto 0)<=VSYNCN & VSYNCB(7 downto 1);
 			HSYNCB(7 downto 0)<=HSYNCN & HSYNCB(7 downto 1);
 			VISIBLEB(7 downto 0)<=VISIBLEN & VISIBLEB(7 downto 1);

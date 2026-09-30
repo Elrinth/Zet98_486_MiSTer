@@ -891,6 +891,7 @@ set_global_assignment -name QIP_FILE ../ram2kw_alt.qip
 set_global_assignment -name VHDL_FILE ../ram2kw_alt.vhd
 set_global_assignment -name VHDL_FILE ../tvram.vhd
 set_global_assignment -name VHDL_FILE ../memorymap.vhd
+set_global_assignment -name VHDL_FILE ../mainram_linebuf.vhd
 set_global_assignment -name VHDL_FILE ../ppi8255.vhd
 set_global_assignment -name VHDL_FILE ../GDC/gdc.vhd
 set_global_assignment -name QIP_FILE ../GDC/gdcfifo.qip

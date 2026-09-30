@@ -198,11 +198,6 @@ parameter CONF_STR = {
 	"P1OQ,MPU MIDI,Off,UART;",
 	"P1o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
 `endif
-	"P2,Access indicators;",
-	"P2O5,Show D0/D1 disk access,On,Off;",
-	"P2o8,Show CD access,On,Off;",
-	"P2o9,Show HDD access,On,Off;",
-	"P2oA,Access icons,On,Off;",
 	"P3,Input;",
 	"P3o6,SNAC PS pads,On,Off;",
 	"P3o7,Right stick mouse,On,Off;",
@@ -430,6 +425,7 @@ wire [31:0] host_slot_lba[4];
 wire [7:0] host_slot_buff_din[4];
 wire [3:0] host_rd,host_wr;
 wire [2:0] invalid_image;
+wire [17:0] hdi_info;
 pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE)) images (
     .clk(clk_sys),.image_mounted(img_mounted),.image_readonly(img_readonly),.image_size(img_size),
     .core_mounted(core_img_mounted),.core_readonly(core_img_readonly),.core_size(core_img_size),
@@ -437,7 +433,7 @@ pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE)) images (
     .disk_ack(core_sd_ack),.disk_buff_wr(core_buff_wr),.disk_buff_addr(core_buff_addr),.disk_buff_dout(core_buff_dout),
     .host_lba(host_slot_lba),.host_rd(host_rd),.host_wr(host_wr),.host_buff_din(host_slot_buff_din),
     .host_ack(sd_ack),.host_buff_wr(sd_buff_wr),.host_buff_addr(sd_buff_addr),.host_buff_dout(sd_buff_dout),
-    .invalid(invalid_image)
+    .invalid(invalid_image),.hdi_info(hdi_info)
 );
 wire [1:0] legacy_buffer_slot = core_sd_ack[0] ? 0 : core_sd_ack[1] ? 1 : core_sd_ack[3] ? 3 : 2;
 
@@ -468,6 +464,7 @@ generate if(RAW_IDE) begin : raw_ide
 		.io_read(ide_read), .io_write(ide_write), .io_readdata(ide_readdata),
 		.io_oe(ide_oe), .irq(ide_irq),
 		.image_mounted(core_img_mounted[2]), .image_readonly(core_img_readonly), .image_size(core_img_size),
+		.hdi_info(hdi_info),
 		.sd_lba(ide_lba), .sd_rd(ide_rd), .sd_wr(ide_wr), .sd_ack(core_sd_ack[2]),
 		.sd_buff_addr(core_buff_addr[2]), .sd_buff_dout(core_buff_dout[2]),
 		.sd_buff_din(ide_buff_din), .sd_buff_wr(core_buff_wr[2]),
@@ -715,18 +712,15 @@ video_output video_out (
 	.ce(output_ce), .r(output_r), .g(output_g), .b(output_b),
 	.hs(output_hs), .vs(output_vs), .de(output_de)
 );
-floppy_overlay floppy_icon (
-	.clk(clk_vid), .reset(!pll_locked), .enabled(!status[5]),
-	.activity(floppy_access | sd_rd[1:0] | sd_wr[1:0]), .writing(sd_wr[1:0]), .cd_activity(cd_activity),
-	.cd_enabled(!status[40]), .hdd_enabled(!status[41]), .icons_enabled(!status[42]),
-	.hdd_activity(ide_rd | ide_wr), .hdd_writing(ide_wr),
-	.crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
-	.crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
-	.in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
-	.in_r(output_r), .in_g(output_g), .in_b(output_b),
-	.out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
-	.out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
-);
+// The on-screen disk/CD/HDD access icons (floppy_overlay) were removed to
+// free ~380 ALMs for the memory-system work; the design had no room left.
+assign CE_PIXEL = output_ce;
+assign VGA_HS = output_hs;
+assign VGA_VS = output_vs;
+assign VGA_DE = output_de;
+assign VGA_R = output_r;
+assign VGA_G = output_g;
+assign VGA_B = output_b;
 
 // Report native pixel aspect by default. Optional crop is HDMI-only.
 pc98_video_scale hdmi_scale (

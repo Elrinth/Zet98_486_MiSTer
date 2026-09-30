@@ -7,6 +7,9 @@ entity knjaddrcnv is
 port(
 	kcode	:in std_logic_vector(15 downto 0);
 	cline	:in std_logic_vector(3 downto 0);
+	-- Two-byte code whose half flag emptied the high byte (user character
+	-- column 80h, masked to 00h): still a Kanji-ROM address, not ANK.
+	force_kanji	:in std_logic := '0';
 
 	mon		:out std_logic_vector(15 downto 0);
 	romsel	:out std_logic_vector(1 downto 0);
@@ -21,12 +24,12 @@ signal	l_rn	:std_logic;
 signal	addr	:std_logic_vector(15 downto 0);
 begin
 	
-	iskanji<='0' when kcode(15 downto 8)=x"00" else '1';
+	iskanji<='0' when kcode(15 downto 8)=x"00" and force_kanji='0' else '1';
 	-- Right half: bit 15 (this core's convention for the second cell of a
 	-- two-cell character) or bit 7 of the first code byte, as a PC-98 marks
-	-- the right half in text VRAM (NP2kai maketext: dat & 0x80). Bit 7 is not
-	-- part of the row. Flame Zapper Kotsujin puts user-defined characters in
-	-- cells with that bit set.
+	-- the right half in text VRAM. Bit 7 is not part of the row. The text
+	-- renderer clears bit 7 of user-defined characters and chooses their
+	-- half itself (see KNJSCR).
 	l_rn<=kcode(15) or kcode(7);
 	
 	mcode<='0' & kcode(6 downto 0) & '0' & kcode(14 downto 8);

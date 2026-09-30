@@ -40,7 +40,20 @@ port(
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
-	
+	-- No device in C0000h-D7FFFh: reads float to FFh as on a PC-98, so
+	-- EMM386 can turn the block into UMB. The SDRAM cycle still runs (and
+	-- acknowledges) into unused shadow RAM.
+	UMA_OPEN	:out std_logic;
+	-- Sound BIOS window with no ROM image loaded: reads FFh except NP2kai's
+	-- default header (01 00 00 00 D2 00 08 00 CB at CC2E00h), which
+	-- programs such as Hello Gre's MUSIC.EXE look for.
+	SOUNDROM	:in std_logic := '0';
+	SND_STUB	:out std_logic;
+	SND_STUB_WORD	:out std_logic_vector(15 downto 0);
+	-- CPU (not DMA) access to fixed main RAM below A0000h, for the read
+	-- line buffer (mainram_linebuf).
+	MAIN_RAM	:out std_logic;
+
 	ITFEN		:in std_logic;
 	BIOSEN		:in std_logic;
 	SOUNDEN		:in std_logic;
@@ -191,6 +204,29 @@ begin
 	DBIOS_CS<=	'0' when CPUTGA='1' and DMAEN='0' else
 				'1' when MSEL=sel_SASI else
 				'0';
+
+	-- D8000h-DFFFFh stays RAM: the disk BIOS resident lives there.
+	UMA_OPEN<=	'0' when CPUTGA='1' and DMAEN='0' else
+				'0' when CPUSEG<x"c000" or CPUSEG>=x"d800" else
+				'1' when MSEL=sel_MRAM else
+				'1' when MSEL=sel_SOUND and SOUNDEN='0' else
+				'0';
+
+	MAIN_RAM<=	'0' when CPUTGA='1' or DMAEN='1' else
+				'1' when MSEL=sel_MRAM and CPUSEG<x"a000" else
+				'0';
+
+	SND_STUB<=	'0' when CPUTGA='1' and DMAEN='0' else
+				'1' when MSEL=sel_SOUND and SOUNDEN='1' and SOUNDROM='0' else
+				'0';
+	with MODADDR(13 downto 1) select SND_STUB_WORD<=
+		x"0001" when '1' & x"700",		-- CC2E00h: 01 00
+		x"0000" when '1' & x"701",		-- CC2E02h: 00 00
+		x"00d2" when '1' & x"702",		-- CC2E04h: D2 00
+		x"0008" when '1' & x"703",		-- CC2E06h: 08 00
+		x"ffcb" when '1' & x"704",		-- CC2E08h: CB (RETF), then FFh
+		x"ffff" when others;			-- as NP2kai: the rest reads empty
+		-- (Zeros here made Flame Zapper's NAX driver stall its intro.)
 	
 	MRD<=	DMARD when DMAEN='1' else
 			'0' when CPUTGA='1' else

@@ -8,11 +8,10 @@ floppies and CD-ROM.
 [game compatibility list](https://pc98.thefirstboss.com/games/) (add your own
 reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
-> **Does your `.hdi` show "please insert disk" or a black screen?** Many PC-98
-> hard-disk images (Dead of the Brain, YU-NO, Steam Heart's and other 10-80 MB
-> SASI disks) use 256-byte sectors, which the core cannot boot. **Convert them
-> first** with the [online HDI converter](https://pc98.thefirstboss.com/converter/)
-> (runs in your browser, nothing is uploaded) or
+> **Old 256-byte-sector `.hdi` images boot directly since B228.** Images such as
+> YU-NO, Steam Heart's or Dead of the Brain (10-80 MB SASI disks) no longer need
+> converting. With B227 or older, convert them first with the
+> [online HDI converter](https://pc98.thefirstboss.com/converter/) or
 > [`scripts/pc98_hdi_256to512.py`](scripts/pc98_hdi_256to512.py).
 
 ## Features
@@ -25,10 +24,12 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
   General MIDI music in Doom, Nightslave and others.
 - **CD-ROM:** ATAPI drive with **CD audio** (ISO, BIN, or CUE/BIN converted to one
   `.pcd` file). Policenauts plays with its CD music.
-- **Hard disk:** IDE with raw VHD/IMG/IMA and HDI images (512-byte sectors), bootable directly.
-  Older 256-byte-sector (SASI) HDIs: [convert them](#converting-old-256-byte-sector-hdi-images)
-  in your browser or with a Python script.
-- **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only).
+- **Hard disk:** IDE with raw VHD/IMG/IMA and HDI images, bootable directly. Both
+  512-byte and old 256-byte-sector (SASI) HDIs boot and can be written.
+- **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only). Games that
+  save to their own disk (Revival Xanadu, for example) need D88: convert with the
+  [online converter](https://pc98.thefirstboss.com/converter/). MiSTer Main
+  treats `.fdi` files as Spectrum images; rename or convert them to `.hdm`/`.d88`.
 - **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
   (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
@@ -44,7 +45,7 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 2. Copy a `boot.rom` to `/media/fat/games/PC98/`: the
    [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS/releases) is free.
 3. Put your PC-98 disk images in `/media/fat/games/PC98/`
-   ([convert 256-byte-sector HDIs](https://pc98.thefirstboss.com/converter/) first).
+   (256-byte and 512-byte-sector HDIs both boot).
    Load the core and open the menu (F12): mount a DOS hard-disk image under
    **IDE hard disk**, or a floppy game under **FDD0**, and reset.
 4. Optional: **MPU MIDI: UART** plus MidiLink for General MIDI music
@@ -79,8 +80,9 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 Many older PC-98 hard-disk images (10-80 MB SASI disks, often from Anex86 or
 early NP2, for example Dead of the Brain, YU-NO or Steam Heart's) use 256-byte
-sectors. The core's IDE slot needs 512-byte sectors, so these images do not boot.
-Convert them to a bootable 512-byte-sector HDI:
+sectors. **Since B228 they boot as they are.** Converting them to 512-byte
+sectors is only needed for B227 and older, or for other tools that expect
+512-byte sectors:
 
 - **In your browser:** open the [HDI converter](https://pc98.thefirstboss.com/converter/)
   (or `docs/hdi-converter.html` from this repo) and drop the `.hdi` on it. The

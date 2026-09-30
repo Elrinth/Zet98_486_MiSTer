@@ -834,6 +834,7 @@ set_global_assignment -name SIGNALTAP_FILE ../grphtest.stp
 set_global_assignment -name VHDL_FILE ../FLSHCOPY.vhd
 set_global_assignment -name SIGNALTAP_FILE ../ramtest.stp
 set_global_assignment -name VHDL_FILE ../memorymap.vhd
+set_global_assignment -name VHDL_FILE ../mainram_linebuf.vhd
 set_global_assignment -name VECTOR_WAVEFORM_FILE ../flshcopy.vwf
 set_global_assignment -name SIGNALTAP_FILE ../flshcopy.stp
 set_global_assignment -name SIGNALTAP_FILE ../zetcpu.stp

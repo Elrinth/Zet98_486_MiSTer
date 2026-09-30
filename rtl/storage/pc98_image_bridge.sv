@@ -22,7 +22,8 @@ module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
     input wire host_buff_wr,
     input wire [8:0] host_buff_addr,
     input wire [7:0] host_buff_dout,
-    output wire [2:0] invalid
+    output wire [2:0] invalid,
+    output wire [17:0] hdi_info          // IDE slot HDI geometry (pc98_hdi_image)
 );
     wire [3:0] mounted,readonly;
     wire [63:0] size[4];
@@ -72,7 +73,8 @@ module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
                 .disk_ack(disk_ack[i]),.disk_buff_wr(disk_buff_wr[i]),
                 .host_lba(host_lba[i]),.host_rd(host_rd[i]),.host_wr(host_wr[i]),
                 .host_ack(host_ack[i]),.host_buff_wr(host_buff_wr),
-                .host_buff_addr(host_buff_addr),.host_buff_dout(host_buff_dout),.invalid(invalid[i])
+                .host_buff_addr(host_buff_addr),.host_buff_dout(host_buff_dout),.invalid(invalid[i]),
+                .info(hdi_info)
             );
             assign host_buff_din[i]=disk_buff_din[i];
             assign disk_buff_addr[i]=host_buff_addr;
@@ -93,6 +95,9 @@ module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
         end
     end
     endgenerate
+    generate if(!(ENABLE && RAW_IDE)) begin: no_hdi
+        assign hdi_info=0;
+    end endgenerate
     generate if(ENABLE) begin: events
         reg [3:0] pending=0, pulse=0;
         reg [63:0] saved_size[4];

@@ -18,7 +18,6 @@ module mister_disk_interface_tb;
     defparam dut.hps_io.PS2DIV = 0;
     defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
-    defparam dut.floppy_icon.FONT_FILE="rtl/assets/boot-font.mem";
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;

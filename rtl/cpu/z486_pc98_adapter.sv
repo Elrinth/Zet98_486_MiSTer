@@ -66,7 +66,10 @@ module z486_pc98_adapter #(
         else reset_release <= {reset_release[0], 1'b1};
     end
     wire cpu_reset_n = reset_release[1];
-    assign debug_state = {eip,triple_fault,write_accepted,valid,ready};
+    // Trace/debug snapshot only: with a 16-bit EIP (real/V86 mode) the upper
+    // half carries CS, so the trace's X lines read CS:IP.
+    assign debug_state = {(eip[31:16] == 16'd0 ? {dbg_cs, eip[15:0]} : eip),
+        triple_fault,write_accepted,valid,ready};
     wire [1:0] first_lane = byte_enable[0] ? 2'd0 : byte_enable[1] ? 2'd1 :
                                  byte_enable[2] ? 2'd2 : 2'd3;
     wire [2:0] byte_count = {2'b0,byte_enable[0]} + {2'b0,byte_enable[1]} +

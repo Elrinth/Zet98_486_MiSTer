@@ -16,6 +16,9 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     output wire io_oe, irq,
     input wire image_mounted, image_readonly,
     input wire [63:0] image_size,
+    // HDI geometry from pc98_hdi_image, reported in IDENTIFY words 128-130
+    // for the disk BIOS: {valid, 256-byte sectors, heads, sectors}.
+    input wire [17:0] hdi_info,
     output reg [31:0] sd_lba = 0,
     output wire sd_rd, sd_wr,
     input wire sd_ack,
@@ -43,7 +46,9 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     reg [2:0] state;
     reg present = 0, readonly = 1;
     reg [27:0] capacity = 0;
+    reg [17:0] hdi = 0;
     always @(posedge clk) if(image_mounted) begin
+        hdi <= hdi_info;
         // Limit to LBA28 and reject images below one sector. A partial last
         // sector (raw dumps with trailing filler) is ignored, like emulators.
         present <= image_size >= 512;
@@ -186,6 +191,10 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
                 58: identify_word={7'b0,cylinders[15:7]};
                 60: identify_word=capacity[15:0];
                 61: identify_word={4'b0,capacity[27:16]};
+                // Vendor words: HDI image sector size and header geometry.
+                128: identify_word=!hdi[17] ? 16'd0 : hdi[16] ? 16'd256 : 16'd512;
+                129: identify_word={8'b0,hdi[15:8]};
+                130: identify_word={8'b0,hdi[7:0]};
                 default: identify_word=0;
             endcase
         end

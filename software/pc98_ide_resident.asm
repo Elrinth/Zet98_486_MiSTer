@@ -29,6 +29,7 @@ resident_handler: dw bios_int1b,RESIDENT_SEGMENT
 partition: dw 0
 candidate: dw 0
 int1f_previous: dd 0
+bios_bps: dw 512                  ; caller sector size: 256 for native SASI-era HDI
 
 initialize:
     cli
@@ -77,6 +78,11 @@ initialize:
     cmp eax,10000000h
     ja .return
     mov [bios_capacity],eax
+    ; IDENTIFY word 128 = 256: an HDI image with 256-byte sectors; words
+    ; 129/130 give its header's heads and sectors per track. DOS then sees
+    ; the disk as the original SASI-era drive; no conversion is needed.
+    cmp word [SECTOR_BUFFER+256],256
+    je .hdi256
     xor esi,esi
     mov di,IPL_BUFFER
     call read_one
@@ -197,6 +203,7 @@ initialize:
     cmp eax,65535
     ja .next_candidate
     mov [bios_cylinders],eax
+.install:
     xor ax,ax
     mov es,ax
     mov eax,[es:1bh*4]
@@ -223,6 +230,39 @@ initialize:
     add word [partition],32
     cmp word [partition],IPL_BUFFER+1024
     jb .partition
+    jmp .return
+.hdi256:
+    movzx eax,word [SECTOR_BUFFER+258]
+    test eax,eax
+    jz .return
+    cmp eax,255
+    ja .return
+    mov [bios_heads],eax
+    movzx ecx,word [SECTOR_BUFFER+260]
+    test ecx,ecx
+    jz .return
+    cmp ecx,255
+    ja .return
+    mov [bios_sectors],ecx
+    xor esi,esi
+    mov di,IPL_BUFFER
+    call read_one
+    jc .return
+    mov byte [state],4
+    cmp word [IPL_BUFFER+254],0aa55h   ; 256-byte IPL sector
+    jne .return
+    imul ecx,eax                       ; heads x sectors
+    mov eax,[bios_capacity]
+    shl eax,1                          ; 256-byte sectors
+    xor edx,edx
+    div ecx
+    test eax,eax
+    jz .return
+    cmp eax,65535
+    ja .return
+    mov [bios_cylinders],eax
+    mov word [bios_bps],256
+    jmp .install
 .return:
     call bios_end_pio
     mov ax,[cs:init_ss]
@@ -312,7 +352,8 @@ boot:
     mov ax,0680h
     int 1bh
     jc boot_error
-    cmp word [es:510],0aa55h
+    mov bx,[bios_bps]                 ; the IPL sector ends in 55AAh
+    cmp word [es:bx-2],0aa55h
     jne boot_error
     xor ax,ax
     mov ds,ax

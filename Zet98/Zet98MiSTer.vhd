@@ -310,6 +310,8 @@ port(
 	GLINENUM2	:in std_logic_vector(9 downto 0);
 	GLINENUM3	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
+	DISPAW		:in std_logic_vector(7 downto 0) := x"4e";
+	DISPAL		:in std_logic_vector(9 downto 0) := "0110010000";
 
 	EMUMODE		:in std_logic;
 
@@ -475,7 +477,12 @@ port(
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
-	
+	UMA_OPEN	:out std_logic;
+	SOUNDROM	:in std_logic;
+	SND_STUB	:out std_logic;
+	SND_STUB_WORD	:out std_logic_vector(15 downto 0);
+	MAIN_RAM	:out std_logic;
+
 	ITFEN		:in std_logic;
 	BIOSEN		:in std_logic;
 	SOUNDEN		:in std_logic;
@@ -692,7 +699,8 @@ end component;
 component z8259 is
 generic(
 	monlen :integer :=15;
-	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00"
+	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00";
+	LEVEL_IRQS :std_logic_vector(7 downto 0) := x"00"
 );
 port(
 	CS		:in std_logic;
@@ -1065,7 +1073,9 @@ port(
 	SL3			:out std_logic_vector(9 downto 0);
 	PITCH		:out std_logic_vector(7 downto 0);
 	EAD			:out std_logic_vector(12 downto 0);
-	
+	DISPAW		:out std_logic_vector(7 downto 0);
+	DISPAL		:out std_logic_vector(9 downto 0);
+
 	clk		:in std_logic;
 	rstn	:in std_logic
 );
@@ -1887,7 +1897,7 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
-signal video_settings_source,video_settings_received : std_logic_vector(175 downto 0);
+signal video_settings_source,video_settings_received : std_logic_vector(193 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -2117,6 +2127,8 @@ signal	vrtc_prev	:std_logic;
 signal	gGDC_CGRAMSEL	:std_logic;
 signal tGDC_ATRSEL :std_logic;
 signal	tGDC_VIDEN		:std_logic;
+signal	tGDC_DISPAW		:std_logic_vector(7 downto 0);
+signal	tGDC_DISPAL		:std_logic_vector(9 downto 0);
 signal	tGDC_CUREN		:std_logic;
 signal	tGDC_CHARLINES	:std_logic_vector(4 downto 0);
 signal	tGDC_BLRATE		:std_logic_vector(4 downto 0);
@@ -2299,6 +2311,19 @@ signal	KNJ2_DOE	:std_logic;
 
 --DISK(SASI) BIOS
 signal	DBIO_CS		:std_logic;
+signal	UMA_OPEN	:std_logic;
+signal	UMA_DOE		:std_logic;
+signal	SND_ROMLOADED	:std_logic:='0';
+signal	SND_VISIBLE	:std_logic;
+signal	SND_STUB	:std_logic;
+signal	SND_DOE		:std_logic;
+signal	SND_STUB_WORD	:std_logic_vector(15 downto 0);
+signal	BUF_ELIG, BUF_ELIG_MAP, BUF_RD4, BUF_ACK, BUF_DOE, BUF_SNOOP, BUF_SDRACK	:std_logic;
+-- Main-RAM read line buffer: off until its hit path is pipelined. At 90 MHz
+-- the tag compare on the decoded bus address missed timing by 4.8 ns and
+-- corrupted reads (Briganty, B228W); disabled, the logic is removed.
+constant USE_LINEBUF	:boolean	:=false;
+signal	BUF_RDAT	:std_logic_vector(15 downto 0);
 signal	DBIO_ADDR	:std_logic_vector(12 downto 1);
 signal	DBIO_ODAT	:std_logic_vector(15 downto 0);
 signal	DBIO_DOE	:std_logic;
@@ -2621,6 +2646,9 @@ begin
 		'1' & DMA_ODAT				when DMA_DOE='1' else
 		'1' & GCG_ODAT(15 downto 8)	when GCG_DOE='1' else
 		'1' & DBIO_ODAT(15 downto 8)	when DBIO_DOE='1' else
+		'1' & x"ff"					when UMA_DOE='1' else
+		'1' & SND_STUB_WORD(15 downto 8)	when SND_DOE='1' else
+		'1' & BUF_RDAT(15 downto 8)	when BUF_DOE='1' and bussel(1)='1' else
 		'1' & CB_RDAT0(15 downto 8)	when CB_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8)		when tramdoe(1)='1' else
 		'1' & BNK89_ODAT				when BNK89_DOE='1' else
@@ -2646,6 +2674,9 @@ begin
 		'1' & INTS_ODAT				when INTS_OE='1' and tgca='0' else
 		'1' & GCG_ODAT(7 downto 0)	when GCG_DOE='1' else
 		'1' & DBIO_ODAT(7 downto 0)	when DBIO_DOE='1' else
+		'1' & x"ff"					when UMA_DOE='1' else
+		'1' & SND_STUB_WORD(7 downto 0)	when SND_DOE='1' else
+		'1' & BUF_RDAT(7 downto 0)	when BUF_DOE='1' and bussel(0)='1' else
 		'1' & CB_RDAT0(7 downto 0)	when CB_RD1='1' and bussel(0)='1' else
 		'1' & tramdo(7 downto 0)		when tramdoe(0)='1' else
 		'1' & aramdo(7 downto 0)		when aramdoe(0)='1' else
@@ -2684,12 +2715,14 @@ begin
 	dma_mem_high <=
 		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' else
+		'1' & x"ff" when UMA_DOE='1' else
 		'1' & CB_RDAT0(15 downto 8) when CB_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8) when tramdoe(1)='1' else
 		'0' & x"ff";
 	dma_mem_low <=
 		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' else
+		'1' & x"ff" when UMA_DOE='1' else
 		'1' & CB_RDAT0(7 downto 0) when CB_RD1='1' and bussel(0)='1' else
 		'1' & tramdo(7 downto 0) when tramdoe(0)='1' else
 		'1' & aramdo(7 downto 0) when aramdoe(0)='1' else
@@ -2714,12 +2747,12 @@ begin
 	
 	CB_RD1<=	'0'		when EGC_PATH='1' else
 				GCG_RD1	when GCG_MCS='1' else
-				MRD		when MSD_CS='1' else
+				MRD		when MSD_CS='1' and BUF_ELIG='0' else
 				'0';
-	
+
 	CB_RD4<=	EGC_RD4 when EGC_PATH='1' else
 				GCG_RD4 when GCG_MCS='1' else
-				'0';
+				BUF_RD4;
 	
 	CB_RMW1<=	'0' when EGC_PATH='1' else
 				GCG_RMW1 when GCG_MCS='1' else
@@ -2918,17 +2951,25 @@ begin
 		
 		DBIOS_CS	=>DBIO_CS,
 		DBIOS_ADDR	=>DBIO_ADDR,
-	
+		UMA_OPEN	=>UMA_OPEN,
+		SOUNDROM	=>SND_ROMLOADED,
+		SND_STUB	=>SND_STUB,
+		SND_STUB_WORD	=>SND_STUB_WORD,
+		MAIN_RAM	=>BUF_ELIG_MAP,
+
 		NVRAM_CS	=>NVR_CS,
 		NVRAM_ADDR	=>NVR_ADDR,
 		CGWIN_CS	=>CGW_CS,
 	
 		ITFEN		=>ITFen,
 		BIOSEN		=>not BIOSRAM,
-		SOUNDEN		=>SNDBIOSEN,
+		SOUNDEN		=>SND_VISIBLE,
 		VSEL		=>gGDC_CGRAMSEL,
 		
-		EMSEN		=>'1',
+		-- No page registers drive EMSA0-3, so C0000h-CFFFFh was fixed RAM
+		-- that hid 64 KiB of UMB from EMM386 (YAHDI: 4K UMB, Flame Zapper
+		-- "Palloc error", Briganty low memory). A PC-9821 has no EMS board.
+		EMSEN		=>'0',
 		NECEMSEN	=>NECEMSSEL,
 		EMSA0		=>(others=>'0'),
 		EMSA1		=>(others=>'0'),
@@ -2941,7 +2982,7 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK;
+	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK or BUF_ACK;
 	ack<=MEMack or iack;
 	
 --	DBIO	:diskbios port map(
@@ -2957,6 +2998,58 @@ begin
     end generate;
 
 	DBIO_DOE<=	MRD when DBIO_CS='1' else '0';
+	UMA_DOE<=	MRD when UMA_OPEN='1' else '0';
+	SND_DOE<=	MRD when SND_STUB='1' else '0';
+
+	-- CPU reads of main RAM fetch four-word SDRAM groups (CPURD4) into a
+	-- line buffer; any CPU-port SDRAM write to the group drops it.
+	BUF_ELIG<=BUF_ELIG_MAP when USE_LINEBUF else '0';
+	BUF_SNOOP<=CB_WR1 or CB_WR4 or CB_RMW1 or CB_RMW4;
+	-- The EGC keeps the SDRAM port (EGC_PATH) after the CPU's VRAM write,
+	-- and its acknowledges are hidden from the CPU. The buffer must see the
+	-- same acknowledge as the CPU: taking the EGC's CB_ACK as its own fill
+	-- froze Flame Zapper at a RET after an EGC copy (buffer in HOLD, CPU
+	-- still waiting).
+	BUF_SDRACK<=CB_ACK and not EGC_PATH;
+	mainbuf	:entity work.mainram_linebuf generic map(AW=>22) port map(
+		elig		=>BUF_ELIG,
+		mrd			=>MRD,
+		bank		=>MBANK,
+		addr		=>MADDR,
+		snoop_wr	=>BUF_SNOOP,
+		snoop_bank	=>CB_BANK,
+		snoop_addr	=>CB_ADDR,
+		flush		=>LDR_OE,
+		sdr_ack		=>BUF_SDRACK,
+		sdr_rdat0	=>CB_RDAT0,
+		sdr_rdat1	=>CB_RDAT1,
+		sdr_rdat2	=>CB_RDAT2,
+		sdr_rdat3	=>CB_RDAT3,
+		rd4			=>BUF_RD4,
+		ack			=>BUF_ACK,
+		doe			=>BUF_DOE,
+		rdat		=>BUF_RDAT,
+		clk			=>cpuclk,
+		rstn		=>srstn
+	);
+
+	-- A sound board's BIOS ROM sits at CC000h, as on a PC-9801 with a -26/-86
+	-- board; port 53Dh bit 7 (PC-9821 ROM select) can also show it. No BIOS
+	-- used here sets 53Dh, so it used to stay hidden. boot.rom carries the
+	-- ROM at offset 20000h-23FFFh; when that is blank the NP2kai stub answers.
+	SND_VISIBLE<='1' when SND/=0 else SNDBIOSEN;
+	-- Kept across soft resets: it describes the loaded boot.rom image.
+	process(cpuclk)begin
+		if(cpuclk' event and cpuclk='1')then
+			if(LDR_OE='1' and LDR_WR='1')then
+				if(LDR_ADDR=x"00000")then
+					SND_ROMLOADED<='0';
+				elsif(LDR_ADDR(19 downto 14)="001000" and LDR_WDAT/=x"00")then
+					SND_ROMLOADED<='1';
+				end if;
+			end if;
+		end if;
+	end process;
 	
 	GCG_IOCS<=	'1' when ioaddr_even(15 downto 2)=(x"007" & "11") and ioaddr_even(0)='0' else '0';
 	gcg	:grcg generic map(true) port map(
@@ -3108,7 +3201,8 @@ begin
 	INTM_CS<='1' when ioaddr_even(15 downto 2)="00000000000000" and ioaddr_even(0)='0' else '0';
 	-- MPU deasserts its level request when software polls the last byte.
 	-- Other legacy producers include one-clock pulses and keep their latch.
-	INT_M	:z8259 generic map(RETRACTABLE_IRQS => x"40") port map(
+	-- IR0 is the 8253 OUT level: IRR read-back follows it (timer polling loops).
+	INT_M	:z8259 generic map(RETRACTABLE_IRQS => x"40", LEVEL_IRQS => x"01") port map(
 		CS		=>INTM_CS,
 		ADDR	=>ioaddr(1),
 		DIN		=>io_wdata(7 downto 0),
@@ -3206,8 +3300,11 @@ begin
     video_settings_source(155 downto 142) <= gGDC_BASEADDR3;
     video_settings_source(165 downto 156) <= gGDC_LINENUM2;
     video_settings_source(175 downto 166) <= gGDC_LINENUM3;
+    -- Text GDC active display (The Return of Ishtar: 72 words x 384 lines).
+    video_settings_source(183 downto 176) <= tGDC_DISPAW;
+    video_settings_source(193 downto 184) <= tGDC_DISPAL;
     gdc_settings : entity work.video_settings_transfer
-        generic map(WIDTH=>176)
+        generic map(WIDTH=>194)
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
     pVideoDebug <= '0' & video_settings_source(127 downto 57);
@@ -3281,6 +3378,8 @@ begin
 		GLINENUM2	=>video_settings_received(165 downto 156),
 		GLINENUM3	=>video_settings_received(175 downto 166),
 		GPITCH		=>video_settings_received(112 downto 105),
+		DISPAW		=>video_settings_received(183 downto 176),
+		DISPAL		=>video_settings_received(193 downto 184),
 
 		EMUMODE		=>'0',
 
@@ -3520,11 +3619,13 @@ begin
 		SL3			=>open,
 		PITCH		=>tGDC_PITCH,
 		EAD			=>tGDC_CURADDR,
+		DISPAW		=>tGDC_DISPAW,
+		DISPAL		=>tGDC_DISPAL,
 
 		clk		=>cpuclk,
 		rstn	=>srstn
 	);
-	
+
 	tGDC_iCURUPPER<=conv_integer(tGDC_CURUPPER);
 	tGDC_iCURLOWER<=conv_integer(tGDC_CURLOWER);
 	
@@ -3859,7 +3960,10 @@ begin
 		index	=>FDE_INDEXn,
 		side	=>FDE_SIDEn,
 		usel	=>FDC_USEL,
-		READY	=>FDE_READYn and (FDC_FREADY),
+		-- Port 94h bit 6 (FRY) = 1 forces READY (NP2kai, MAME). With it clear the
+		-- drive's own READY counts, so an empty drive reports Not Ready (BIOS 60h)
+		-- instead of a failed read (Hello Gre's "set the user disk" prompt).
+		READY	=>FDE_READYn and not FDC_FREADY,
 		
 		int0	=>FDC_int,
 		int1	=>FDC_int,

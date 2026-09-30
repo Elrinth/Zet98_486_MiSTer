@@ -63,12 +63,15 @@ port(
 	GLINENUM2	:in std_logic_vector(9 downto 0);
 	GLINENUM3	:in std_logic_vector(9 downto 0);
 	GPITCH		:in std_logic_vector(7 downto 0);
-	
+	-- Text GDC active display: AW-2 words and AL lines (SYNC P2, P7/P8).
+	DISPAW		:in std_logic_vector(7 downto 0) := x"4e";
+	DISPAL		:in std_logic_vector(9 downto 0) := "0110010000";
+
 	EMUMODE		:in std_logic;
 
 	VRTC		:out std_logic;
 	HRTC		:out std_logic;
-	
+
 	GPALNO		:out std_logic_vector(3 downto 0);
 	GPALR		:in std_logic_vector(3 downto 0);
 	GPALG		:in std_logic_vector(3 downto 0);
@@ -226,9 +229,12 @@ port(
 	
 	HRTC	:out std_logic;
 	VRTC	:out std_logic;
-	
+
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	ACTW	:in integer range 0 to 127 := 80;
+	ACTL	:in integer range 0 to 1023 := 400;
+	ACTIVE	:out std_logic
 );
 end component;
 
@@ -277,6 +283,11 @@ signal UCOUNT	:integer range 0 to DOTPU-1;
 signal HCOMP	:std_logic;
 signal VCOMP	:std_logic;
 signal VISIBLE	:std_logic;
+signal ACTIVE	:std_logic;
+signal dispaw_video, dispaw_pixel_source :std_logic_vector(7 downto 0);
+signal dispal_video, dispal_pixel_source :std_logic_vector(9 downto 0);
+signal act_words :integer range 0 to 127;
+signal act_lines :integer range 0 to 1023;
 signal GRPHR		:std_logic_vector(3 downto 0);
 signal GRPHG		:std_logic_vector(3 downto 0);
 signal GRPHB		:std_logic_vector(3 downto 0);
@@ -390,6 +401,8 @@ begin
 			graphen_video <= GRAPHEN;
 			txten_video <= TXTEN;
 			lowbl_video <= LOWBL;
+			dispaw_video <= DISPAW;
+			dispal_video <= DISPAL;
 		end if;
 	end process;
 
@@ -422,6 +435,27 @@ begin
             dotpline_pixel_source <= dotpline_video;
             graphen_pixel_source <= graphen_video;
             lowbl_pixel_source <= lowbl_video;
+            dispaw_pixel_source <= dispaw_video;
+            dispal_pixel_source <= dispal_video;
+        end if;
+    end process;
+
+    -- Active display rectangle from the text GDC (NP2kai dispsync): width
+    -- AW+2 words, AL lines (0 means 1024), shown from the top-left corner and
+    -- black beyond it. Values outside 16..80 words / 100..400 lines keep the
+    -- full 640x400 window.
+    process(clk3) begin
+        if rising_edge(clk3) then
+            if conv_integer(dispaw_pixel_source)+2>=16 and conv_integer(dispaw_pixel_source)+2<=80 then
+                act_words<=conv_integer(dispaw_pixel_source)+2;
+            else
+                act_words<=80;
+            end if;
+            if conv_integer(dispal_pixel_source)>=100 and conv_integer(dispal_pixel_source)<=400 then
+                act_lines<=conv_integer(dispal_pixel_source);
+            else
+                act_lines<=400;
+            end if;
         end if;
     end process;
 
@@ -454,11 +488,11 @@ begin
     -- and valid seven after its two-clock line-reader pipeline.
     ROUT<=legacy_r;GOUT<=legacy_g;BOUT<=legacy_b;
     ROUT8<=legacy_r & legacy_r when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
-           pc_rgb_delay(5)(23 downto 16) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
+           pc_rgb_delay(5)(23 downto 16) when VISIBLE='1' and ACTIVE='1' and pc_valid_delay(6)='1' else x"00";
     GOUT8<=legacy_g & legacy_g when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
-           pc_rgb_delay(5)(15 downto 8) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
+           pc_rgb_delay(5)(15 downto 8) when VISIBLE='1' and ACTIVE='1' and pc_valid_delay(6)='1' else x"00";
     BOUT8<=legacy_b & legacy_b when pc_mode_delay(8)='0' or EMUMODE='1' or (T_BIT='1' and txten_video='1') else
-           pc_rgb_delay(5)(7 downto 0) when VISIBLE='1' and pc_valid_delay(6)='1' else x"00";
+           pc_rgb_delay(5)(7 downto 0) when VISIBLE='1' and ACTIVE='1' and pc_valid_delay(6)='1' else x"00";
 
 	TIM	:vtiming generic map(
 	DOTPU	=>DOTPU,
@@ -596,7 +630,8 @@ begin
 	HSY		=>HSY,
 	VFP		=>VFP,
 	VSY		=>VSY
-) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,open,HRTC,VRTC,clk3,pixel_rstn);
+) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,open,HRTC,VRTC,clk3,pixel_rstn,
+	act_words,act_lines,ACTIVE);
 	-- RGB is already forced black outside VISIBLE (640x400). Capturing 480
 	-- lines included an 80-line black border and distorted HDMI aspect/scaling.
 	-- Use the same delayed visible window for DE; HS/VS and RGB do not change.
@@ -616,19 +651,19 @@ begin
 
 	GPALNO<=G_DOT;
 
-	legacy_b<="0000" when VISIBLE='0' else 
+	legacy_b<="0000" when VISIBLE='0' or ACTIVE='0' else 
 			(others=>EF_COLOR(0)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(0)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(0)='1' and T_BIT='1' and txten_video='1' else
 			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHB;
-	legacy_r<="0000" when VISIBLE='0' else 
+	legacy_r<="0000" when VISIBLE='0' or ACTIVE='0' else 
 			(others=>EF_COLOR(2)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(2)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(1)='1' and T_BIT='1' and txten_video='1' else
 			"0000" when T_BIT='1' and txten_video='1' else
 			GRPHR;
-	legacy_g<="0000" when VISIBLE='0' else 
+	legacy_g<="0000" when VISIBLE='0' or ACTIVE='0' else 
 			(others=>EF_COLOR(1)) when EMUMODE='1' and ET_BIT='1' else
 			(others=>EB_COLOR(1)) when EMUMODE='1' and ET_BIT='0' else
 			"1111" when TCOLOR(2)='1' and T_BIT='1' and txten_video='1' else

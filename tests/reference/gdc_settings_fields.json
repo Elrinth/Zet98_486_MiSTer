@@ -148,5 +148,15 @@
     "GLINENUM3",
     10,
     "gGDC_LINENUM3"
+  ],
+  [
+    "DISPAW",
+    8,
+    "tGDC_DISPAW"
+  ],
+  [
+    "DISPAL",
+    10,
+    "tGDC_DISPAL"
   ]
 ]

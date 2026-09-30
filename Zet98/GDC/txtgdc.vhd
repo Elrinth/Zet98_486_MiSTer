@@ -45,6 +45,10 @@ port(
 	SL3			:out std_logic_vector(9 downto 0);
 	PITCH		:out std_logic_vector(7 downto 0);
 	EAD			:out std_logic_vector(12 downto 0);
+	-- Active display from RESET/SYNC: AW-2 words (P2) and AL lines (P7/P8).
+	-- The text GDC is the display master; The Return of Ishtar sets 72x384.
+	DISPAW		:out std_logic_vector(7 downto 0);
+	DISPAL		:out std_logic_vector(9 downto 0);
 
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -187,6 +191,8 @@ begin
 			r_EAD<=(others=>'0');
 			RNUMCLR<='0';
 			NUMRDAT<=0;
+			DISPAW<=x"4e";						-- 80 words
+			DISPAL<="0110010000";				-- 400 lines
 		elsif(clk' event and clk='1')then
 			gdcreset<='0';
 			RNUMCLR<='0';
@@ -225,6 +231,8 @@ begin
 						VIDEN<='1';
 					when x"0c" =>
 						VIDEN<='0';
+					when x"e0" =>	-- CSRR takes no parameters; its 5 bytes are ready at once
+						NUMRDAT<=5;
 					when x"70" | x"71" | x"72" | x"73" |
 						 x"74" | x"75" | x"76" | x"77" |
 						 x"78" | x"79" | x"7a" | x"7b" |
@@ -234,10 +242,16 @@ begin
 					end case;
 				else
 					case COMMAND is
-					when x"0e" | x"0f" =>
+					when x"0e" | x"0f" | x"00" =>	-- SYNC, and RESET's same parameters
 						case PARNUM is
 						when 0 =>
 							INTER<=FIFORDAT(3);
+						when 1 =>
+							DISPAW<=FIFORDAT(7 downto 0);
+						when 6 =>
+							DISPAL(7 downto 0)<=FIFORDAT(7 downto 0);
+						when 7 =>
+							DISPAL(9 downto 8)<=FIFORDAT(1 downto 0);
 						when others =>
 						end case;
 					when x"4b" =>
@@ -303,9 +317,6 @@ begin
 							r_EAD(12 downto 8)<=FIFORDAT(4 downto 0);
 						when others =>
 						end case;
-					when x"e0" =>
-						NUMRDAT<=5;
-					
 					when others =>
 					end case;
 					PARNUM<=PARNUM+1;

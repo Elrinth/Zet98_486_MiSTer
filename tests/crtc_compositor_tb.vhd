@@ -10,8 +10,12 @@ architecture test of crtc_compositor_tb is
     signal TCOLOR, EF_COLOR, EB_COLOR : std_logic_vector(2 downto 0) := "000";
     signal GPALB, GPALR, GPALG, GRPHB, GRPHR, GRPHG, BOUT, ROUT, GOUT : std_logic_vector(3 downto 0);
     signal G_DOT, GPALNO : std_logic_vector(3 downto 0) := "0000";
+    -- ACTIVE: inside the text GDC's programmed display area (SYNC AW/AL).
+    signal ACTIVE : std_logic := '1';
+    signal legacy_r, legacy_g, legacy_b : std_logic_vector(3 downto 0);
 begin
     clk <= not clk after 6667 ps;
+    ROUT<=legacy_r;GOUT<=legacy_g;BOUT<=legacy_b;
     GPALR<=x"3";GPALG<=x"9";GPALB<=x"c";
     process(clk) begin
         if rising_edge(clk) then graphen_video<=GRAPHEN;txten_video<=TXTEN;end if;
@@ -22,13 +26,14 @@ begin
         variable n : natural := 0;
     begin
         -- All combinations of enable/visibility/coverage and text colour.
-        for mode in 0 to 255 loop
-            GRAPHEN<=to_unsigned(mode,8)(0);TXTEN<=to_unsigned(mode,8)(1);
-            VISIBLE<=to_unsigned(mode,8)(2);G_DOTE<=to_unsigned(mode,8)(3);
-            T_BIT<=to_unsigned(mode,8)(4);TCOLOR<=std_logic_vector(to_unsigned(mode/32,3));
+        for mode in 0 to 511 loop
+            GRAPHEN<=to_unsigned(mode,9)(0);TXTEN<=to_unsigned(mode,9)(1);
+            VISIBLE<=to_unsigned(mode,9)(2);G_DOTE<=to_unsigned(mode,9)(3);
+            T_BIT<=to_unsigned(mode,9)(4);TCOLOR<=std_logic_vector(to_unsigned((mode/32) mod 8,3));
+            ACTIVE<=not to_unsigned(mode,9)(8);
             wait until rising_edge(clk);wait for 1 ns;
             expected:=x"000";
-            if VISIBLE='1' then
+            if VISIBLE='1' and ACTIVE='1' then
                 if TXTEN='1' and T_BIT='1' then
                     expected(11 downto 8):=(others=>TCOLOR(1));
                     expected(7 downto 4):=(others=>TCOLOR(2));
@@ -42,7 +47,7 @@ begin
             assert (ROUT & GOUT & BOUT)=old_pixel report "CPU enable bypassed video stage" severity failure;
             wait until falling_edge(clk);n:=n+1;
         end loop;
-        report "PASS: CRTC final RGB gate, 256 enable/coverage/colour cases and between-edge stability";
+        report "PASS: CRTC final RGB gate, 512 enable/coverage/colour/active-area cases and between-edge stability";
         finish;
     end process;
     -- Runner appends the actual production compositor expressions.

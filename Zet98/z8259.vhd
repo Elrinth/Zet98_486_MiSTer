@@ -8,7 +8,10 @@ generic(
 	monlen	:integer	:=15;
 	-- Legacy internal producers send pulses; selected real level sources can
 	-- withdraw an unacknowledged request (8259A datasheet, Figures 9/10).
-	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00"
+	RETRACTABLE_IRQS :std_logic_vector(7 downto 0) := x"00";
+	-- Level inputs (the 8253 OUT on IR0): the IRR read-back follows the line
+	-- after its edge, as a real 8259A does, without changing delivery.
+	LEVEL_IRQS :std_logic_vector(7 downto 0) := x"00"
 );
 port(
 	CS		:in std_logic;
@@ -64,6 +67,7 @@ signal	ICW		:integer range 0 to 3;
 signal	IRx		:std_logic_vector(7 downto 0);
 signal	IMR		:std_logic_vector(7 downto 0);
 signal	IRR		:std_logic_vector(7 downto 0);
+signal	IRRread	:std_logic_vector(7 downto 0);
 signal	ISR		:std_logic_vector(7 downto 0);
 signal	lIRx		:std_logic_vector(7 downto 0);
 signal	S_LEV	:std_logic_vector(2 downto 0);
@@ -184,6 +188,7 @@ begin
 				if(lADDR='0')then
 					if(lDIN(4)='1')then	--ICW1
 						ICW<=0;
+						RIS<='0';				-- status reads return IRR after ICW1
 						ICW4<=lDIN(0);
 						SNGL<=lDIN(1);
 						L_En<=lDIN(3);
@@ -202,7 +207,10 @@ begin
 						end case;
 						S_LEV<=lDIN(2 downto 0);
 					else
-						RIS<=lDIN(0);
+						-- RR=0 keeps the previous read selection (8259A OCW3).
+						if(lDIN(1)='1')then
+							RIS<=lDIN(0);
+						end if;
 						RR<=lDIN(1);
 						POLL<=lDIN(2);
 						case lDIN(6 downto 5)is
@@ -423,11 +431,15 @@ begin
 			'1' when (INTA='1' and (M_Sn='1' and TOSLAVE(acknowledged_irq)='0')) else
 			'1' when (INTA='1' and (M_Sn='0' and SLID=CASI)) else
 			'0';
+	-- Status read: IRR (default) or ISR, as the last OCW3 with RR=1 chose.
+	-- IRR shows requests whether or not they are masked (Steel Gun Nyan masks
+	-- the timer and times itself by polling IRR bit 0; the old read returned
+	-- only unmasked requests, or 00h before any OCW3, and it hung).
+	IRRread<=IRx when L_En='1' else IRL and (IRx or not LEVEL_IRQS);
 	DOUT<=	IVECT when INTA='1' else
 			IMR	when ADDR='1' else
-			ISR	when RR='1' and RIS='1' else
-			IRR 	when RR='1' and RIS='0' else
-			(others=>'0');
+			ISR	when RIS='1' else
+			IRRread;
 
 	process(clk,rstn)begin
 		if(rstn='0')then

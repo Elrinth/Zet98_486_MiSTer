@@ -10,6 +10,8 @@ module pc98_ide_tb;
     wire io_oe,irq;
     reg image_mounted=0, image_readonly=0;
     reg [63:0] image_size=524288;
+    // HDI geometry reported through IDENTIFY words 128-130: 256-byte sectors, 8 heads, 33 sectors.
+    reg [17:0] hdi_info=18'h30821;
     wire [31:0] sd_lba;
     wire sd_rd,sd_wr;
     reg sd_ack=0,sd_buff_wr=0;
@@ -152,6 +154,9 @@ module pc98_ide_tb;
                 49: if(value!='h0200) $fatal(1,"identify features");
                 60: if(value!=1024) $fatal(1,"identify capacity");
                 61: if(value!=0) $fatal(1,"identify capacity high");
+                128: if(value!=256) $fatal(1,"identify HDI sector size");
+                129: if(value!=8) $fatal(1,"identify HDI heads");
+                130: if(value!='h21) $fatal(1,"identify HDI sectors");
             endcase
         end
         await_status('h50);

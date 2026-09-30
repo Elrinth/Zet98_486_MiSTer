@@ -495,6 +495,40 @@ must fail blank code 0 / F1. `run-crtc-reset.sh` also checks the ATRSEL
 parent/pixel stages across reset phases. Snapshot mapping, transport and
 SDC endpoint guard tests include the 122nd bit carrying this mode.
 
+`run-text-gaiji.sh` checks user-defined characters (rows 56h/57h) in
+production KNJSCR: halves alternate across a run of cells, left first,
+bit 7 is ignored, and ANK or Kanji cells restart the run (NP2kai
+maketext). The pre-fix renderer fails at the second cell of a pair, as
+Pac-Man's score digits showed the left half twice.
+
+`run-memorymap-uma.sh` checks that unclaimed C0000h-D7FFFh floats
+(`UMA_OPEN`, reads FFh) while the sound ROM, DBIOS D0000h-D1FFFh and the
+disk BIOS resident D8000h-DFFFFh stay claimed, and that the SDRAM cycle
+still runs so the access is acknowledged. Fall-through main RAM there left
+EMM386 4K of UMB on YAHDI (NP2kai: 54K). It also checks the sound BIOS
+stub: with a sound board and no ROM image in boot.rom, CC000h-CFFFFh reads
+FFh with NP2kai's header 01 00 00 00 D2 00 08 00 CB at CC2E00h (Hello
+Gre's MUSIC.EXE looks for it), and a loaded ROM replaces the stub.
+
+`run-active-area.sh` checks synccont2's ACTIVE window: the text GDC's
+programmed display area from RESET/SYNC (AW words, AL lines; The Return of
+Ishtar sets 72x384) inside the 640x400 window with VISIBLE's delay, and that
+the 80x400 default equals VISIBLE. CRTC98 blanks RGB outside it (NP2kai
+dispsync); `run-crtc-compositor.sh` covers the gate, and
+`video_settings_mapping.py` the two new snapshot fields (DISPAW, DISPAL).
+
+`run-text-gdc-csrr.sh` checks the text GDC's CSRR (E0h): the NEC MS-DOS console
+driver sends it without parameters and polls DATA READY before reading five
+bytes (EAD first). The old decoder only counted read data after a parameter
+byte, so Hello Gre's SHOTANM waited forever; the script also runs it as a
+negative control.
+
+`run-mainram-linebuf.sh` runs Zet98/mainram_linebuf.vhd (CPU main-RAM read
+line buffer filled by four-word CPURD4 bursts) against a reference memory:
+random CPU reads/writes, writes from a second master and random SDRAM
+latency, three seeds. With write snooping disconnected it must catch a
+stale read.
+
 `run-z486-unreal-cs.sh` runs the actual z486 through PC98 bridges and checks
 all four visible CS low-bit values across CR0 mode changes, CPL0 privileged
 instructions before CS reload, and a protected far transfer from an odd

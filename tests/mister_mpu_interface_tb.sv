@@ -14,7 +14,6 @@ module mister_mpu_interface_tb;
     defparam dut.hps_io.PS2DIV=0;
     defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
-    defparam dut.floppy_icon.FONT_FILE="rtl/assets/boot-font.mem";
     task word_io(input [15:0] value);
         @(negedge clk);enable=1;strobe=1;host_data=value;
         @(negedge clk);strobe=0;

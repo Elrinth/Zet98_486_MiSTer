@@ -102,6 +102,8 @@ constant bit_CLR2:integer	:=7;
 
 signal	tramdatm	:std_logic_vector(15 downto 0);
 signal	tramdatl	:std_logic_vector(15 downto 0);
+signal	isgaiji	:std_logic;
+signal	gaiji_r	:std_logic;
 
 begin
 
@@ -175,11 +177,19 @@ begin
 		end if;
 	end process;
 	
-	tramdatm<=tramdatl when TRAMADRb=TRAMADRx else TRAMDAT;
-	
+	-- User-defined characters (rows 56h/57h): NP2kai maketext ignores bit 7
+	-- and alternates halves across a run of them, left first; any other cell
+	-- restarts the run. Pac-Man writes the same code in both cells of its
+	-- 16-dot score digits.
+	isgaiji<=	'1' when TRAMDAT(15 downto 8)/=x"00" and TRAMDAT(6 downto 1)="101011" and TRAMADRb/=TRAMADRx else '0';
+	tramdatm<=	tramdatl when TRAMADRb=TRAMADRx else
+				gaiji_r & TRAMDAT(14 downto 8) & '0' & TRAMDAT(6 downto 0) when isgaiji='1' else
+				TRAMDAT;
+
 	acnv	:entity work.knjaddrcnv port map(
 		kcode	=>tramdatm,
 		cline	=>conv_std_logic_vector(C_LIN,4),
+		force_kanji	=>isgaiji,
 		mon		=>open,
 		
 		romsel	=>FROMSEL,
@@ -259,10 +269,12 @@ begin
 			TRAMADRb<=(others=>'0');
 			C_LOW<=0;
 			C0ADDR<=(others=>'0');
+			gaiji_r<='0';
 		elsif(clk' event and clk='1')then
 
 -- Data	section
 			if(DHCOMP='1')then
+				gaiji_r<='0';
 				if(VCOUNT>VIV)then
 					if(C_LIN/=0)then
 						TRAMADRb<=C0ADDR;
@@ -289,7 +301,7 @@ begin
                             -- meaning. Kanji (including the retained right half)
                             -- still comes from the font ROM. Left bits 0..3,
                             -- right bits 4..7, top to bottom.
-                            if attribute_mode_pixel='1' and TRAMATR(bit_VL)='1' and tramdatm(15 downto 8)=x"00" then
+                            if attribute_mode_pixel='1' and TRAMATR(bit_VL)='1' and tramdatm(15 downto 8)=x"00" and isgaiji='0' then
                                 if CHRLINES<=8 then
                                     block_row:=(C_LIN/2) mod 4;
                                 else
@@ -321,6 +333,11 @@ begin
 					end if;
 					NXTCLR<=TRAMATR(bit_CLR2 downto bit_CLR0);
 					TRAMADRb<=TRAMADRb+1;
+					if(isgaiji='1')then
+						gaiji_r<=not gaiji_r;
+					elsif(TRAMADRb/=TRAMADRx)then
+						gaiji_r<='0';
+					end if;
 				else
 					NXTDOT<=(others=>'0');
 					NXTCLR<=(others=>'0');

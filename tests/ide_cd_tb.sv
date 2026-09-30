@@ -24,6 +24,7 @@ module ide_cd_tb;
     wire [5:0] cd_blk_cnt;
     wire [1:0] cd_activity;
     wire [91:0] cd_trace;
+    wire [17:0] hdi_info=0;
     pc98_ide dut(.*);
 
     // CD host: sector n byte i = n ^ i (ISO layout).

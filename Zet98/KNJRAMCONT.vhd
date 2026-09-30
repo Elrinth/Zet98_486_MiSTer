@@ -44,6 +44,7 @@ signal	FONT_OFFSET	:std_logic_vector(23 downto 0);
 signal	CGADDR	:std_logic_vector(16 downto 0);
 signal	JISCODE	:std_logic_vector(15 downto 0);
 signal	CGCODE	:std_logic_vector(15 downto 0);
+signal	CGKANJI	:std_logic;
 signal	CPOS	:std_logic_vector(7 downto 0);
 signal	KNJRAMSELb	:std_logic_vector(1 downto 0);
 signal	CLINE	:std_logic_vector(3 downto 0);
@@ -53,7 +54,8 @@ component knjaddrcnv
 port(
 	kcode	:in std_logic_vector(15 downto 0);
 	cline	:in std_logic_vector(3 downto 0);
-	
+	force_kanji	:in std_logic;
+
 	romsel	:out std_logic_vector(1 downto 0);
 	romaddr	:out std_logic_vector(16 downto 0)
 );
@@ -90,10 +92,16 @@ begin
 	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" else
 			cgw_right & JISCODE(14 downto 0) when cgw_en='1' else     -- odd address: right half
 			not CPOS(5) & JISCODE(14 downto 0);
+	CGKANJI<='0' when JISCODE(15 downto 8)=x"00" else '1';
+	-- Port A1h bit 7 is dropped like NP2kai's code & 7F7Fh, so user character
+	-- 7680h shares a slot with 7600h. It must stay a Kanji-ROM access even
+	-- when the half flag leaves the high byte zero, or its left half would
+	-- overwrite ANK 'V'.
 	cnv	:knjaddrcnv port map(
 		kcode	=>CGCODE,
 		cline	=>CLINE,
-		
+		force_kanji	=>CGKANJI,
+
 		romsel	=>KNJRAMSELb,
 		romaddr	=>CGADDR
 	);

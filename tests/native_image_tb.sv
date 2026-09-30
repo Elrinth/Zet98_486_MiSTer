@@ -6,6 +6,7 @@ reg clk=0; always #5 clk=~clk;
 reg mounted=0, readonly=0;
 reg [63:0] image_size;
 wire media_mounted,media_readonly,invalid;
+wire [17:0] info;
 wire [63:0] media_size;
 reg [31:0] disk_lba=0;
 reg disk_rd=0,disk_wr=0;
@@ -94,12 +95,14 @@ task sector(input integer lba);
  if(received!=512) $fatal(1,"short transfer %d bytes at %d",received,lba);
 endtask
 string path,oracle;
+reg [17:0] expected_info;
 initial begin
  if(!$value$plusargs("image=%s",path) || !$value$plusargs("expected=%s",oracle)) $fatal;
  fd=$fopen(path,"rb");image_size=$fread(source,fd);$fclose(fd);
  fd=$fopen(oracle,"rb");size_expected=$fread(expected,fd);$fclose(fd);
  if($value$plusargs("reject=%d",reject)) begin end
  if($value$plusargs("direct=%d",direct)) begin end
+ if(!$value$plusargs("info=%h",expected_info)) expected_info=0;
  repeat(5) @(negedge clk);mounted=1;@(negedge clk);mounted=0;
  wait(notifications>=2);repeat(3) @(negedge clk);
  if(reject) begin
@@ -107,6 +110,7 @@ initial begin
  end else begin
    if(invalid || media_size!=size_expected) $fatal(1,"media size=%d expected=%d invalid=%d",media_size,size_expected,invalid);
    if(FLOPPY && !direct && !media_readonly) $fatal(1,"native floppy lacks write protection");
+   if(!FLOPPY && info!==expected_info) $fatal(1,"HDI info=%h expected=%h",info,expected_info);
    sector(0);sector(1);sector(2);
    for(integer l=7;l<(size_expected+511)/512;l=l+29) sector(l);
    sector((size_expected-1)/512);sector(0);sector(17);sector(3);

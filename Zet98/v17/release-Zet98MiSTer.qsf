@@ -412,6 +412,7 @@ set_global_assignment -name VHDL_FILE ../../rtc/I2Crtc.vhd
 set_global_assignment -name VHDL_FILE ../../rtc/rtcbody.vhd
 set_global_assignment -name VHDL_FILE ../../rtc/rtc4990MiSTer.vhd
 set_global_assignment -name VHDL_FILE ../memorymap.vhd
+set_global_assignment -name VHDL_FILE ../mainram_linebuf.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/cpu/pc98_cache_policy.vhd
 set_global_assignment -name VHDL_FILE ../grpal.vhd
 set_global_assignment -name VHDL_FILE ../tstamp.vhd
@@ -493,7 +494,6 @@ set_global_assignment -name VHDL_FILE ../../VIDEO/synccont2.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/text_row_counter.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/video_output.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/boot_media_control.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/floppy_overlay.sv
 set_global_assignment -name VHDL_FILE ../../rtl/startup_mute.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_retrace_cdc.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pcm86.sv

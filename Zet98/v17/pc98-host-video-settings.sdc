@@ -46,14 +46,10 @@ foreach instance {
 
 # Independently synchronized one-bit controls. Only the first destination
 # stage is asynchronous; the next stage and every consumer remain timed.
-# Floppy drive activity bits are independent display hints, not a bundled
-# bus transaction. Each and the overlay enable pass through two video flops.
+# (The disk access icon overlay and its synchronizers were removed.)
 foreach first_name {
     {emu|video_out|test_meta}
     {tune_gate|enable_video[0]}
-    {emu|floppy_icon|activity_meta[0]}
-    {emu|floppy_icon|activity_meta[1]}
-    {emu|floppy_icon|enabled_meta}
 } {
     set first [get_registers $first_name]
     if {[get_collection_size $first] != 1} {

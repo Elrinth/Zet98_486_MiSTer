@@ -18,7 +18,10 @@ module pc98_hdi_image (
     input wire host_ack, host_buff_wr,
     input wire [8:0] host_buff_addr,
     input wire [7:0] host_buff_dout,
-    output reg invalid = 0
+    output reg invalid = 0,
+    // HDI geometry for the disk BIOS: {valid, 256-byte sectors, heads, sectors}.
+    // 256-byte images pass through as 512-byte blocks; the BIOS splits them.
+    output reg [17:0] info = 0
 );
     localparam DRAIN=0, PROBE=1, ACK=2, CHECK=3, GEOMETRY=4, READY=5;
     reg [2:0] state = DRAIN;
@@ -38,7 +41,7 @@ module pc98_hdi_image (
         media_mounted <= 0;
         if (mounted) begin
             size <= image_size; ro <= readonly; pending <= image_size != 0;
-            state <= DRAIN; base <= 0; invalid <= 0;
+            state <= DRAIN; base <= 0; invalid <= 0; info <= 0;
             media_size <= 0; media_readonly <= 1; media_mounted <= 1;
         end else case(state)
             DRAIN: if (!host_ack && !disk_rd && !disk_wr && pending) begin
@@ -57,13 +60,15 @@ module pc98_hdi_image (
                 state <= READY; media_mounted <= 1; media_readonly <= ro;
                 if (header[0] == 0 && (header[2] != 0 || header[4] != 0)) begin
                     if (header[2] >= 32 && header[2][8:0] == 0 &&
-                        header[4] == 512 && header[5] >= 1 && header[5] <= 255 &&
+                        (header[4] == 512 && {geometry,9'b0} == {9'b0,header[3]} ||
+                         header[4] == 256 && {geometry,8'b0} == {8'b0,header[3]}) &&
+                        header[5] >= 1 && header[5] <= 255 &&
                         header[6] >= 1 && header[6] <= 255 &&
                         header[7] >= 1 && header[7] <= 65535 &&
-                        {geometry,9'b0} == {9'b0,header[3]} &&
                         {32'b0,header[2]} + {32'b0,header[3]} == size) begin
                         base <= header[2] >> 9;
                         media_size <= {32'b0,header[3]};
+                        info <= {1'b1, header[4] == 256, header[6][7:0], header[5][7:0]};
                     end else begin
                         invalid <= 1; media_size <= 0;
                     end

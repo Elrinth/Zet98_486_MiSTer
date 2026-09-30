@@ -23,8 +23,15 @@ cpu 386
 %define BIOS_SECTORS dword [cs:bios_sectors]
 %define BIOS_CYLINDERS dword [cs:bios_cylinders]
 %define BIOS_TOTAL dword [cs:bios_capacity]
+; Bytes per disk sector seen by the caller: 512, or 256 for native SASI-era
+; HDI images (the image is still read in 512-byte ATA blocks).
+%define BIOS_BPS word [cs:bios_bps]
 %else
-%define BIOS_TOTAL (BIOS_HEADS * BIOS_SECTORS * BIOS_CYLINDERS)
+%ifndef BIOS_BPS
+%define BIOS_BPS 512
+%endif
+; In 512-byte ATA blocks; the geometry counts caller-sized sectors.
+%define BIOS_TOTAL (BIOS_HEADS * BIOS_SECTORS * BIOS_CYLINDERS * BIOS_BPS / 512)
 %ifdef BIOS_ALLOW_WRITES
 %ifndef BIOS_WRITE_FIRST_LBA
 %error Define an explicit BIOS_WRITE_FIRST_LBA / BIOS_WRITE_LAST_LBA window
@@ -107,8 +114,16 @@ bios_int1b:
     jnz .nonzero
     mov ebx,65536
 .nonzero:
-    mov eax,ebx
-    add eax,511
+    ; Caller sector -> 512-byte ATA block (ESI) and byte offset in it (ECX).
+    xor ecx,ecx
+    mov ax,BIOS_BPS
+    cmp ax,256
+    jne .blocks
+    shr esi,1
+    jnc .blocks
+    mov cx,256
+.blocks:
+    lea eax,[ebx+ecx+511]
     shr eax,9
     add eax,esi
     cmp eax,BIOS_TOTAL
@@ -135,7 +150,9 @@ bios_int1b:
     cmp eax,100000h
     ja .range
     ; Use a stack bounce buffer: the service itself can later reside in ROM.
-    sub sp,512
+    ; [bp-516]: byte offset of the transfer in the current block (first only).
+    sub sp,516
+    mov [bp-516],cx
     mov dx,0432h
     xor al,al
     out dx,al
@@ -150,7 +167,9 @@ bios_int1b:
     and al,0fh
     cmp al,5
     jne .read_sector
-    ; A partial final write first reads its sector to preserve the tail.
+    ; A partial write (block offset or short tail) first reads its block.
+    cmp word [bp-516],0
+    jne .read_sector
     cmp ebx,512
     jae .write_sector
 .read_sector:
@@ -198,14 +217,12 @@ bios_int1b:
     push ss
     pop ds
     lea si,[bp-512]
+    add si,[bp-516]
     mov eax,edi
     shr eax,4
     mov es,ax
     and di,15
-    mov ecx,ebx
-    cmp ecx,512
-    jbe .copy
-    mov cx,512
+    call .chunk
 .copy:
     ; Keep the bounce buffer and status check, but avoid a string iteration
     ; for every byte. The caller may be unaligned or request a partial sector.
@@ -232,10 +249,8 @@ bios_int1b:
     push ss
     pop es
     lea di,[bp-512]
-    mov ecx,ebx
-    cmp ecx,512
-    jbe .write_copy
-    mov cx,512
+    add di,[bp-516]
+    call .chunk
 .write_copy:
     rep movsb
     pop edi
@@ -259,24 +274,31 @@ bios_int1b:
     jc .io_failed
 %endif
 .advance:
-    mov eax,ebx
-    cmp eax,512
-    jbe .last
-    mov eax,512
-.last:
-    add edi,eax
-    sub ebx,eax
+    call .chunk
+    add edi,ecx
+    sub ebx,ecx
     inc esi
+    mov word [bp-516],0
     test ebx,ebx
     jnz .sector
-    add sp,512
+    add sp,516
     call bios_end_pio
     jmp .success
 .io_failed:
-    add sp,512
+    add sp,516
     call bios_end_pio
     mov al,60h
     jmp .return
+; ECX = bytes of this block to transfer: the rest of the block after the
+; offset, or the remaining request if shorter.
+.chunk:
+    mov ecx,512
+    sub cx,[bp-516]
+    cmp ecx,ebx
+    jbe .chunk_done
+    mov ecx,ebx
+.chunk_done:
+    ret
 .initialize:
     xor ax,ax
     mov ds,ax
@@ -290,7 +312,8 @@ bios_int1b:
     jc .not_ready
     cmp byte [ss:bp+29],84h
     jne .sense_done
-    mov word [ss:bp+16],512
+    mov ax,BIOS_BPS
+    mov [ss:bp+16],ax
 %ifdef BIOS_DYNAMIC_GEOMETRY
     mov ax,[cs:bios_cylinders]
     mov [ss:bp+24],ax

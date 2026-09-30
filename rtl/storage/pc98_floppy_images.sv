@@ -34,7 +34,7 @@ module pc98_floppy_images (
 );
     localparam IDLE=0, FETCH=1, FETCH_ACK=2, HEADER=3, GEOMETRY=4, PUBLISH=5,
         LOAD=6, START=7, LOCATE=8, BYTE=9, CACHE_WAIT=10, EMIT=11, END_ACK=12,
-        REJECT=13;
+        REJECT=13, HCHECK=14;
     reg [3:0] state = IDLE, resume_state;
     reg owner = 0, cache_owner = 0;
 
@@ -57,6 +57,9 @@ module pc98_floppy_images (
     reg direct = 0, cache_valid = 0, transfer_active = 0, ro = 1, big = 0;
     reg [31:0] size = 0;
     reg [31:0] header[0:7];
+    // Header tests, registered one state ahead of HEADER: evaluated in one
+    // cycle they failed timing on hardware (FDI rejected, HDM/D88 fine).
+    reg d88_header, fdi_header, fdi_layout, fdi_length;
     reg [31:0] cache_lba = 0, base = 0, virtual_size;
     reg [7:0] cylinders, sectors, media;
     reg [12:0] sector_bytes;
@@ -116,20 +119,29 @@ module pc98_floppy_images (
                 end
             end
             FETCH: if (owner_ack) state <= FETCH_ACK;
-            FETCH_ACK: if (!owner_ack) begin cache_valid <= 1; cache_owner <= owner; state <= resume_state; end
-            HEADER: begin
-                base <= 0; cylinders<=77; sectors<=8; sector_bytes<=1024; size_code<=3; media<=8'h20;
-                if (big) state <= REJECT;
-                else if (size >= 688 && header[7] == size && header[6][31:24] <= 8'h20) begin
-                    direct <= 1; virtual_size <= size; state <= PUBLISH;
-                end else if (header[0] == 0 && (header[2] != 0 || header[4] != 0)) begin
-                    // Regular, two-sided FDI only. Other layouts are rejected.
-                    if (header[2] < 32 || header[4] != 512 && header[4] != 1024 ||
+            FETCH_ACK: if (!owner_ack) begin
+                cache_valid <= 1; cache_owner <= owner;
+                state <= resume_state == HEADER ? HCHECK : resume_state;
+            end
+            HCHECK: begin
+                d88_header <= size >= 688 && header[7] == size && header[6][31:24] <= 8'h20;
+                fdi_header <= header[0] == 0 && (header[2] != 0 || header[4] != 0);
+                // Regular, two-sided FDI only. Other layouts are rejected.
+                fdi_layout <= !(header[2] < 32 || header[4] != 512 && header[4] != 1024 ||
                         header[5] < 1 || header[5] > 26 || header[6] != 2 ||
                         !((header[7]==77 && header[5]==8 && header[4]==1024) ||
                           (header[7]==80 && header[4]==512 && (header[5]==8 || header[5]==9 || header[5]==15 || header[5]==18)) ||
-                          (header[7]==40 && header[5]==8 && header[4]==512)) ||
-                        {1'b0,header[2]}+{1'b0,header[3]} != {1'b0,size}) state<=REJECT;
+                          (header[7]==40 && header[5]==8 && header[4]==512)));
+                fdi_length <= {1'b0,header[2]}+{1'b0,header[3]} == {1'b0,size};
+                state <= HEADER;
+            end
+            HEADER: begin
+                base <= 0; cylinders<=77; sectors<=8; sector_bytes<=1024; size_code<=3; media<=8'h20;
+                if (big) state <= REJECT;
+                else if (d88_header) begin
+                    direct <= 1; virtual_size <= size; state <= PUBLISH;
+                end else if (fdi_header) begin
+                    if (!fdi_layout || !fdi_length) state<=REJECT;
                     else begin
                         base<=header[2]; cylinders<=header[7][7:0]; sectors<=header[5][7:0];
                         sector_bytes<=header[4][12:0]; size_code<=header[4]==512 ? 2 : 3;
