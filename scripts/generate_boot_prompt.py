@@ -20,12 +20,12 @@ FONT = {
     '-':'0000001F000000', ' ':'00000000000000',
 }
 PAGES = [
-    ['ZET98', '', 'BOOT.ROM REQUIRED', '', 'COPY BOOT.ROM TO THE',
+    ['PC98 486', '', 'BOOT.ROM REQUIRED', '', 'COPY BOOT.ROM TO THE',
      'GAME FOLDER FOR THIS CORE', '', 'THEN RELOAD THE CORE'],
-    ['ZET98', '', 'PLEASE INSERT DISK', '', 'PRESS F12 AND SELECT FDD0',
+    ['PC98 486', '', 'PLEASE INSERT DISK', '', 'PRESS F12 AND SELECT FDD0',
      'OR SELECT IDE HARD DISK', '', 'RAW PC-98 VHD OR IMG'],
-    ['ZET98', '', 'STARTING HARD DISK', '', 'PLEASE WAIT', '', '', ''],
-    ['ZET98', '', 'LOADING DISK', '', 'PLEASE WAIT', '', '', ''],
+    ['PC98 486', '', 'STARTING HARD DISK', '', 'PLEASE WAIT', '', '', ''],
+    ['PC98 486', '', 'LOADING DISK', '', 'PLEASE WAIT', '', '', ''],
 ]
 
 
