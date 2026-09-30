@@ -68,11 +68,11 @@ module video_output_tb;
             end
             $fatal(1,"Diagnostic raster did not complete");
         end
-        if (pixels!=800*525 || active_pixels!=640*480 ||
-            hsync_pixels!=96*525 || vsync_pixels!=2*800)
+        if (pixels!=848*440 || active_pixels!=640*400 ||
+            hsync_pixels!=64*440 || vsync_pixels!=8*848)
             $fatal(1,"Raster totals: pixels=%0d active=%0d HS=%0d VS=%0d",
                    pixels,active_pixels,hsync_pixels,vsync_pixels);
-        $display("PASS: registered native pixels; diagnostic 800x525 total, 640x480 active raster");
+        $display("PASS: registered native pixels; diagnostic 848x440 total, 640x400 active raster (PC-98 24.8 kHz)");
         $finish;
     end
 endmodule

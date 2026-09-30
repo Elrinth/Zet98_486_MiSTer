@@ -33,8 +33,8 @@ module boot_prompt_tb;
             end
             fd=$fopen($sformatf("%s/page%0d.ppm",folder,page),"wb");
             if(!fd) $fatal(1,"Cannot create frame");
-            $fwrite(fd,"P6\n640 480\n255\n"); count=0;
-            while(count<640*480) begin
+            $fwrite(fd,"P6\n640 400\n255\n"); count=0;
+            while(count<640*400) begin
                 tick;
                 if(ce && de) begin
                     $fwrite(fd,"%c%c%c",r,g,b); count=count+1;

@@ -311,6 +311,7 @@ set_global_assignment -name RAW_BINARY_FILE "output_files/release-Zet98MiSTer.rb
 set_global_assignment -name SOURCE_FILE ../BIOS/mkrom.sh
 set_global_assignment -name VHDL_FILE ../mem_addr_pkg_MiSTer.vhd
 set_global_assignment -name QIP_FILE ../MiSTer/pll.qip
+set_global_assignment -name VERILOG_FILE ../MiSTer/pll_vid.v
 set_global_assignment -name SIP_FILE ../MiSTer/pll.sip
 set_global_assignment -name QIP_FILE ../../MiSTer/sys/sys.qip
 set_global_assignment -name MIF_FILE ../../sound/FMcommon/TL.mif

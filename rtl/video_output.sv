@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Register pixel data, blanking and sync with their MiSTer clock enable.
 // The diagnostic raster bypasses PC-98 text/graphics and SDRAM fetches while
-// retaining the same 75 MHz video clock and MiSTer scaler/HDMI path.
+// retaining the same video clock (63.158 MHz, 3 clocks per pixel) and
+// MiSTer scaler/HDMI path. Its raster matches the PC-98 one: 848 x 440,
+// 640 x 400 visible, 24.8 kHz / 56.4 Hz.
 module video_output #(
     parameter BOOT_TEXT_FILE="../../rtl/assets/boot-text.mem",
     parameter BOOT_FONT_FILE="../../rtl/assets/boot-font.mem"
@@ -25,9 +27,9 @@ module video_output #(
     wire pattern_ce = divider == 2;
     wire [2:0] bar = x < 80 ? 7 : x < 160 ? 6 : x < 240 ? 5 :
                      x < 320 ? 4 : x < 400 ? 3 : x < 480 ? 2 : x < 560 ? 1 : 0;
-    wire pattern_de = x < 640 && y < 480;
+    wire pattern_de = x < 640 && y < 400;
     // A white border makes clipped edges apparent on a physical display.
-    wire border = x < 2 || x >= 638 || y < 2 || y >= 478;
+    wire border = x < 2 || x >= 638 || y < 2 || y >= 398;
     // Two synchronous ROM reads complete within the three clocks per pixel.
     // Keep this prefetch separate from the RGB path and its raster selects.
     (* ramstyle="M10K" *) reg [6:0] boot_text[0:1023];
@@ -36,8 +38,8 @@ module video_output #(
     reg [7:0] glyph_row;
     wire [1:0] page = prompt_active[1:0] - 2'd1;
     wire [8:0] text_x = x - 10'd64;
-    wire [8:0] text_y = y - 10'd112;
-    wire text_area = x>=64 && x<576 && y>=112 && y<368 && !text_y[4];
+    wire [8:0] text_y = y - 10'd72;
+    wire text_area = x>=64 && x<576 && y>=72 && y<328 && !text_y[4];
     wire ink = text_area && glyph_row[7-text_x[3:1]];
     initial begin
         $readmemh(BOOT_TEXT_FILE,boot_text);
@@ -64,9 +66,9 @@ module video_output #(
             test_sync <= test_meta;
             divider <= pattern_ce ? 0 : divider + 1'b1;
             if (pattern_ce) begin
-                if (x == 799) begin
+                if (x == 847) begin
                     x <= 0;
-                    if (y == 524) begin
+                    if (y == 439) begin
                         y <= 0;
                         test_active <= test_sync || boot_prompt != 0;
                         prompt_active <= test_sync ? 3'd0 : boot_prompt;
@@ -75,8 +77,8 @@ module video_output #(
             end
             ce <= test_active ? pattern_ce : native_ce;
             if (test_active && pattern_ce) begin
-                hs <= x >= 656 && x < 752;
-                vs <= y >= 490 && y < 492;
+                hs <= x >= 720 && x < 784;
+                vs <= y >= 407 && y < 415;
                 de <= pattern_de;
                 if (prompt_active != 0) begin
                     r <= !pattern_de ? 0 : ink ? 8'he8 : 8'h08;

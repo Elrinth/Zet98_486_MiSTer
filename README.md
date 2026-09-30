@@ -35,7 +35,8 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
   right analog stick as mouse.
 - **Video:** scaled HDMI (native aspect or integer), and the core's own 640x400
-  RGB signal (31.25 kHz, 59.5 Hz) on VGA/SCART for multisync monitors and scalers.
+  RGB signal with the real PC-98 timing (24.8 kHz, 56.4 Hz) on VGA/SCART for
+  multisync monitors and scalers.
 
 ## Quick start
 
@@ -164,10 +165,13 @@ Mount a disc image in the core menu under **CD-ROM (ISO/BIN/PCD)**:
 
 HDMI always carries the scaled picture. The analog outputs (VGA, and SCART RGB
 on boards such as the SuperStation One) carry the core's raster directly:
-640x400 inside an 800x525 frame, 31.25 kHz horizontal and 59.5 Hz vertical.
-(A real PC-98 uses 24.8 kHz and 56.4 Hz; the core does not reproduce that yet.)
-That is not a TV standard, so 15 kHz TVs and plain SCART monitors will not
-sync; use a VGA/multisync monitor or a scaler (for example a RetroTINK 4K).
+640x400 inside an 848x440 frame with the real PC-98 400-line timing: 21.05 MHz
+dot clock, 24.83 kHz horizontal and 56.42 Hz vertical. Games also run at that
+refresh rate (VSYNC interrupts and GDC retrace status), as on the real machine.
+24 kHz is not a TV standard and not standard VGA either: 15 kHz TVs, plain
+SCART monitors and 31 kHz-only VGA monitors will not sync. Use a multisync
+monitor that accepts 24 kHz (as PC-98 monitors do) or a scaler (for example a
+RetroTINK 4K). HDMI stays at 60 Hz through MiSTer's scaler.
 HDMI and the analog outputs work at the same time.
 
 Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
@@ -177,7 +181,7 @@ Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
 [PC98]
 vga_mode=rgb          ; plain RGB (a global vga_mode=subcarrier/ypbpr would override it otherwise)
 composite_sync=1      ; combined sync on the HSync pin, needed for SCART RGB
-vga_scaler=0          ; analog outputs keep the core's own 31.25 kHz signal
+vga_scaler=0          ; analog outputs keep the core's own 24.8 kHz signal
 forced_scandoubler=0
 ```
 

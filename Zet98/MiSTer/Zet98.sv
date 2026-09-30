@@ -264,15 +264,26 @@ localparam integer SOUND_MODEL = 3;
 localparam integer SOUND_MODEL = 2;
 `endif
 
+wire pll_main_locked;
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_ram),
 	.outclk_1(clk_sys),
-	.outclk_2(clk_vid),
-	.locked(pll_locked)
+	.outclk_2(),
+	.locked(pll_main_locked)
 );
+// PC-98 24.8 kHz / 56.4 Hz video: 63.158 MHz = 3 x the 21.0526 MHz dot clock.
+wire pll_vid_locked;
+pll_vid pll_vid
+(
+	.refclk(CLK_50M),
+	.rst(0),
+	.outclk_0(clk_vid),
+	.locked(pll_vid_locked)
+);
+assign pll_locked = pll_main_locked & pll_vid_locked;
 
 altddio_out
 #(

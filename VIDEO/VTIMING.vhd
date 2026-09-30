@@ -5,15 +5,15 @@ use ieee.std_logic_unsigned.all;
 entity VTIMING is
 generic(
 	DOTPU	:integer	:=8;
-	HWIDTH	:integer	:=800;
-	VWIDTH	:integer	:=525;
+	HWIDTH	:integer	:=848;
+	VWIDTH	:integer	:=440;
 	HVIS	:integer	:=640;
 	VVIS	:integer	:=400;
 	CPD		:integer	:=3;		--clocks per dot
-	HFP		:integer	:=3;
-	HSY		:integer	:=12;
-	VFP		:integer	:=51;
-	VSY		:integer	:=2;
+	HFP		:integer	:=10;
+	HSY		:integer	:=8;
+	VFP		:integer	:=7;
+	VSY		:integer	:=8;
     EXTERNAL_PIXEL_RESET : boolean := false
 );	
 port(

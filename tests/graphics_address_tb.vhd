@@ -25,8 +25,8 @@ architecture test of graphics_address_tb is
     signal rstn, rd, ack : std_logic := '0';
     signal addr : std_logic_vector(13 downto 0);
     signal uc : natural range 0 to 7 := 1;
-    signal hc : natural range 0 to 99 := 0;
-    signal vc : natural range 0 to 524 := 0;
+    signal hc : natural range 0 to 105 := 0;
+    signal vc : natural range 0 to 439 := 0;
     signal requests : natural := 0;
     constant BASE0 : natural := 16300;
     constant BASE1 : natural := 2048;
@@ -99,8 +99,8 @@ begin
         end loop;
         wait for 201 ns; rstn<='1';
         for frame in 0 to 1 loop
-            for row in 0 to 524 loop
-                for pixel in 0 to 799 loop
+            for row in 0 to 439 loop
+                for pixel in 0 to 847 loop
                     wait until falling_edge(clk);
                     vc<=row;hc<=pixel/8;uc<=pixel mod 8;
                 end loop;
