@@ -34,9 +34,8 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
   (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
   right analog stick as mouse.
-- **Video:** scaled HDMI (native aspect or integer), and the native 24.8 kHz RGB
-  signal on VGA/SCART for multisync monitors and scalers.
-- Disk activity overlay (floppy, CD, HDD).
+- **Video:** scaled HDMI (native aspect or integer), and the core's own 640x400
+  RGB signal (31.25 kHz, 59.5 Hz) on VGA/SCART for multisync monitors and scalers.
 
 ## Quick start
 
@@ -164,10 +163,11 @@ Mount a disc image in the core menu under **CD-ROM (ISO/BIN/PCD)**:
 ## Video outputs: HDMI, VGA and SCART RGB
 
 HDMI always carries the scaled picture. The analog outputs (VGA, and SCART RGB
-on boards such as the SuperStation One) carry the PC-98's native signal:
-640x400 at about 24.8 kHz horizontal and 56 Hz vertical. That is not a TV
-standard, so 15 kHz TVs and plain SCART monitors will not sync; use a
-multisync monitor or a scaler that accepts 24 kHz (for example a RetroTINK 4K).
+on boards such as the SuperStation One) carry the core's raster directly:
+640x400 inside an 800x525 frame, 31.25 kHz horizontal and 59.5 Hz vertical.
+(A real PC-98 uses 24.8 kHz and 56.4 Hz; the core does not reproduce that yet.)
+That is not a TV standard, so 15 kHz TVs and plain SCART monitors will not
+sync; use a VGA/multisync monitor or a scaler (for example a RetroTINK 4K).
 HDMI and the analog outputs work at the same time.
 
 Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
@@ -177,14 +177,14 @@ Add this to `/media/fat/MiSTer.ini`, in a `[PC98]` section (and in any MGL
 [PC98]
 vga_mode=rgb          ; plain RGB (a global vga_mode=subcarrier/ypbpr would override it otherwise)
 composite_sync=1      ; combined sync on the HSync pin, needed for SCART RGB
-vga_scaler=0          ; analog outputs keep the native 24.8 kHz signal
+vga_scaler=0          ; analog outputs keep the core's own 31.25 kHz signal
 forced_scandoubler=0
 ```
 
 On a RetroTINK 4K select **SCART -> RGBS (75 ohm)** for the SCART cable, or
 **HD-15 -> RGBS** for the VGA cable (combined sync is on the H pin; with
 `composite_sync=0` choose **HD-15 -> RGBHV**, but SCART then has no sync).
-If a display cannot lock to 24.8 kHz, `vga_scaler=1` sends the scaled HDMI
+If a display cannot lock to it, `vga_scaler=1` sends the scaled HDMI
 mode (for example 1080p) to VGA instead; SCART is then unusable.
 
 ## Playing Doom with General MIDI music
