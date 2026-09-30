@@ -5,7 +5,7 @@
 // is a DualShock in digital mode that follows the 43h/44h/43h setup.
 module snac_psx_pad_tb;
     reg clk = 0; always #100 clk = ~clk;          // 5 MHz keeps the sim short
-    reg enable = 0;
+    reg enable = 0, swap = 0;
     wire [6:0] user_out;
     wire [5:0] joy1, joy2;
     wire [1:0] analog, mbtn1, mbtn2;
@@ -21,7 +21,7 @@ module snac_psx_pad_tb;
     realtime att2_fall, att2_low_max = 0;
     always @(negedge att2) att2_fall = $realtime;
     always @(posedge att2) if (present2 && $realtime - att2_fall > att2_low_max) att2_low_max = $realtime - att2_fall;
-    snac_psx_pad #(.CLK_HZ(5000000)) dut(.clk(clk), .enable(enable), .user_in(user_in),
+    snac_psx_pad #(.CLK_HZ(5000000)) dut(.clk(clk), .enable(enable), .swap_sticks(swap), .user_in(user_in),
         .user_out(user_out), .joy1(joy1), .joy2(joy2),
         .analog(analog), .right1(right1), .right2(right2), .mbtn1(mbtn1), .mbtn2(mbtn2));
 
@@ -125,6 +125,17 @@ module snac_psx_pad_tb;
         resp2[5] = 8'h80; resp2[6] = 8'h80; resp1[4] = 8'hff; resp2[3] = 8'hff;
         wait_polls(2);
         if (mbtn1 !== 0 || mbtn2 !== 0) $fatal(1, "mouse buttons stuck");
+        // Swapped sticks: port 2's left stick moves the mouse and gives no
+        // direction; its right stick (pushed right) gives the direction.
+        swap = 1;
+        resp2[7] = 8'h20; resp2[8] = 8'he0; resp2[5] = 8'hff; resp2[6] = 8'h80;
+        wait_polls(2);
+        if (right2 !== 16'he020 || joy2 !== 6'b000001)
+            $fatal(1, "swapped sticks: mouse %h (want e020) joy2 %b (want right only)", right2, joy2);
+        swap = 0;
+        resp2[7] = 8'h80; resp2[8] = 8'h80; resp2[5] = 8'h80;
+        wait_polls(2);
+        if (right2 !== 16'h8080 || joy2 !== 0) $fatal(1, "sticks not restored: %h %b", right2, joy2);
         // A device without the 5Ah handshake is not a pad: no input.
         resp1[2] = 8'h00; resp1[3] = 8'h00; resp1[4] = 8'h00;
         wait_polls(2);
@@ -163,7 +174,7 @@ module snac_psx_pad_tb;
         check_joy(0, 0, "no pads");
         enable = 0; repeat (10) @(posedge clk);
         if (user_out !== 7'h7f || joy1 !== 0 || joy2 !== 0) $fatal(1, "disable did not release port");
-        $display("PASS: SNAC PlayStation pads: ACK ignored, 01/42 polling, DualShock analog setup once per plug-in (unlocked, misreads ignored), digital+analog mapping, 5Ah handshake, right stick/mouse buttons, both ports, unplugged, off");
+        $display("PASS: SNAC PlayStation pads: ACK ignored, 01/42 polling, DualShock analog setup once per plug-in (unlocked, misreads ignored), digital+analog mapping, 5Ah handshake, right stick/mouse buttons, swapped sticks, both ports, unplugged, off");
         $finish;
     end
     initial begin #6000000000; $fatal(1, "SNAC timeout"); end

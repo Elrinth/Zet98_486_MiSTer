@@ -577,29 +577,19 @@ times per second at 250 kHz and only accepts replies with the PlayStation 5Ah
 handshake, so other user-port hardware cannot create input; with the option Off
 the user port is not driven.
 
-`Right stick mouse: On / Off` (default On, status bit 39 clear) moves the PC-98
-mouse with the right analog stick of a USB controller or of a DualShock in the
-SNAC port (analog mode). Mouse buttons: on SNAC pads L3/L1 = left and R3/R1 = right;
+`Stick mouse: On / Off` (default On, status bit 39 clear) moves the PC-98
+mouse with an analog stick of a USB controller or of a DualShock in the
+SNAC port (analog mode). `Mouse stick: Right / Left` (default Right, status bit 40)
+picks the stick: with Left, the left stick moves the mouse and the right stick gives
+the joystick directions instead (the d-pad keeps working either way).
+Mouse buttons: on SNAC pads L3/L1 = left and R3/R1 = right;
 on USB controllers map the core's **Mouse L** / **Mouse R** buttons in MiSTer's
 *Define joystick buttons* (for example to L3/R3). A dead zone and a quadratic
 curve keep small movements precise. A USB mouse (and the PS5 touchpad, which
 MiSTer reports as a mouse) keeps working; all sources add up
 (`rtl/stick_mouse.sv`, extra input of `Zet98/MOUSE/MOUSECONV.vhd`).
 
-`Show D0/D1 disk access`, `Show CD access` and `Show HDD access` (all **On** by
-default; status bits 5, 40, 41) switch each part of the access overlay;
-`Access icons: Off` (status bit 42) keeps only the text captions.
-HDD sits at the lower left and the CD just left of the floppy, all on the same
-rows (the second layout was removed to free FPGA area). The
-caption `READING D0...` or `READING D1...` (with cycling dots) appears at the lower
-right while that floppy drive is accessed, and `WRITING D0...`/`WRITING D1...`
-while its image is being written back, under a turning floppy icon. Next to it,
-`READING CD...` under a spinning CD icon shows CD-ROM data reads and CD audio
-playback, and `READING HDD...`/`WRITING HDD...` under a hard-disk icon shows
-IDE hard-disk access. Each has a short hold for visibility, follows the measured
-active raster, leaves blanking/sync unchanged, and disappears when idle. The
-self-drawn icons (16x16, 8 frames, shown at 2x) come from
-`scripts/make_overlay_icons.py` and use one RAM block.
+The on-screen disk/CD/HDD access overlay was removed to free FPGA area.
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

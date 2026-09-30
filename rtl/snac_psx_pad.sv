@@ -15,6 +15,7 @@
 // plug-in, as analog PlayStation games do: 43h enter config, 44h analog
 // (unlocked, so the ANALOG button still toggles it), 43h exit. The right
 // stick (PC-98 mouse) needs analog mode. A digital-only pad ignores this.
+// swap_sticks exchanges the two: left stick = mouse, right stick = directions.
 // A pad counts as unplugged only after 32 missing reads in a row (~0.5 s):
 // one misread used to repeat the setup and undo an ANALOG button press.
 module snac_psx_pad #(
@@ -22,11 +23,12 @@ module snac_psx_pad #(
 ) (
     input wire clk,
     input wire enable,
+    input wire swap_sticks,
     input wire [6:0] user_in,
     output reg [6:0] user_out = 7'h7f,
     output reg [5:0] joy1 = 0,
     output reg [5:0] joy2 = 0,
-    // Mouse emulation: right stick {Y, X} (unsigned, 80h centre) of pads in
+    // Mouse emulation: right stick (left with swap_sticks) {Y, X} (unsigned, 80h centre) of pads in
     // analog mode, and mouse buttons {right, left} = {R3|R1, L3|L1}.
     output reg [1:0] analog = 0,
     output reg [15:0] right1 = 16'h8080, right2 = 16'h8080,
@@ -75,8 +77,10 @@ module snac_psx_pad #(
 
     // Stick outside the centre third counts as a direction.
     wire analog_mode = id == 8'h73;
-    wire st_left  = analog_mode && left_x < 8'h40, st_right = analog_mode && left_x > 8'hc0;
-    wire st_up    = analog_mode && left_y < 8'h40, st_down  = analog_mode && left_y > 8'hc0;
+    wire [7:0] dir_x = swap_sticks ? right_x : left_x, dir_y = swap_sticks ? right_y : left_y;
+    wire [15:0] mouse_xy = swap_sticks ? {left_y, left_x} : {right_y, right_x};
+    wire st_left  = analog_mode && dir_x < 8'h40, st_right = analog_mode && dir_x > 8'hc0;
+    wire st_up    = analog_mode && dir_y < 8'h40, st_down  = analog_mode && dir_y > 8'hc0;
     // A real pad answers the 42h read with its ID and then 5Ah.
     wire present  = id != 8'hff && id != 8'h00 && handshake == 8'h5a;
     // L3/L1 = left mouse button, R3/R1 = right (buttons active low).
@@ -153,11 +157,11 @@ module snac_psx_pad #(
                     end
                     if (step == 0 && port) begin
                         joy2 <= mapped; mbtn2 <= mouse_buttons;
-                        analog[1] <= present && analog_mode; right2 <= {right_y, right_x};
+                        analog[1] <= present && analog_mode; right2 <= mouse_xy;
                     end else if (step == 0) begin
                         raw1 <= {id, handshake, buttons_lo, buttons_hi, right_x, right_y, left_x, left_y};
                         joy1 <= mapped; mbtn1 <= mouse_buttons;
-                        analog[0] <= present && analog_mode; right1 <= {right_y, right_x};
+                        analog[0] <= present && analog_mode; right1 <= mouse_xy;
                     end
                     port <= !port; state <= IDLE; timer <= FRAME;
                 end

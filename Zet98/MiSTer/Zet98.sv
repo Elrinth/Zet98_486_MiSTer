@@ -200,7 +200,8 @@ parameter CONF_STR = {
 `endif
 	"P3,Input;",
 	"P3o6,SNAC PS pads,On,Off;",
-	"P3o7,Right stick mouse,On,Off;",
+	"P3o7,Stick mouse,On,Off;",
+	"P3o8,Mouse stick,Right,Left;",
 	"P4,Boot & storage;",
 	"P4OR,Empty boot,Wait for disk,Start BIOS;",
 	"P4R9,Eject FD0;",
@@ -338,9 +339,12 @@ wire  [5:0] snac_joy1, snac_joy2;
 wire  [1:0] snac_analog, snac_mbtn1, snac_mbtn2;
 wire [15:0] snac_right1, snac_right2;
 wire [63:0] snac_raw1;
-wire [15:0] joystick_r0, joystick_r1;
+wire [15:0] joystick_r0, joystick_r1, joystick_l0, joystick_l1;
+// "Mouse stick: Left" swaps the sticks: the left one moves the mouse, the
+// right one gives the joystick directions.
+wire        swap_sticks = status[40];
 snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
-	.clk(clk_sys), .enable(!status[38]), .user_in(USER_IN), .user_out(USER_OUT),
+	.clk(clk_sys), .enable(!status[38]), .swap_sticks(swap_sticks), .user_in(USER_IN), .user_out(USER_OUT),
 	.joy1(snac_joy1), .joy2(snac_joy2),
 	.analog(snac_analog), .right1(snac_right1), .right2(snac_right2),
 	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2), .raw1(snac_raw1)
@@ -352,14 +356,22 @@ wire signed [7:0] stick_dx, stick_dy;
 wire        stick_stb;
 stick_mouse #(.CLK_HZ(SYS_CLK_KHZ*1000)) stick_mouse (
 	.clk(clk_sys), .enable(!status[39]),
-	.usb_r0(joystick_r0), .usb_r1(joystick_r1),
+	.usb_r0(swap_sticks ? joystick_l0 : joystick_r0), .usb_r1(swap_sticks ? joystick_l1 : joystick_r1),
 	.snac_valid(snac_analog), .snac_r0(snac_right1), .snac_r1(snac_right2),
 	.dx(stick_dx), .dy(stick_dy), .strobe(stick_stb)
 );
 wire  [1:0] stick_buttons = status[39] ? 2'b00 :
 	(joystick_0[7:6] | joystick_1[7:6] | snac_mbtn1 | snac_mbtn2);
-wire  [5:0] joy0_bits = joystick_0[5:0] | snac_joy1;
-wire  [5:0] joy1_bits = joystick_1[5:0] | snac_joy2;
+// Main_MiSTer also turns the left stick into d-pad bits. With swapped sticks
+// those are dropped while the left stick is pushed that way, and the right
+// stick outside its centre third gives the directions instead.
+function automatic [3:0] stick_dirs(input [15:0] s, input integer t);
+	stick_dirs = {$signed(s[15:8]) < -t, $signed(s[15:8]) > t, $signed(s[7:0]) < -t, $signed(s[7:0]) > t};
+endfunction
+wire  [3:0] dirs0 = swap_sticks ? (joystick_0[3:0] & ~stick_dirs(joystick_l0, 16)) | stick_dirs(joystick_r0, 42) : joystick_0[3:0];
+wire  [3:0] dirs1 = swap_sticks ? (joystick_1[3:0] & ~stick_dirs(joystick_l1, 16)) | stick_dirs(joystick_r1, 42) : joystick_1[3:0];
+wire  [5:0] joy0_bits = {joystick_0[5:4], dirs0} | snac_joy1;
+wire  [5:0] joy1_bits = {joystick_1[5:4], dirs1} | snac_joy2;
 wire  [5:0] joyA = ~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
 wire  [5:0] joyB = ~{joy1_bits[5:4],joy1_bits[0],joy1_bits[1],joy1_bits[2],joy1_bits[3]};
 
@@ -652,6 +664,8 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .V
 
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),
+	.joystick_l_analog_0(joystick_l0),
+	.joystick_l_analog_1(joystick_l1),
 	.joystick_r_analog_0(joystick_r0),
 	.joystick_r_analog_1(joystick_r1)
 );
