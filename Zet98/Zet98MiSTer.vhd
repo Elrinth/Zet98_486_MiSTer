@@ -2124,7 +2124,6 @@ signal	tGDC_C40			:std_logic;
 signal	gGDC_VGRAMSEL	:std_logic;
 -- Display page as used for the frame on screen (see display_address).
 signal	gGDC_VGRAMSEL_frame	:std_logic;
-signal	vrtc_prev	:std_logic;
 signal	VSINT_ARM, VSINT	:std_logic;
 signal	gGDC_CGRAMSEL	:std_logic;
 signal tGDC_ATRSEL :std_logic;
@@ -3556,20 +3555,11 @@ begin
         clk=>cpuclk, rstn=>srstn, arm=>VSINT_ARM, vrtc=>VRTC, irq=>VSINT);
     VSINT_ARM<='1' when ioaddr_even=x"0064" and iowr='1' else '0';
 
-    -- The display page (port A4h) takes effect for a whole frame: it is
-    -- latched when vertical retrace ends. Games flip pages during retrace;
-    -- a flip applied mid-frame split the picture between both pages
-    -- (Flame Zapper Kotsujin's "rolling" split while it scrolls).
-    process(cpuclk,srstn)begin
-        if(srstn='0')then
-            gGDC_VGRAMSEL_frame<='0'; vrtc_prev<='0';
-        elsif(cpuclk' event and cpuclk='1')then
-            vrtc_prev<=VRTC;
-            if(vrtc_prev='1' and VRTC='0')then
-                gGDC_VGRAMSEL_frame<=gGDC_VGRAMSEL;
-            end if;
-        end if;
-    end process;
+    -- Display page (A4h) as scanned out: applied when retrace ends, or at once
+    -- when the game starts drawing into the page still shown (see entity).
+    display_page : entity work.pc98_display_page port map(
+        clk=>cpuclk, rstn=>srstn, vrtc=>VRTC, disp=>gGDC_VGRAMSEL,
+        draw=>gGDC_CGRAMSEL, page=>gGDC_VGRAMSEL_frame);
     display_address : entity work.display_page_address
         generic map(FRONT_PAGE=>RAM_VRAMF(21 downto 16), BACK_PAGE=>RAM_VRAMB(21 downto 16))
         port map(memory_clk=>ramclk, async_rstn=>srstn, cpu_page=>gGDC_VGRAMSEL_frame,

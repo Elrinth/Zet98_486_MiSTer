@@ -546,6 +546,13 @@ to follow the retrace every frame; Thexder's handler then ran before the game
 armed it and jumped through an unset pointer (crash recorder, freeze on INT 6).
 The free-running wiring is rejected.
 
+`run-display-page.sh` checks the scanned-out display page (`rtl/pc98_display_page.vhd`):
+a flip takes effect when retrace ends, a mid-frame flip is held for the rest of the
+frame (Flame Zapper), but once the game draws into the page still on screen the
+pending flip applies at once. Touhou 5 flips mid-frame when a frame runs late and
+clears the old page straight away; holding it made sprites flicker. The
+retrace-only latch is rejected.
+
 `run-crash-recorder-freeze.sh` also covers `-RecorderFreezeVector`: the
 recorder freezes on the first real-mode read of that vector, e.g. 6 (#UD).
 

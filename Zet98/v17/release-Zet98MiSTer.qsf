@@ -497,6 +497,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/boot_media_control.sv
 set_global_assignment -name VHDL_FILE ../../rtl/startup_mute.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_retrace_cdc.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/pc98_vsync_irq.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/pc98_display_page.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pcm86.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/audio_decimator.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/snac_psx_pad.sv
