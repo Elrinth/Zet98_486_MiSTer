@@ -45,18 +45,25 @@ footer a { color: var(--accent); }
 </head>
 <body>
 <main>
-  <h1>PC-98 HDI 256 → 512 converter</h1>
-  <p>Old PC-98 hard-disk images (10/20/40 MB SASI disks) use 256-byte sectors, which the
-  <a href="https://github.com/Elrinth/Zet98_486_MiSTer">Zet98 486 MiSTer core</a> cannot boot.
-  Drop an <code>.hdi</code> here to get a 512-byte-sector copy named <code>…-512b.hdi</code>.</p>
+  <h1>PC-98 disk image converter</h1>
+  <p>For the <a href="https://github.com/Elrinth/Zet98_486_MiSTer">PC98 486 MiSTer core</a>:</p>
+  <ul>
+    <li><strong>Floppies</strong> (<code>.hdm</code>, <code>.fdi</code>, <code>.xdf</code>): the core
+    reads floppies as <code>.d88</code> only (writable, so games can save). Drop an image here to
+    get a <code>.d88</code> copy with the same sectors.</li>
+    <li><strong>Hard disks</strong> (<code>.hdi</code>): old SASI images (10/20/40 MB) use 256-byte
+    sectors; this makes a 512-byte-sector copy named <code>…-512b.hdi</code>. (The core also boots
+    256-byte HDIs directly since B228.)</li>
+  </ul>
   <p>Everything runs in your browser; the image is not uploaded anywhere.</p>
   <label id="drop">
-    <strong>Drop .hdi files here</strong>
+    <strong>Drop .hdm / .fdi / .xdf / .hdi files here</strong>
     or click to choose
-    <input id="pick" type="file" accept=".hdi,.HDI" multiple hidden>
+    <input id="pick" type="file" accept=".hdi,.HDI,.hdm,.HDM,.fdi,.FDI,.xdf,.XDF" multiple hidden>
   </label>
   <ul id="log"></ul>
-  <footer>Same conversion as
+  <footer>Same conversions as
+    <a href="https://github.com/Elrinth/Zet98_486_MiSTer/blob/main/scripts/import_disk_image.py">scripts/import_disk_image.py</a> (floppies) and
     <a href="https://github.com/Elrinth/Zet98_486_MiSTer/blob/main/scripts/pc98_hdi_256to512.py">scripts/pc98_hdi_256to512.py</a>
     (Python, for the command line). GPL-3.0-or-later.</footer>
 </main>
@@ -198,10 +205,60 @@ function convert(buf, log) {
   return out;
 }
 
-function outputName(name) {
+// Floppies: raw HDM/XDF (size gives the geometry) or FDI (32-byte header with
+// geometry) to D88, one MFM record per sector, as scripts/import_disk_image.py.
+const RAW_GEOMETRIES = {
+  1261568: [77, 2, 8, 1024], 1228800: [80, 2, 15, 512], 1474560: [80, 2, 18, 512],
+  655360: [80, 2, 8, 512], 737280: [80, 2, 9, 512], 327680: [40, 2, 8, 512],
+};
+function floppyToD88(buf, ext, title, log) {
+  const data = new Uint8Array(buf), dv = new DataView(buf);
+  let cyl, heads, spt, bps, off = 0;
+  if (ext === "fdi") {
+    if (data.length < 32) throw new ConvertError("truncated FDI header");
+    const f = k => dv.getUint32(k * 4, true);
+    const [reserved, , hdr, size] = [f(0), f(1), f(2), f(3)];
+    [bps, spt, heads, cyl] = [f(4), f(5), f(6), f(7)];
+    if (reserved !== 0 || hdr < 32 || size !== bps * spt * heads * cyl || data.length !== hdr + size ||
+        ![128, 256, 512, 1024, 2048, 4096].includes(bps))
+      throw new ConvertError("inconsistent FDI geometry or length");
+    off = hdr;
+  } else {
+    const g = RAW_GEOMETRIES[data.length];
+    if (!g) throw new ConvertError("unknown raw floppy size " + data.length + " bytes");
+    [cyl, heads, spt, bps] = g;
+  }
+  if (cyl > 82 || (heads !== 1 && heads !== 2) || spt > 26)
+    throw new ConvertError("floppy geometry does not fit a D88 track table");
+  const n = Math.log2(bps) - 7, capacity = bps * cyl * heads * spt;
+  const media = cyl <= 42 && capacity < 500000 ? 0x00 : capacity < 1000000 ? 0x10 : 0x20;
+  const tracks = cyl * 2, perTrack = 16 + bps;
+  const out = new Uint8Array(688 + cyl * heads * spt * perTrack);
+  const ov = new DataView(out.buffer);
+  const name = new TextEncoder().encode(title.replace(/[^ -~]/g, "_")).slice(0, 16);
+  out.set(name, 0);
+  out[27] = media;
+  let pos = 688;
+  for (let c = 0; c < cyl; c++) for (let h = 0; h < heads; h++) {
+    ov.setUint32(32 + (c * 2 + h) * 4, pos, true);
+    for (let r = 1; r <= spt; r++) {
+      out[pos] = c; out[pos + 1] = h; out[pos + 2] = r; out[pos + 3] = n;
+      ov.setUint16(pos + 4, spt, true);
+      ov.setUint16(pos + 14, bps, true);
+      out.set(data.subarray(off, off + bps), pos + 16);
+      off += bps; pos += perTrack;
+    }
+  }
+  if (off !== data.length) throw new ConvertError("floppy payload length mismatch");
+  ov.setUint32(28, out.length, true);
+  log(`${ext.toUpperCase()}: ${cyl} cylinders, ${heads} heads, ${spt} sectors of ${bps} bytes -> D88 (${tracks} track slots)`);
+  return out;
+}
+
+function outputName(name, kind) {
   const dot = name.lastIndexOf(".");
   const root = dot > 0 ? name.slice(0, dot) : name;
-  return root + "-512b.hdi";
+  return kind === "floppy" ? root + ".d88" : root + "-512b.hdi";
 }
 
 const logList = document.getElementById("log");
@@ -213,10 +270,14 @@ async function handle(file) {
   logList.prepend(li);
   const log = s => { pre.textContent += s + "\n"; };
   try {
-    const out = convert(await file.arrayBuffer(), log);
+    const ext = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+    const floppy = ["hdm", "fdi", "xdf"].includes(ext);
+    const buf = await file.arrayBuffer();
+    const root = file.name.replace(/\.[^.]*$/, "");
+    const out = floppy ? floppyToD88(buf, ext, root, log) : convert(buf, log);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([out], { type: "application/octet-stream" }));
-    a.download = outputName(file.name);
+    a.download = outputName(file.name, floppy ? "floppy" : "hdi");
     a.textContent = "Save " + a.download;
     li.append(a);
     a.click();

@@ -37,6 +37,8 @@
 // reaches DE_FREEZE_CS:DE_FREEZE_IP[15:0], logged as a type 12 entry.
 // DE_FREEZE_VECTOR[8] set (-RecorderFreezeVector): also freeze on the first
 // real-mode read of that interrupt vector (e.g. 6, invalid opcode).
+// DE_FREEZE_SECONDS != 0 (-RecorderFreezeSeconds): also freeze that many
+// seconds after the core starts, to capture whatever loop a hang runs.
 // It is never reset (only by loading the core) so it survives CPU resets.
 module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
@@ -47,7 +49,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [23:0] DE_STACK = 24'h000351,
                              parameter [15:0] DE_FREEZE_CS = 16'h0000,
                              parameter [16:0] DE_FREEZE_IP = 17'h00000,
-                             parameter [8:0] DE_FREEZE_VECTOR = 9'h000) (
+                             parameter [8:0] DE_FREEZE_VECTOR = 9'h000,
+                             parameter integer DE_FREEZE_SECONDS = 0) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -127,6 +130,13 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     (* ramstyle = "M10K" *) reg [127:0] ring[0:255];
     reg [127:0] ring_q, newest;
     reg [7:0] raddr;
+    // Timed freeze: seconds since the core started (DE_FREEZE_SECONDS).
+    reg [$clog2(CLOCK_HZ+1)-1:0] up_div = 0;
+    reg [15:0] up_seconds = 0;
+    always @(posedge clk)
+        if (up_div == CLOCK_HZ - 1) begin up_div <= 0; up_seconds <= up_seconds + 1'b1; end
+        else up_div <= up_div + 1'b1;
+    wire timed_freeze = DE_TRIGGER && DE_FREEZE_SECONDS != 0 && up_seconds >= DE_FREEZE_SECONDS;
     always @(posedge clk) begin
         prev_pe <= pe; prev_vm <= vm;
         prev_cs <= cs; prev_ip <= eip[15:0];
@@ -145,6 +155,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               (!DE_FREEZE_IP[16] || de_at_ip))
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
         end
+        if (armed && timed_freeze) frozen <= 1'b1;
         ring_q <= ring[raddr];
     end
 

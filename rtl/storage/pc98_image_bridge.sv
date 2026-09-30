@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Per-slot image translation (one shared floppy converter) and serialization of mount metadata for the
 // legacy disk engine's shared size/read-only bus.
-module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
+// FLOPPY_CONVERT=0 leaves out the HDM/FDI converter (about 760 ALMs): the
+// floppy slots then take D88 images directly, which need no translation.
+module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1, FLOPPY_CONVERT=1) (
     input wire clk,
     input wire [3:0] image_mounted,
     input wire image_readonly,
@@ -36,7 +38,7 @@ module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
     assign floppy_lba[0]=disk_lba[0]; assign floppy_lba[1]=disk_lba[1];
     assign floppy_din[0]=disk_buff_din[0]; assign floppy_din[1]=disk_buff_din[1];
     wire [1:0] floppy_mounted, floppy_readonly, floppy_ack, floppy_buff_wr, floppy_rd, floppy_wr, floppy_invalid;
-    generate if(ENABLE) begin: floppies
+    generate if(ENABLE && FLOPPY_CONVERT) begin: floppies
         // Both drives share one converter (see pc98_floppy_images).
         pc98_floppy_images images (
             .clk(clk),.mounted(image_mounted[1:0]),.readonly(image_readonly),.image_size(image_size),
@@ -52,7 +54,7 @@ module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1) (
     end endgenerate
     genvar i;
     generate for(i=0;i<4;i=i+1) begin: slots
-        if(ENABLE && i<2) begin: floppy
+        if(ENABLE && FLOPPY_CONVERT && i<2) begin: floppy
             assign mounted[i]=floppy_mounted[i];
             assign readonly[i]=floppy_readonly[i];
             assign size[i]=floppy_size[i];
