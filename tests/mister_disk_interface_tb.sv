@@ -113,6 +113,11 @@ module pll(input refclk, rst, output outclk_0, outclk_1, outclk_2, locked);
     assign locked = !rst;
 endmodule
 
+module pll_vid(input refclk, rst, output outclk_0, locked);
+    assign outclk_0 = refclk;
+    assign locked = !rst;
+endmodule
+
 module altddio_out #(
     parameter extend_oe_disable = "", intended_device_family = "", invert_output = "",
     lpm_hint = "", lpm_type = "", oe_reg = "", power_up_high = "", width = 1
