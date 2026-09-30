@@ -5,12 +5,13 @@
 module crash_recorder_freeze_tb;
     parameter [15:0] FREEZE_CS = 16'h0de3;
     parameter [16:0] FREEZE_IP = 17'h00000;   // bit 16: freeze at CS:IP instead
+    parameter [8:0] FREEZE_VECTOR = 9'h000;   // bit 8: freeze on that vector (INT 6 here)
     reg clk = 0; always #5 clk = ~clk;
     reg gate_read = 0;
     reg [31:0] gate_addr = 0, eip = 32'h0000fff0;
     reg [15:0] cs = 16'hf000;
     wire tx;
-    z486_crash_recorder #(.CLOCK_HZ(1152000), .DE_TRIGGER(1), .DE_FREEZE_CS(FREEZE_CS), .DE_FREEZE_IP(FREEZE_IP)) dut(.clk(clk), .gate_read(gate_read),
+    z486_crash_recorder #(.CLOCK_HZ(1152000), .DE_TRIGGER(1), .DE_FREEZE_CS(FREEZE_CS), .DE_FREEZE_IP(FREEZE_IP), .DE_FREEZE_VECTOR(FREEZE_VECTOR)) dut(.clk(clk), .gate_read(gate_read),
         .gate_addr(gate_addr), .cs(cs), .eip(eip), .eflags(32'h2), .pe(1'b0), .vm(1'b0), .pf_code(3'd0),
         .pf_addr(32'h0), .triple_fault(1'b0), .port_f0_write(1'b0), .port_f0_data(8'h00),
         .page_fault(1'b0), .walk_pde(32'h0), .walk_pte(32'h0), .cr3(32'h0), .a20(1'b1), .sp(16'h0),
@@ -47,6 +48,10 @@ module crash_recorder_freeze_tb;
             @(negedge clk); gate_read = 0;
         end
         @(negedge clk); cs = 16'h0e4b; eip = 32'h00002130;   // an ordinary far transfer
+        if (FREEZE_VECTOR[8]) begin                       // #UD at 0E4B:2130
+            @(negedge clk); gate_read = 1; gate_addr = 4 * 6;
+            @(negedge clk); gate_read = 0;
+        end
         if (FREEZE_IP[16]) begin                          // enter elsewhere, no freeze yet
             @(negedge clk); cs = 16'h0de3; eip = 32'h00005ffd;
             @(negedge clk); eip = 32'h00000100;
@@ -60,6 +65,13 @@ module crash_recorder_freeze_tb;
         @(negedge clk); gate_read = 1; gate_addr = 4 * 9;
         @(negedge clk); gate_read = 0;
         wait (done);
+        if (FREEZE_VECTOR[8]) begin
+            if (last_e[127:124] !== 4'd1 || last_e[123:108] !== 16'h0e4b || last_e[107:76] !== 32'h2130 ||
+                last_e[75:44] !== 32'h18)
+                $fatal(1, "newest entry is not the INT 6 vector read at 0E4B:2130: %h", last_e);
+            $display("PASS: crash recorder DE_FREEZE_VECTOR: freezes on the first read of vector 6, at the faulting CS:IP");
+            $finish;
+        end
         if (last_e[127:124] !== 4'd12 || last_e[123:108] !== 16'h0de3 || last_e[107:92] !== 16'h049d ||
             (!FREEZE_IP[16] && (far_e[75:60] !== 16'h0e4b || far_e[59:44] !== 16'h2130)))
             $fatal(1, "newest entry is not the jump into 0DE3 from 0E4B:2130: %h", last_e);

@@ -2125,6 +2125,7 @@ signal	gGDC_VGRAMSEL	:std_logic;
 -- Display page as used for the frame on screen (see display_address).
 signal	gGDC_VGRAMSEL_frame	:std_logic;
 signal	vrtc_prev	:std_logic;
+signal	VSINT_ARM, VSINT	:std_logic;
 signal	gGDC_CGRAMSEL	:std_logic;
 signal tGDC_ATRSEL :std_logic;
 signal	tGDC_VIDEN		:std_logic;
@@ -3214,7 +3215,7 @@ begin
 		
 		IR0		=>PTC_CNTOUT(0),
 		IR1		=>KBINT,
-		IR2		=>VRTC,
+		IR2		=>VSINT,
 		IR3		=>'0',
 		IR4		=>not COM_INTn,
 		IR5		=>'0',
@@ -3548,6 +3549,13 @@ begin
 					VID_KNJ2DAT when VID_KNJSEL="10" else
 					(others=>'0');
 	
+    -- CRT vertical-retrace interrupt (IRQ2), armed by port 64h writes. Wired
+    -- to VRTC directly it fired every frame, so Thexder's handler ran before
+    -- the game armed it and jumped through an unset pointer.
+    vsync_irq : entity work.pc98_vsync_irq port map(
+        clk=>cpuclk, rstn=>srstn, arm=>VSINT_ARM, vrtc=>VRTC, irq=>VSINT);
+    VSINT_ARM<='1' when ioaddr_even=x"0064" and iowr='1' else '0';
+
     -- The display page (port A4h) takes effect for a whole frame: it is
     -- latched when vertical retrace ends. Games flip pages during retrace;
     -- a flip applied mid-frame split the picture between both pages

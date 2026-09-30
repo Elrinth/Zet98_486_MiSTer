@@ -539,6 +539,16 @@ a full period later. The old low-first square wave ticked every half period
 (hardware: 194 callbacks per 1.07 s instead of NP2kai's 104). A counter-latch
 command must not rewrite the channel mode. Both old behaviours are rejected.
 
+`run-vsync-irq.sh` checks the CRT retrace interrupt (IRQ2, `rtl/pc98_vsync_irq.vhd`):
+a port 64h write arms it, the next retrace raises IRQ2 once, unarmed retraces
+raise nothing, and a write during a retrace arms the following one. IRQ2 used
+to follow the retrace every frame; Thexder's handler then ran before the game
+armed it and jumped through an unset pointer (crash recorder, freeze on INT 6).
+The free-running wiring is rejected.
+
+`run-crash-recorder-freeze.sh` also covers `-RecorderFreezeVector`: the
+recorder freezes on the first real-mode read of that vector, e.g. 6 (#UD).
+
 `run-z486-expand-down.sh` runs `hardware/expand_down_stack_probe.asm` on z486:
 PUSH/POP, CALL and a 32-bit interrupt gate on expand-down stacks (32-bit, limit
 0, and 16-bit, limit 0FFFh). Viper CTR's SGS mixer uses such a stack; ignoring

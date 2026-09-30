@@ -146,6 +146,11 @@ module z486_pc98_adapter #(
 `else
     localparam [16:0] RECORDER_FREEZE_IP = 17'h00000;
 `endif
+`ifdef ZET98_RECORDER_FREEZE_VECTOR
+    localparam [8:0] RECORDER_FREEZE_VECTOR = {1'b1, 8'(`ZET98_RECORDER_FREEZE_VECTOR)};
+`else
+    localparam [8:0] RECORDER_FREEZE_VECTOR = 9'h000;
+`endif
 `ifdef ZET98_RECORDER_DE
     localparam RECORDER_DE = 1;   // freeze on the first real-mode divide error
 `else
@@ -153,7 +158,8 @@ module z486_pc98_adapter #(
 `endif
     z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO),
                           .DE_TRIGGER(RECORDER_DE), .DE_FREEZE_CS(RECORDER_FREEZE_CS),
-                          .DE_FREEZE_IP(RECORDER_FREEZE_IP)) crash_recorder (
+                          .DE_FREEZE_IP(RECORDER_FREEZE_IP),
+                          .DE_FREEZE_VECTOR(RECORDER_FREEZE_VECTOR)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),

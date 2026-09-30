@@ -35,6 +35,8 @@
 // into that CS (a wild jump into data): the ring ends with the jump. With
 // DE_FREEZE_IP[16] set (-RecorderFreezeIp) it freezes instead when execution
 // reaches DE_FREEZE_CS:DE_FREEZE_IP[15:0], logged as a type 12 entry.
+// DE_FREEZE_VECTOR[8] set (-RecorderFreezeVector): also freeze on the first
+// real-mode read of that interrupt vector (e.g. 6, invalid opcode).
 // It is never reset (only by loading the core) so it survives CPU resets.
 module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
@@ -44,7 +46,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [15:0] DE_MATCH2 = 16'h0058,
                              parameter [23:0] DE_STACK = 24'h000351,
                              parameter [15:0] DE_FREEZE_CS = 16'h0000,
-                             parameter [16:0] DE_FREEZE_IP = 17'h00000) (
+                             parameter [16:0] DE_FREEZE_IP = 17'h00000,
+                             parameter [8:0] DE_FREEZE_VECTOR = 9'h000) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -136,6 +139,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             wp <= wp + 1'b1;
             seq <= seq + 1'b1;
             if (DE_TRIGGER ? (ev_type == 4'd1 && !pe && gate_addr == 32'd0 ||
+                              DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
+                              gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00} ||
                               DE_FREEZE_CS != 0 && ev_type == 4'd12 && cs == DE_FREEZE_CS &&
                               (!DE_FREEZE_IP[16] || de_at_ip))
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
