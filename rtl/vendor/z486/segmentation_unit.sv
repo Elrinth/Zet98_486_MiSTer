@@ -65,6 +65,8 @@ reg         dt_target_idt;      // Tracks GDTR vs IDTR for SBAS/SLIM_TABLE
 reg         addr_size;          // 1=32-bit, 0=16-bit effective address
 reg [31:0]  seg_base_r;         // Registered segment base
 reg [31:0]  seg_limit_r;        // Registered segment limit
+reg         seg_ed_r;           // Registered: expand-down data segment
+reg         seg_big_r;          // Registered: its B bit (upper bound FFFFFFFF, else FFFF)
 
 // Full hidden descriptors exist only for the six architectural segment
 // registers, TR, and LDTR. GDTR/IDTR contain only base+limit, and SEG_IO is a
@@ -266,7 +268,15 @@ wire limit_violated = start_out_of_bounds | size_fault;
 wire rm_limit_fault = !pe && (size_fault ||
                       (start_out_of_bounds && !(is_stack_fault && !addr_size)));
 
-wire pm_limit_fault = pe && limit_violated && !is_dtable;
+// Expand-down data segments are valid above the limit, up to FFFFh (B=0) or
+// FFFFFFFFh (B=1): offset <= limit faults, and so does an access running past
+// the top (Viper CTR's SGS mixer runs on an expand-down 32-bit stack with limit
+// 0; every interrupt push faulted, escalating to a triple fault).
+wire ed_top_carry = (({1'b0, eff_offset[1:0]} + {1'b0, access_size}) > 3'd3);
+wire ed_high_fault = seg_big_r ? (&eff_offset[31:2] && ed_top_carry)
+                               : ((eff_offset[31:16] != 16'h0) || (&eff_offset[15:2] && ed_top_carry));
+wire ed_fault = !start_out_of_bounds || ed_high_fault;
+wire pm_limit_fault = pe && !is_dtable && (seg_ed_r ? ed_fault : limit_violated);
 
 wire seg_writable = (seg_sel == SEG_ES) ? (!desc_cache[SEG_ES].seg_type[3] && desc_cache[SEG_ES].seg_type[1]) :
                     (seg_sel == SEG_CS) ? vm :
@@ -322,6 +332,21 @@ function automatic [31:0] expand_raw_limit(input [20:0] raw_limit);
                      : {12'h000, raw_limit[19:0]};
 endfunction
 
+// Expand-down data segment (S=1, type 0x1xx, bit 2 set) and its B bit, for the
+// segment the registered limit belongs to. SS during a stack switch uses the
+// new stack held in the CS slot, as the limit does.
+function automatic [1:0] ed_big_of(input seg_desc_t d);
+    ed_big_of = {d.S && !d.seg_type[3] && d.seg_type[2], d.D_B};
+endfunction
+
+function automatic [1:0] seg_ed_big_for(input [3:0] sel, input dsw);
+    case (sel)
+        SEG_ES, SEG_DS, SEG_FS, SEG_GS: seg_ed_big_for = ed_big_of(desc_cache[sel]);
+        SEG_SS:  seg_ed_big_for = dsw ? ed_big_of(desc_cache[SEG_CS]) : ed_big_of(desc_cache[SEG_SS]);
+        default: seg_ed_big_for = 2'b00;
+    endcase
+endfunction
+
 function automatic [31:0] seg_limit_for(input [3:0] sel, input dsw);
     case (sel)
         SEG_ES, SEG_CS, SEG_SS, SEG_DS, SEG_FS, SEG_GS, SEG_TR:
@@ -354,6 +379,15 @@ function automatic [31:0] read_limit_for(input dsw);
         read_limit_for = expand_raw_limit({desc_cache[SEG_CS].G, desc_cache[SEG_CS].limit});
     else
         read_limit_for = expand_raw_limit(desc_read_raw_limit);
+endfunction
+
+function automatic [1:0] read_ed_big_for(input dsw);
+    if (seg_target > SEG_GS || seg_target == SEG_CS)
+        read_ed_big_for = 2'b00;
+    else if (seg_target == SEG_SS && dsw)
+        read_ed_big_for = ed_big_of(desc_cache[SEG_CS]);
+    else
+        read_ed_big_for = ed_big_of(desc_read);
 endfunction
 
 // LAR/LLIM/LBAS: z486 routes these to IND in same cycle
@@ -582,6 +616,7 @@ always_ff @(posedge clk) begin
         addr_size <= 1'b0;
         seg_base_r <= 32'h0;  // DS_base at reset
         seg_limit_r <= 32'hFFFF;
+        {seg_ed_r, seg_big_r} <= 2'b00;
         stack_push_mode <= 1'b0;
         descsw_mode <= 1'b0;
         tss_access_flag <= 1'b0;
@@ -601,8 +636,10 @@ always_ff @(posedge clk) begin
             stack_push_mode <= 1'b0;
             descsw_mode <= 1'b0;
             tss_access_flag <= 1'b1;
-            if (seg_sel == SEG_SS)
+            if (seg_sel == SEG_SS) begin
                 seg_limit_r <= seg_limit_for(SEG_SS, 1'b0);
+                {seg_ed_r, seg_big_r} <= seg_ed_big_for(SEG_SS, 1'b0);
+            end
         end
         if (ctssaf_pulse)
             tss_access_flag <= 1'b0;
@@ -611,6 +648,7 @@ always_ff @(posedge clk) begin
                 seg_sel <= seg_target;
                 seg_is_io <= (seg_target == SEG_IO);
                 seg_limit_r <= read_limit_for(1'b0);
+                {seg_ed_r, seg_big_r} <= read_ed_big_for(1'b0);
                 i_addr32_r <= init_addr32;
                 i_stack_op_r <= init_stack_op;
                 stack_push_mode <= 1'b0;
@@ -623,8 +661,10 @@ always_ff @(posedge clk) begin
                 if (clear_descsw) begin
                     descsw_mode <= 1'b0;
                     seg_limit_r <= read_limit_for(1'b0);
+                    {seg_ed_r, seg_big_r} <= read_ed_big_for(1'b0);
                 end else begin
                     seg_limit_r <= read_limit_for(descsw_mode);
+                    {seg_ed_r, seg_big_r} <= read_ed_big_for(descsw_mode);
                 end
             end
 
@@ -638,6 +678,7 @@ always_ff @(posedge clk) begin
                 seg_is_io <= 1'b0;
                 descsw_mode <= 1'b1;
                 seg_limit_r <= seg_limit_for(SEG_CS, 1'b0);
+                {seg_ed_r, seg_big_r} <= ed_big_of(desc_cache[SEG_CS]);   // new stack in the CS slot
             end
 
             default: ;

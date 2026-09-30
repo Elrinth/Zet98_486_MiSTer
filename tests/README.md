@@ -330,6 +330,21 @@ selection, then checks 56576 continuous/bursty-CE pixels for three-clock
 RGB/sync/blanking alignment. The ROM packer independently reconstructs all
 165200 original pixels before writing its two ROM files.
 
+## D88 floppy path
+
+`tests/run-fdc-d88.sh` mounts synthetic D88 images through the MiSTer sd
+protocol into `diskemu_mister` (track cache in a behavioural SDRAM that
+follows `sdramc`'s FDE/FEC accept/wait protocol), plays them with `FDemu` into
+the `FDC`, wired as in `Zet98MiSTer.vhd`, and issues the NEC BIOS command
+sequence (SPECIFY, RECALIBRATE, SEEK, READ ID, READ DATA over a DMA model).
+Transferred bytes are compared with the D88 and every command must interrupt
+before the BIOS completion timeout. Cases: 2HD MFM sanity; a Xanadu-style
+FM 26x128 track 0 (360 rpm, the IPL's whole-track read, MFM probe fails within
+two turns); Legend of Heroes-style IDs R=1,49..55 read with the BIOS EOT of 8.
+Negative controls revert each fix (EOT compare, four-index Missing AM, FM
+revolution time, D88 track table entry 164). `FDC_D88_IMAGES` scans private
+images; `FDC_D88_RATES=90000` runs at the release clock (slow).
+
 `tests/run-crtc-reset.sh` exercises the complete CRTC text path after six
 reset phases, including stopped-clock recovery and settings changed during
 reset. It checks a 640-pixel rendered line after each release. Temporary
@@ -516,6 +531,27 @@ Ishtar sets 72x384) inside the 640x400 window with VISIBLE's delay, and that
 the 80x400 default equals VISIBLE. CRTC98 blanks RGB outside it (NP2kai
 dispsync); `run-crtc-compositor.sh` covers the gate, and
 `video_settings_mapping.py` the two new snapshot fields (DISPAW, DISPAL).
+
+`run-pit-mode3.sh` checks 8253 mode 3 as the PC-98 BIOS interval timer
+(INT 1Ch AH=02h) uses it: OUT is high for the first half of the period, so
+after the count is reloaded from the timer callback the next IRQ0 edge comes
+a full period later. The old low-first square wave ticked every half period
+(hardware: 194 callbacks per 1.07 s instead of NP2kai's 104). A counter-latch
+command must not rewrite the channel mode. Both old behaviours are rejected.
+
+`run-z486-expand-down.sh` runs `hardware/expand_down_stack_probe.asm` on z486:
+PUSH/POP, CALL and a 32-bit interrupt gate on expand-down stacks (32-bit, limit
+0, and 16-bit, limit 0FFFh). Viper CTR's SGS mixer uses such a stack; ignoring
+expand-down made every push fault and ended in a triple fault (crash recorder).
+
+`run-mpu-intelligent.sh` checks the MPU-PC98II intelligent subset KAJA's MMD
+needs (Cyber Arms): an ACK for every command, E0/E7 parameters, clock-to-host
+FD at the tempo/timebase rate (NP2kai's timing) and bytes after D0 on MIDI
+out. The UART-only MPU (no ACK) is rejected; MMD waits for each ACK forever.
+
+`run-crash-recorder-freeze.sh` checks the recorder's DE_FREEZE_CS option
+(`-RecorderDivide -RecorderFreezeCs XXXX`): the ring freezes on the first far
+transfer into that CS and keeps the CS:IP it came from.
 
 `run-text-gdc-csrr.sh` checks the text GDC's CSRR (E0h): the NEC MS-DOS console
 driver sends it without parameters and polls DATA READY before reading five

@@ -31,6 +31,10 @@
 // old IP, 32'd0, ...}; type 13 = {13, CS, IP, SP, data, byte enables,
 // address, vm, pe, seq}. Every write to DE_STACK (a 256-byte block, e.g. a
 // game's stack) is logged the same way, whatever its data.
+// DE_FREEZE_CS != 0 (-RecorderFreezeCs): also freeze on the first far transfer
+// into that CS (a wild jump into data): the ring ends with the jump. With
+// DE_FREEZE_IP[16] set (-RecorderFreezeIp) it freezes instead when execution
+// reaches DE_FREEZE_CS:DE_FREEZE_IP[15:0], logged as a type 12 entry.
 // It is never reset (only by loading the core) so it survives CPU resets.
 module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
@@ -38,7 +42,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter DE_TRIGGER = 0,
                              parameter [15:0] DE_MATCH = 16'h0e62,
                              parameter [15:0] DE_MATCH2 = 16'h0058,
-                             parameter [23:0] DE_STACK = 24'h000351) (
+                             parameter [23:0] DE_STACK = 24'h000351,
+                             parameter [15:0] DE_FREEZE_CS = 16'h0000,
+                             parameter [16:0] DE_FREEZE_IP = 17'h00000) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -77,7 +83,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg pause = 0;                   // IO_MODE: recording paused while dumping
     reg [15:0] prev_cs = 0;
     reg [15:0] prev_ip = 0;
-    wire de_far = DE_TRIGGER && cs != prev_cs;
+    wire de_at_ip = DE_TRIGGER && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS && eip[15:0] == DE_FREEZE_IP[15:0];
+    wire de_far = DE_TRIGGER && (cs != prev_cs || de_at_ip);
     wire de_match = DE_TRIGGER && mem_write && (mem_addr[31:8] == DE_STACK ||mem_data[15:0] == DE_MATCH || mem_data[31:16] == DE_MATCH ||
                                                 mem_data[15:0] == DE_MATCH2 || mem_data[31:16] == DE_MATCH2);
     wire ide_port = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h0432;
@@ -128,7 +135,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             newest <= entry;
             wp <= wp + 1'b1;
             seq <= seq + 1'b1;
-            if (DE_TRIGGER ? (ev_type == 4'd1 && !pe && gate_addr == 32'd0)
+            if (DE_TRIGGER ? (ev_type == 4'd1 && !pe && gate_addr == 32'd0 ||
+                              DE_FREEZE_CS != 0 && ev_type == 4'd12 && cs == DE_FREEZE_CS &&
+                              (!DE_FREEZE_IP[16] || de_at_ip))
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
         end
         ring_q <= ring[raddr];

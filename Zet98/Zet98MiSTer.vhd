@@ -1710,6 +1710,7 @@ port(
 	fdc_dencity	:in std_logic						:='1';	--1:2HD 0:2DD/2D
 	fdc_rpm		:in std_logic						:='0';	--1:360rpm 0:300rpm
 	fdc_mfm		:in std_logic						:='1';
+	fdc_ifmode	:in std_logic						:='0';
 	
 --FD emulator
 	fde_tracklen:out std_logic_vector(13 downto 0);
@@ -4037,6 +4038,7 @@ begin
 		fdc_dencity	=>FDC_H_Dn,
 		fdc_rpm		=>'0',
 		fdc_mfm		=>FDE_MFM,
+		fdc_ifmode	=>FDCIF_H_Dn,
 		
 	--FD emulator
 		fde_tracklen=>open,

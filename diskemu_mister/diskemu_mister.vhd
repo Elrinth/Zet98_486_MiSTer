@@ -41,6 +41,10 @@ port(
 	fdc_dencity	:in std_logic						:='1';	--1:2HD 0:2DD/2D
 	fdc_rpm		:in std_logic						:='0';	--1:360rpm 0:300rpm
 	fdc_mfm		:in std_logic						:='1';
+	-- 1: 1MB interface (ports 90h-94h). Its 2HD drives spin whenever a disk is
+	-- in; port 94h bit 3 does not stop them (NP2kai). Xanadu's own FDC driver
+	-- writes 94h=10h/00h around every command.
+	fdc_ifmode	:in std_logic						:='0';
 	
 --FD emulator
 	fde_tracklen:out std_logic_vector(13 downto 0);
@@ -267,6 +271,7 @@ signal	fde_ramaddrw	:std_logic_vector(23 downto 0);
 signal	fdc_usel		:std_logic_vector(1 downto 0);
 signal	fdc_indiskb	:std_logic_vector(1 downto 0);
 signal	fdc_motoren	:std_logic;
+signal	motorn		:std_logic_vector(1 downto 0);
 signal	trackwrote	:std_logic;
 signal	statusaddr	:std_logic_vector(13 downto 0);
 
@@ -1020,12 +1025,15 @@ begin
 						when others =>
 						end case;
 						track_curaddr<=(others=>'0');
+						-- Gap 4a in the track's own density: 40 x FFh FM (density
+						-- bit 6 set) or 80 x 4Eh MFM. These were swapped, so FM
+						-- tracks began with MFM words that garbled sector 1's ID.
 						if(img_rddat(6)='1')then
-							bytecount<=80;
-							trackwrdat<=x"024e";
-						else
 							bytecount<=40;
 							trackwrdat<=x"00ff";
+						else
+							bytecount<=80;
+							trackwrdat<=x"024e";
 						end if;
 						trackwr<='1';
 						swait:=1;
@@ -1406,7 +1414,9 @@ begin
 							track_curaddr<=track_curaddr+1;
 							trackwr<='1';
 						else
-							if(trackno<tracks)then
+							-- D88 has tracks entries (0 to tracks-1); entry "tracks"
+							-- is the first sector header, not a track offset.
+							if((trackno+1)<tracks)then
 								trackno<=trackno+1;
 								tbladdr<=trackno+x"09";
 								swait:=2;
@@ -1420,11 +1430,12 @@ begin
 					end if;
 				when fs_nxttrack =>
 					if(haddr=x"00000000")then
-						if(trackno<tracks)then
+						if((trackno+1)<tracks)then
 							trackno<=trackno+1;
 							tbladdr<=trackno+x"09";
 							swait:=2;
 						else
+							tracksync<='1';
 							fddone<='1';
 							fdstate<=fs_IDLE;
 						end if;
@@ -1952,8 +1963,9 @@ begin
 	fdc_wprotn<=not wrprot(0) when fdc_useln="10" else
 					not wrprot(1) when fdc_useln="01" else
 					'1';
-	fdc_motoren<=	not fdc_motorn(0) when fdc_useln(0)='0' else
-						not fdc_motorn(1) when fdc_useln(1)='0' else
+	motorn<=	"00" when fdc_ifmode='1' else fdc_motorn;
+	fdc_motoren<=	not motorn(0) when fdc_useln(0)='0' else
+						not motorn(1) when fdc_useln(1)='0' else
 						'0';
 	
 	fde_ramaddr<=fde_ramaddrw(22 downto 0);
@@ -1998,8 +2010,8 @@ begin
 						fde_rdbitn	when fdc_useln="01" else
 						'1';
 	
-	fdc_readyn<=fdc_motorn(0) when fdc_indiskb(0)='1' and fdc_useln(0)='0' else
-					fdc_motorn(1) when fdc_indiskb(1)='1' and fdc_useln(1)='0' else
+	fdc_readyn<=motorn(0) when fdc_indiskb(0)='1' and fdc_useln(0)='0' else
+					motorn(1) when fdc_indiskb(1)='1' and fdc_useln(1)='0' else
 					'1';
 	fdc_indisk<=fdc_indiskb;
 	

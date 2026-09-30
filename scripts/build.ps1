@@ -31,6 +31,11 @@ param(
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
     [switch]$RecorderDivide,
+    # With -RecorderDivide: also freeze on the first far transfer into this
+    # real-mode CS (hex, e.g. 0DE3) to catch a wild jump.
+    [string]$RecorderFreezeCs,
+    # With -RecorderFreezeCs: freeze when execution reaches that CS at this IP (hex).
+    [string]$RecorderFreezeIp,
     # CD trace debug build: CD-ROM events on the UART (replaces MIDI).
     [switch]$CdTrace,
     [ValidateRange(1, 99)]
@@ -116,6 +121,14 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
         if ($RecorderDivide) {
             Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_DE=1"
+            if ($RecorderFreezeCs) {
+                if ($RecorderFreezeCs -notmatch '^[0-9A-Fa-f]{1,4}$') { throw 'RecorderFreezeCs must be 1-4 hex digits.' }
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_CS=$([Convert]::ToInt32($RecorderFreezeCs, 16))"
+                if ($RecorderFreezeIp) {
+                    if ($RecorderFreezeIp -notmatch '^[0-9A-Fa-f]{1,4}$') { throw 'RecorderFreezeIp must be 1-4 hex digits.' }
+                    Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_IP=$([Convert]::ToInt32($RecorderFreezeIp, 16))"
+                }
+            }
         }
     }
     if ($CdTrace) {

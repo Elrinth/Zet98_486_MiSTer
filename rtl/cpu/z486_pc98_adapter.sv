@@ -136,13 +136,24 @@ module z486_pc98_adapter #(
 `else
     localparam RECORDER_IO = 0;
 `endif
+`ifdef ZET98_RECORDER_FREEZE_CS
+    localparam [15:0] RECORDER_FREEZE_CS = `ZET98_RECORDER_FREEZE_CS;
+`else
+    localparam [15:0] RECORDER_FREEZE_CS = 16'h0000;
+`endif
+`ifdef ZET98_RECORDER_FREEZE_IP
+    localparam [16:0] RECORDER_FREEZE_IP = {1'b1, 16'(`ZET98_RECORDER_FREEZE_IP)};
+`else
+    localparam [16:0] RECORDER_FREEZE_IP = 17'h00000;
+`endif
 `ifdef ZET98_RECORDER_DE
     localparam RECORDER_DE = 1;   // freeze on the first real-mode divide error
 `else
     localparam RECORDER_DE = 0;
 `endif
     z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO),
-                          .DE_TRIGGER(RECORDER_DE)) crash_recorder (
+                          .DE_TRIGGER(RECORDER_DE), .DE_FREEZE_CS(RECORDER_FREEZE_CS),
+                          .DE_FREEZE_IP(RECORDER_FREEZE_IP)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),

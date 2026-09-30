@@ -15,6 +15,8 @@ port(
 	CNTLAT	:in std_logic;
 	OPMODE	:in std_logic_vector(2 downto 0);
 	OPBCD	:in std_logic;
+	CTLWR	:in std_logic;							-- control word for this channel
+	CTLMODE	:in std_logic_vector(2 downto 0);		-- its mode field
 	
 	CNTIN	:in std_logic;
 	TRIG	:in std_logic;
@@ -33,6 +35,11 @@ signal	DATH_Ln		:std_logic;
 signal	DECVAL		:std_logic_vector(15 downto 0);
 signal	HALFVAL		:std_logic_vector(15 downto 0);
 signal	CNTBGN		:std_logic;
+signal	PERCOUNT	:std_logic_vector(15 downto 0);	-- count of the running period
+signal	LOADING		:std_logic;						-- control word written, count not yet
+signal	LSBHOLD		:std_logic_vector(7 downto 0);
+signal	WDATL		:std_logic_vector(7 downto 0);
+signal	lWRC		:std_logic;
 begin
 
 	process(clk,rstn)
@@ -60,7 +67,9 @@ begin
 		elsif(clk' event and clk='1')then
 			case RWMODE is
 			when "11" =>
-				if((lRD='1' and RD='0') or (lWR='1' and WR='0'))then
+				if(CTLWR='1')then
+					DATH_Ln<='0';		-- a control word restarts with the LSB
+				elsif((lRD='1' and RD='0') or (lWR='1' and WR='0'))then
 					DATH_Ln<=not DATH_Ln;
 				end if;
 			when "10" =>
@@ -84,112 +93,137 @@ begin
 		end if;
 	end process;
 
-	process(clk,rstn)begin
+	-- 8253 count loading. A control word sets OUT to its initial state (low
+	-- in mode 0, else high) and stops the counter until the whole count is
+	-- written (LSB only / MSB only with the other byte 0, or LSB then MSB).
+	-- Modes 0 and 4 restart on every new count; in the periodic modes 2 and 3
+	-- a count written without a control word takes effect at the next reload.
+	-- Applying bytes as they arrived made mode 3 OUT dip and rise again while
+	-- a timer ISR reprogrammed it: a spurious IRQ0 edge on every tick
+	-- (Might and Magic III's music driver after the BIOS interval timer).
+	process(clk,rstn)
+	variable newcnt	:std_logic_vector(15 downto 0);
+	variable done	:boolean;
+	begin
 		if(rstn='0')then
 			CURCOUNT<=(others=>'0');
 			RETCOUNT<=(others=>'0');
+			PERCOUNT<=(others=>'0');
 			CNTOUT<='0';
+			LOADING<='0';
+			LSBHOLD<=(others=>'0');
+			WDATL<=(others=>'0');
+			lWRC<='0';
 		elsif(clk' event and clk='1')then
-			case OPMODE is
-			when "000" =>
-				if(WR='1')then
+			lWRC<=WR;
+			if(WR='1')then
+				WDATL<=WDAT;
+			end if;
+			done:=false;
+			newcnt:=RETCOUNT;
+			if(lWRC='1' and WR='0')then		-- a count byte write has ended
+				case RWMODE is
+				when "01" =>
+					newcnt:=x"00" & WDATL; done:=true;
+				when "10" =>
+					newcnt:=WDATL & x"00"; done:=true;
+				when others =>
 					if(DATH_Ln='0')then
-						CURCOUNT(7 downto 0)<=WDAT;
-						RETCOUNT(7 downto 0)<=WDAT;
+						LSBHOLD<=WDATL;
 					else
-						CURCOUNT(15 downto 8)<=WDAT;
-						RETCOUNT(15 downto 8)<=WDAT;
+						newcnt:=WDATL & LSBHOLD; done:=true;
 					end if;
+				end case;
+			end if;
+			if(CTLWR='1')then
+				LOADING<='1';
+				if(CTLMODE="000")then
 					CNTOUT<='0';
-				elsif(CNTIN='1')then
-					if(CURCOUNT=x"0001")then
-						CNTOUT<='1';
-					else
-						CURCOUNT<=DECVAL;
-					end if;
-				end if;
-			when "100" =>
-				if(WR='1')then
-					if(DATH_Ln='0')then
-						CURCOUNT(7 downto 0)<=WDAT;
-						RETCOUNT(7 downto 0)<=WDAT;
-					else
-						CURCOUNT(15 downto 8)<=WDAT;
-						RETCOUNT(15 downto 8)<=WDAT;
-					end if;
-					CNTOUT<='0';
-				elsif(CNTIN='1')then
-					if(CURCOUNT>x"0000")then
-						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
-						end if;
-						CURCOUNT<=DECVAL;
-					else
-						CNTOUT<='0';
-					end if;
-				end if;
-			when "001" | "101" =>
-				if(WR='1')then
-					if(DATH_Ln='0')then
-						RETCOUNT(7 downto 0)<=WDAT;
-					else
-						RETCOUNT(15 downto 8)<=WDAT;
-					end if;
-				elsif(CNTBGN='1')then
-					CURCOUNT<=RETCOUNT;
-					CNTOUT<='0';
-				elsif(CNTIN='1')then
-					if(CURCOUNT>x"0000")then
-						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
-						end if;
-						CURCOUNT<=DECVAL;
-					elsif(OPMODE="101")then
-						CNTOUT<='0';
-					end if;
-				end if;
-			when "010" | "110" =>
-				if(WR='1')then
-					if(DATH_Ln='0')then
-						CURCOUNT(7 downto 0)<=WDAT;
-						RETCOUNT(7 downto 0)<=WDAT;
-					else
-						CURCOUNT(15 downto 8)<=WDAT;
-						RETCOUNT(15 downto 8)<=WDAT;
-					end if;
-					CNTOUT<='0';
-				elsif(CNTIN='1')then
-					if(CURCOUNT=x"0001")then
-						CNTOUT<='1';
-						CURCOUNT<=RETCOUNT;
-					else
-						CNTOUT<='0';
-						CURCOUNT<=DECVAL;
-					end if;
-				end if;
-			when "011" | "111" =>
-				if(WR='1')then
-					if(DATH_Ln='0')then
-						CURCOUNT(7 downto 0)<=WDAT;
-						RETCOUNT(7 downto 0)<=WDAT;
-					else
-						CURCOUNT(15 downto 8)<=WDAT;
-						RETCOUNT(15 downto 8)<=WDAT;
-					end if;
-				elsif(CNTIN='1')then
-					if(CURCOUNT=x"0001")then
-						CURCOUNT<=RETCOUNT;
-					else
-						CURCOUNT<=DECVAL;
-					end if;
-				end if;
-				if(CURCOUNT<HALFVAL)then
-					CNTOUT<='1';
 				else
-					CNTOUT<='0';
+					CNTOUT<='1';
 				end if;
-			when others =>
-			end case;
+			elsif(done)then
+				RETCOUNT<=newcnt;
+				case OPMODE is
+				when "001" | "101" =>			-- triggered: wait for the gate
+					LOADING<='0';
+				when "000" | "100" =>
+					CURCOUNT<=newcnt; PERCOUNT<=newcnt;
+					LOADING<='0';
+					CNTOUT<='0';
+				when others =>					-- 2, 3: reload later unless just programmed
+					if(LOADING='1')then
+						CURCOUNT<=newcnt; PERCOUNT<=newcnt;
+						LOADING<='0';
+						CNTOUT<='1';
+					end if;
+				end case;
+			elsif(LOADING='0')then
+				case OPMODE is
+				when "000" =>
+					if(CNTIN='1')then
+						if(CURCOUNT=x"0001")then
+							CNTOUT<='1';
+						else
+							CURCOUNT<=DECVAL;
+						end if;
+					end if;
+				when "100" =>
+					if(CNTIN='1')then
+						if(CURCOUNT>x"0000")then
+							if(CURCOUNT=x"0001")then
+								CNTOUT<='1';
+							end if;
+							CURCOUNT<=DECVAL;
+						else
+							CNTOUT<='0';
+						end if;
+					end if;
+				when "001" | "101" =>
+					if(CNTBGN='1')then
+						CURCOUNT<=RETCOUNT;
+						CNTOUT<='0';
+					elsif(CNTIN='1')then
+						if(CURCOUNT>x"0000")then
+							if(CURCOUNT=x"0001")then
+								CNTOUT<='1';
+							end if;
+							CURCOUNT<=DECVAL;
+						elsif(OPMODE="101")then
+							CNTOUT<='0';
+						end if;
+					end if;
+				when "010" | "110" =>
+					if(CNTIN='1')then
+						if(CURCOUNT=x"0001")then
+							CNTOUT<='1';
+							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
+						else
+							CNTOUT<='0';
+							CURCOUNT<=DECVAL;
+						end if;
+					end if;
+				when "011" | "111" =>
+					if(CNTIN='1')then
+						if(CURCOUNT=x"0001")then
+							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
+						else
+							CURCOUNT<=DECVAL;
+						end if;
+					end if;
+					-- Square wave: OUT is high for the first half of each period
+					-- ((N+1)/2 counts) and low for the second, as on the 8253. A
+					-- reload restarts high, so the next rising edge (IRQ0) comes
+					-- after a full period; low-first made the BIOS interval timer,
+					-- which reloads from its callback, tick every half period.
+					if(CURCOUNT>HALFVAL)then
+						CNTOUT<='1';
+					else
+						CNTOUT<='0';
+					end if;
+				when others =>
+				end case;
+			end if;
 		end if;
 	end process;
 					
@@ -213,31 +247,31 @@ begin
 		end if;
 	end process;
 	
-	process(RETCOUNT,OPBCD)
+	process(PERCOUNT,OPBCD)
 	variable	tmp100,tmp10,tmp1	:std_logic_vector(4 downto 0);
 	begin
 		if(OPBCD='1')then
-			HALFVAL(15 downto 12)<='0' & RETCOUNT(15 downto 13);
-			if(RETCOUNT(12)='1')then
-				tmp100:=('0' & RETCOUNT(11 downto 8))+"01010";
+			HALFVAL(15 downto 12)<='0' & PERCOUNT(15 downto 13);
+			if(PERCOUNT(12)='1')then
+				tmp100:=('0' & PERCOUNT(11 downto 8))+"01010";
 			else
-				tmp100:='0' & RETCOUNT(11 downto 8);
+				tmp100:='0' & PERCOUNT(11 downto 8);
 			end if;
 			HALFVAL(11 downto 8)<=tmp100(4 downto 1);
 			if(tmp100(0)='1')then
-				tmp10:=('0' & RETCOUNT(7 downto 4))+"01010";
+				tmp10:=('0' & PERCOUNT(7 downto 4))+"01010";
 			else
-				tmp10:='0' & RETCOUNT(7 downto 4);
+				tmp10:='0' & PERCOUNT(7 downto 4);
 			end if;
 			HALFVAL(7 downto 4)<=tmp10(4 downto 1);
 			if(tmp10(0)='1')then
-				tmp1:=('0' & RETCOUNT(3 downto 0))+"01010";
+				tmp1:=('0' & PERCOUNT(3 downto 0))+"01010";
 			else
-				tmp1:='0' & RETCOUNT(3 downto 0);
+				tmp1:='0' & PERCOUNT(3 downto 0);
 			end if;
 			HALFVAL(3 downto 0)<=tmp1(4 downto 1);
 		else
-			HALFVAL<='0' & RETCOUNT(15 downto 1);
+			HALFVAL<='0' & PERCOUNT(15 downto 1);
 		end if;
 	end process;
 	
