@@ -166,8 +166,9 @@ Mount a disc image in the core menu under **CD-ROM (ISO/BIN/PCD)**:
 
 HDMI always carries the scaled picture. The analog outputs (VGA, and SCART RGB
 on boards such as the SuperStation One) carry the core's raster directly:
-640x400 inside an 848x440 frame with the real PC-98 400-line timing: 21.05 MHz
-dot clock, 24.83 kHz horizontal and 56.42 Hz vertical. Games also run at that
+640x400 inside an 864x440 frame with PC-98 400-line timing: 24.80 kHz horizontal
+and 56.37 Hz vertical (a real PC-98: 24.83 kHz / 56.42 Hz; the core's 21.43 MHz
+dot clock comes from its main PLL, which cannot make the exact 21.05 MHz). Games also run at that
 refresh rate (VSYNC interrupts and GDC retrace status), as on the real machine.
 24 kHz is not a TV standard and not standard VGA either: 15 kHz TVs, plain
 SCART monitors and 31 kHz-only VGA monitors will not sync. Use a multisync

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Register pixel data, blanking and sync with their MiSTer clock enable.
 // The diagnostic raster bypasses PC-98 text/graphics and SDRAM fetches while
-// retaining the same video clock (63.158 MHz, 3 clocks per pixel) and
-// MiSTer scaler/HDMI path. Its raster matches the PC-98 one: 848 x 440,
-// 640 x 400 visible, 24.8 kHz / 56.4 Hz.
+// retaining the same video clock (64.29 MHz, 3 clocks per pixel) and
+// MiSTer scaler/HDMI path. Its raster matches the native one: 864 x 440,
+// 640 x 400 visible, 24.80 kHz / 56.37 Hz.
 module video_output #(
     parameter BOOT_TEXT_FILE="../../rtl/assets/boot-text.mem",
     parameter BOOT_FONT_FILE="../../rtl/assets/boot-font.mem"
@@ -66,7 +66,7 @@ module video_output #(
             test_sync <= test_meta;
             divider <= pattern_ce ? 0 : divider + 1'b1;
             if (pattern_ce) begin
-                if (x == 847) begin
+                if (x == 863) begin
                     x <= 0;
                     if (y == 439) begin
                         y <= 0;

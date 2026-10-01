@@ -1,5 +1,5 @@
-# VTIMING rotates 001 on the 63.158 MHz video clock. Its clk3sft[2] output
-# clocks the 21.05 MHz raster/text logic, with one parent cycle high. Include
+# VTIMING rotates 001 on the 64.29 MHz video clock. Its clk3sft[2] output
+# clocks the 21.43 MHz raster/text logic, with one parent cycle high. Include
 # this clock during fitting, not only in an after-the-fact timing audit.
 set pixel_register [get_registers {*|VID|TIM|clk3sft[2]}]
 set pixel_source [get_pins -compatibility_mode {*|VID|TIM|clk3sft[2]|clk}]

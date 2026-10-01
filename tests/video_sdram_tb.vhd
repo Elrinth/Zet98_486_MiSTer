@@ -105,7 +105,7 @@ architecture test of video_sdram_tb is
     signal hold_poison : std_logic := '0';
     signal hold_checks : natural := 0;
     signal uc : natural range 0 to 7 := 0;
-    signal hc : natural range 0 to 105 := 0;
+    signal hc : natural range 0 to 107 := 0;
     signal vc : natural range 0 to 439 := VIV;
     signal commands : natural := 0;
 begin
@@ -236,7 +236,7 @@ begin
         -- GRAPHSCR can have queued the first line during SDRAM initialization.
         wait until ack='1';
         for line in 0 to 15 loop
-            for pixel in 0 to 847 loop
+            for pixel in 0 to 863 loop
                 wait until falling_edge(pixelclk);
                 uc<=pixel mod 8; hc<=pixel/8; vc<=VIV+line;
             end loop;

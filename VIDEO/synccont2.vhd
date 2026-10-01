@@ -5,7 +5,7 @@ use ieee.std_logic_unsigned.all;
 entity synccont2 is
 generic(
 	DOTPU	:integer	:=8;
-	HWIDTH	:integer	:=848;
+	HWIDTH	:integer	:=864;
 	VWIDTH	:integer	:=440;
 	HVIS	:integer	:=640;
 	VVIS	:integer	:=400;

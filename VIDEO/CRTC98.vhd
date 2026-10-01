@@ -95,7 +95,7 @@ architecture MAIN of CRTC98 is
 component VTIMING is
 generic(
 	DOTPU	:integer	:=8;
-	HWIDTH	:integer	:=848;
+	HWIDTH	:integer	:=864;
 	VWIDTH	:integer	:=440;
 	HVIS	:integer	:=640;
 	VVIS	:integer	:=400;
@@ -204,7 +204,7 @@ end component;
 component synccont2
 generic(
 	DOTPU	:integer	:=8;
-	HWIDTH	:integer	:=848;
+	HWIDTH	:integer	:=864;
 	VWIDTH	:integer	:=440;
 	HVIS	:integer	:=640;
 	VVIS	:integer	:=400;
