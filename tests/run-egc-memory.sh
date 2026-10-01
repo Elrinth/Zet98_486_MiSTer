@@ -24,8 +24,8 @@ for mhz in 20 50 60 90 100; do
 done
 for mutation in or live_mode live_mask late; do
     case "$mutation" in
-        or) sed 's/cpu_write_memory(i\*16+15 downto i\*16) xor/cpu_write_memory(i*16+15 downto i*16) or/' Zet98/sdramc.vhd > "$out/bad.vhd" ;;
-        live_mode) sed "s/cpu_write_memory(ADRWIDTH+152)='1'/CPUAFFINE='1'/" Zet98/sdramc.vhd > "$out/bad.vhd" ;;
+        or) sed 's/cpu_bundle(i\*16+15 downto i\*16) xor/cpu_bundle(i*16+15 downto i*16) or/' Zet98/sdramc.vhd > "$out/bad.vhd" ;;
+        live_mode) sed "s/CPU_AFFINE_RMW and cpu_affine='1'/CPU_AFFINE_RMW and CPUAFFINE='1'/" Zet98/sdramc.vhd > "$out/bad.vhd" ;;
         live_mask) sed 's/cpu_write_memory(ADRWIDTH+103+i\*16 downto ADRWIDTH+88+i\*16)/CPUXORMASK(i*16+15 downto i*16)/' Zet98/sdramc.vhd > "$out/bad.vhd" ;;
         late) make_variant 80 "$out/bad.vhd" ;;
     esac
