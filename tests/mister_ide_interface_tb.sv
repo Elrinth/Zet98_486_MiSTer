@@ -86,11 +86,13 @@ module mister_ide_interface_tb;
                 word_io(value & 255);
             end
             finish_command; repeat(15) @(negedge clk);
-            // Mount a D88 in slot 1: the core takes D88 directly (no HDM/FDI
-            // converter, FLOPPY_CONVERT=0), so the mount issues no host read.
+            // Mount a small synthetic D88 so slot 1 follows its unchanged path.
             word_io('h1d);word_io(1024);word_io(0);word_io(0);word_io(0);finish_command;
-            word_io('h1c);word_io(2);finish_command;repeat(15) @(negedge clk);
-            if(floppy_bytes) $fatal(1,"mount leaked into legacy disk buffer");
+            word_io('h1c);word_io(2);finish_command;repeat(10) @(negedge clk);
+            check_request(1,0,0);word_io('h117);
+            for(i=0;i<512;i=i+1) word_io(i==29 ? 4 : 0);
+            finish_command;repeat(15) @(negedge clk);
+            if(floppy_bytes) $fatal(1,"probe leaked into legacy disk buffer");
         end
         inw('h430,value);if(value!=16'hff01) $fatal(1,"IDE image missing");
         set_taskfile('h12);

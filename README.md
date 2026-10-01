@@ -26,11 +26,10 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
   `.pcd` file). Policenauts plays with its CD music.
 - **Hard disk:** IDE with raw VHD/IMG/IMA and HDI images, bootable directly. Both
   512-byte and old 256-byte-sector (SASI) HDIs boot and can be written.
-- **Floppies:** two drives, D88 images (read/write, so games can save). Convert
-  HDM/FDI/XDF floppies to D88 with the
-  [online converter](https://pc98.thefirstboss.com/converter/) or
-  `scripts/import_disk_image.py` (same sectors, nothing lost). Native HDM/FDI
-  loading was removed in B231 to free FPGA area.
+- **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only). Games that
+  save to their own disk (Revival Xanadu, for example) need D88: convert with the
+  [online converter](https://pc98.thefirstboss.com/converter/). MiSTer Main
+  treats `.fdi` files as Spectrum images; rename or convert them to `.hdm`/`.d88`.
 - **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
   (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
@@ -300,7 +299,7 @@ and Lemmings into its intro through a temporary loader on #142. The integrated
 #143R2 revision remains to be hardware-tested. MiSTer Main intercepts PC-98 `.fdi` files as Spectrum images; a
 byte-identical `.hdm` copy bypasses that host bug. It is not fully qualified
 yet. See [format limits](rtl/storage/README.md) and [CPU speed control](rtl/Z486_PC98.md).
-Native HDM/FDI mounts were read-only and were removed in B231 (convert to D88). Native NFD
+Native HDM/FDI mounts are read-only; D88 supports saving as before. Native NFD
 loading was removed after B167 to free FPGA area; convert NFD images to D88 with
 `scripts/import_disk_image.py`.
 
