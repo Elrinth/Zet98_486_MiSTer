@@ -92,7 +92,7 @@ module ao486_extmem_tb;
                                {memory[20'h595],memory[20'h594]}!=(RAM_MB==64 ? 48 : 0))
                                 $fatal(1,"incorrect PC-98 BIOS memory counts");
                             if(memory[20'h501]!=(RAM_MB==0 ? identity_flag : (identity_flag & 8'hbf)) ||
-                               memory[20'h480]!=8'h50 || memory[20'h500]!=8'h03)
+                               memory[20'h480]!=(RAM_MB==0 ? 8'h50 : 8'h53) || memory[20'h500]!=8'h03)
                                 $fatal(1,"incorrect CPU identity correction or unrelated BIOS mutation");
                             for(n=0;n<used;n=n+1) if(words[n]!=(64'ha5987e21c0359bf4 ^ keys[n]))
                                 $fatal(1,"memory initializer did not restore probe words");
