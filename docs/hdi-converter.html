@@ -132,6 +132,13 @@ function patchBpb(out, o, oldStart, newLba) {
   const hidden18 = u32(out, o + 0x18), hidden1c = u32(out, o + 0x1C);
   if (u16(out, o + 0x1E) === 256 && (hidden18 === old256 || hidden18 === oldLog)) {
     // NEC's older layout: physical hidden sectors at 18h, physical sector size at 1Eh
+    // and the data-area start in physical sectors at 1Ch (the boot code loads
+    // IO.SYS from [18h]+[1Ch]; Binyu Hunter, Totsugeki! Mix).
+    if (hidden18 === old256) {
+      const data = u16(out, o + 0x1C) * 256;
+      if (data % BPS) throw new ConvertError("the NEC boot record's data-area start is not 512-byte aligned");
+      put16(out, o + 0x1C, data / BPS);
+    }
     put32(out, o + 0x18, hidden18 === old256 ? newLba : newLog);
     put16(out, o + 0x1E, BPS);
     return "NEC" + nec;

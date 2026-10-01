@@ -92,6 +92,13 @@ def patch_bpb(pbr, old_start, new_lba):
     hidden1c = struct.unpack_from('<I', pbr, 0x1C)[0]
     if struct.unpack_from('<H', pbr, 0x1E)[0] == 256 and hidden18 in (old256, old_log):
         # NEC's older layout: physical hidden sectors at 18h, physical sector size at 1Eh
+        # and the data-area start in physical sectors at 1Ch (the boot code loads
+        # IO.SYS from [18h]+[1Ch]; Binyu Hunter, Totsugeki! Mix).
+        if hidden18 == old256:
+            data = struct.unpack_from('<H', pbr, 0x1C)[0] * 256
+            if data % BPS:
+                raise SystemExit("the NEC boot record's data-area start is not 512-byte aligned")
+            struct.pack_into('<H', pbr, 0x1C, data // BPS)
         struct.pack_into('<I', pbr, 0x18, new_lba if hidden18 == old256 else new_log)
         struct.pack_into('<H', pbr, 0x1E, BPS)
         return 'NEC' + nec
