@@ -189,6 +189,9 @@ parameter CONF_STR = {
 	"-;",
 	"ONP,HDMI scaling,Fit native,Integer fit,Integer zoom,Stretch,CRT 4:3,Custom aspect;",
 	"O12,Aspect ratio,4:3,16:9,Full Screen;",
+`ifdef ZET98_AO486
+	"oBC,CPU speed,Full,386/486,286,V30;",
+`endif
 	"-;",
 	"P1,Audio & Video;",
 	"P1O3,Video test,Off,Color bars;",
@@ -840,9 +843,13 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
 	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
 	.pIDEReadData(artic_oe ? artic_readdata : ide_readdata), .pIDEOE(ide_oe | artic_oe), .pIDEIRQ(ide_irq),
-	// Full compiled clock only. Keep saved status bits 29:28 reserved so an
-	// old slower-speed selection cannot re-enable the unqualified throttle.
-	.pCPUSpeed(2'b00),
+	// z486 execution-rate throttle (rtl/vendor/z486/cpu_throttle.sv): Full,
+	// ~8 MIPS 386/486, ~2 MIPS 286-12, ~0.8 MIPS V30-10 class. Only CPU
+	// execution slows; timers, video, sound and DMA are unaffected. Changes
+	// apply at once. Status bits 44:43 were never used before; bits
+	// 29:28 (the old throttle selection) stay reserved so a stale saved value
+	// cannot select a slow speed by itself.
+	.pCPUSpeed(status[44:43]),
 	.pMPUReadData(mpu_readdata), .pMPUOE(mpu_oe), .pMPUIRQ(mpu_irq),
     .pCPUDebug(cpu_debug_snapshot),
 

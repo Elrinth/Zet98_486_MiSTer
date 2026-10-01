@@ -452,7 +452,6 @@ reg        d2_waited_r;             // D2 held after predecessor delay slot
 reg        d2_stale_slot_r;         // D2 also waited during predecessor delay slot
 reg        d2_ea_split_done_r;      // D2a captured base + scaled index
 wire       d2_ea_split_wait;        // Three-term EA needs its D2a cycle
-reg        throttle_parked_r;       // predecessor retired; successor D2 waits for rate debt
 wire [11:0] d2_entry_r;             // Effective entry resident in D2
 wire        d2_rom_mem_resident;    // D2 entry tag aligned with ROM q_mem
 wire       init_cycle = d2_valid_r; // Temporary waveform alias; not control logic
@@ -584,9 +583,23 @@ dec_entry_t d1_issue_entry;
 // entry before starting the ROM. This removes the live opcode/group decode
 // from the microcode-ROM input. It adds one cycle only to a direct D1 launch.
 wire       d1_issue_usable = !PC98_MODE && d1_issue_direct;
+// Fixed-clock CPU throttle (cpu_throttle.sv). While execution-rate debt is
+// due, no new instruction is launched into D2 (i_entry here, hardwired
+// chaining and the shift prestart likewise), exactly as if the frontend had
+// no instruction ready; the predecessor completes its boundary normally and
+// interrupts are recognized there. A successor already resident in D2 always
+// issues. (Holding a resident D2 at the D2->EX edge split overlapped
+// boundaries: a held VIPT successor kept the ROM shadow so a microcoded
+// load's delay slot re-executed a stale word and its EAX write was lost, and a
+// stale delay-slot word counted as execution livelocked the debt.)
+wire        throttle_hold;
+wire        throttle_full;
+wire        throttle_debt_high;
+reg         throttle_rep_break_r;    // REP string takes its restart exit
 wire       i_entry_raw = (i_rni || i_rni_delay || ~uc_active) && ~halted && !stall &&
                          (d1_issue_usable || !decq_empty) && !q_flush && !d2_valid &&
-                         !fault_suppress_delay_slot && !interrupt_entry;
+                         !fault_suppress_delay_slot && !interrupt_entry &&
+                         !throttle_hold;
 assign     i_entry = i_entry_raw && !any_fault_issue;
 // synthesis translate_off
 always_ff @(posedge clk) begin
@@ -602,26 +615,10 @@ wire       interrupt_deliverable = tf_trap_pending || nmi_request_active ||
                                    (intr_pending && EFLAGS[9] && !inhibit_interrupts);
 wire       interrupt_at_boundary = i_rni_delay && interrupt_deliverable && !single_step;
 
-// Fixed-clock CPU throttle. Hardwired memory/stack pairs remain atomic while
-// the controller repays execution-rate debt between instructions.
-wire        throttle_hold;
-wire        throttle_release_ready;
-wire        throttle_full;
-// Loads/POPs defer their GPR commit, while PUSH recipes retain an architectural
-// stack-update delay slot after WR. Splitting either pair can replay the entry
-// word; for PUSH SP that changes the posted data from old SP to post-push SP.
-wire        throttle_atomic_chain = recipe_state.hardwired && uc_active && i_rni &&
-    ((recipe_state.commit_sel == RECIPE_COMMIT_MEM) ||
-     ((recipe_state.commit_sel == RECIPE_COMMIT_ESP) && recipe_state.slot_has_work));
-// D2 launch is normally hidden under the predecessor's last cycle. When the
-// predecessor has already retired, overlap it with the final repayment cycle.
-wire        throttle_release_cycle = throttle_parked_r && throttle_release_ready;
 
 assign     d2_valid = d2_valid_r;
 wire       d2_payload_ready = d2_push && !d2_ea_split_wait;
 wire       d2_ready_before_fault = d2_payload_ready && !stall &&
-                      (!throttle_hold || throttle_atomic_chain ||
-                       throttle_release_cycle) &&
                       !(i_rni && tf_trap_pending && !single_step) &&
                       !interrupt_at_boundary && !q_flush &&
                       !d2_vipt_ea_hazard;
@@ -716,7 +713,7 @@ wire       vipt_load_exec_block = vipt_load_busy && !vipt_load_overlap_wb;
 assign uc_exec = core_live && !(mem_servicing ? mem_block_busy : mem_block_idle) &&
                  !stall_wio && !stall_d2 && !stall_x87_direct && !stall_invlpg &&
                  !stall_fast_store &&
-                 !d2_release_hold && !throttle_parked_r && !recipe_slot_stale &&
+                 !d2_release_hold && !recipe_slot_stale &&
                  !vipt_load_exec_block && !rmw_fallback_delay_r &&
                  !(vipt_load_rom_shadow_r && recipe_state.jcc);
 wire       uc_exec_writeback = uc_exec;  // local copies for reducing fanout
@@ -1210,7 +1207,7 @@ hardwired_control hardwired_control_inst (
     .branch_redirect(branch_ustep_redirect)
 );
 
-// D2 residency and throttle state. Microcode ROM/address flow is owned by
+// D2 residency state. Microcode ROM/address flow is owned by
 // microsequencer; this block controls only the macro instruction presented to it.
 always_ff @(posedge clk) begin
     if (!reset_n) begin
@@ -1218,7 +1215,6 @@ always_ff @(posedge clk) begin
         d2_waited_r <= 1'b0;
         d2_stale_slot_r <= 1'b0;
         d2_ea_split_done_r <= 1'b0;
-        throttle_parked_r <= 1'b0;
         stack_init_pending <= 1'b0;
     end else begin
         if (d2_start || i_issue || q_flush || any_fault) begin
@@ -1239,15 +1235,6 @@ always_ff @(posedge clk) begin
             d2_ea_split_done_r <= 1'b1;
         else if (d2_start || i_issue)
             d2_ea_split_done_r <= 1'b0;
-
-        if (!d2_valid || i_issue || q_flush || any_fault ||
-            interrupt_at_boundary || throttle_full)
-            throttle_parked_r <= 1'b0;
-        else if (d2_valid && i_rni_delay && throttle_hold &&
-                 (uc_exec || recipe_slot_stale))
-            // Retire the predecessor's architectural delay slot on this edge,
-            // then keep the prefetched successor out of EX until release.
-            throttle_parked_r <= 1'b1;
 
         if (any_fault)
             d2_valid_r <= 1'b0;
@@ -2136,7 +2123,7 @@ wire iack_busop = uc_p_iack;        // IACK bus operation (interrupt acknowledge
 // waiting for literals. It is not an EX uop yet and must not issue its bus op.
 assign mem_op_eligible = core_live && !mem_servicing &&
                          !stall_d2 && !d2_release_hold &&
-                         !throttle_parked_r && !vipt_load_exec_block &&
+                         !vipt_load_exec_block &&
                          !vipt_load_rom_shadow_r &&
                          !(i_rni_delay && d2_vipt_candidate);
 // A failed protection test redirects after its third architectural delay uop.
@@ -2615,12 +2602,20 @@ always_comb begin
     seq_conditions.nested_task = EFLAGS[14];
     seq_conditions.io_ok = !pe ||
         (cpl <= EFLAGS[13:12] && (!vm || !i.port_io));
-    seq_conditions.no_interrupt = !interrupt_pending;
+    seq_conditions.no_interrupt = !interrupt_pending && !throttle_rep_break_r;
     seq_conditions.x87_not_busy = ENABLE_X87 ? x87_busy_n : 1'b1;
     seq_conditions.x87_error = ENABLE_X87 ? !x87_error_n : 1'b0;
     seq_conditions.task_16bit = !desc_cache[6].seg_type[3];
     seq_conditions.desc_accessed = desc_raw_hi[8];
 end
+
+// A REP string instruction that has run up a large throttle debt leaves its
+// iteration loop through the interrupt exit (RPTI): EIP is restored to the
+// REP and it is refetched, relaunched once the debt is repaid, and resumes
+// with the remaining count. Interrupts are then serviced between iterations
+// instead of after the whole string's debt.
+always_ff @(posedge clk)
+    throttle_rep_break_r <= reset_n && throttle_debt_high && i.rep_lock[1];
 
 always_ff @(posedge clk) begin
     if (!reset_n) begin
@@ -2958,10 +2953,6 @@ always_ff @(posedge clk) begin
 end
 
 // synthesis translate_off
-always @(posedge clk)
-    if (reset_n && throttle_parked_r && !d2_valid)
-        $fatal(1, "throttle parked without a resident D2 successor");
-
 // RPTI marks its restarted instruction by writing EIP before presenting an
 // interrupt boundary. That ownership must not leak into interrupt delivery,
 // where it suppresses the delivery routine's normal completion boundary.
@@ -3569,9 +3560,8 @@ interrupt_controller interrupts (
     .inhibit_interrupts(inhibit_interrupts)
 );
 
-wire throttle_active_cycle = (i_issue && !throttle_parked_r) ||
-                             (uc_active && !stall && !d2_release_hold &&
-                              !throttle_parked_r);
+wire throttle_active_cycle = i_issue ||
+                             (uc_active && !stall && !d2_release_hold);
 
 cpu_throttle #(.CLOCK_RATE_MHZ(CLOCK_RATE_MHZ), .PC98_MODE(PC98_MODE)) throttle (
     .clk(clk),
@@ -3579,8 +3569,9 @@ cpu_throttle #(.CLOCK_RATE_MHZ(CLOCK_RATE_MHZ), .PC98_MODE(PC98_MODE)) throttle 
     .speed_sel(cpu_speed_sel),
     .active_cycle(throttle_active_cycle),
     .hold(throttle_hold),
-    .release_cycle(throttle_release_ready),
-    .full_speed(throttle_full)
+    .release_cycle(),
+    .full_speed(throttle_full),
+    .debt_high(throttle_debt_high)
 );
 
 

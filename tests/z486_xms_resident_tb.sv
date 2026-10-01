@@ -35,8 +35,25 @@ module z486_xms_resident_tb;
     reg ddr_busy=0,ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
     wire pegc_mode256,pegc_single_page;
+    // +cpu_speed=N drives the z486 execution-rate throttle (0=full). Slower
+    // settings scale the watchdog unless +watchdog_scale=N overrides it.
+    reg [1:0] tb_cpu_speed=0;
+    integer watchdog_scale=1,speed_arg=0;
+    initial begin
+        if($value$plusargs("cpu_speed=%d",speed_arg)) tb_cpu_speed=speed_arg[1:0];
+        watchdog_scale=tb_cpu_speed==0 ? 1 : tb_cpu_speed==1 ? 4 : tb_cpu_speed==2 ? 16 : 40;
+        void'($value$plusargs("watchdog_scale=%d",watchdog_scale));
+    end
+    // Execution-rate evidence: wall cycles, issued instructions, and cycles
+    // the throttle charged as execution, printed with the PASS line.
+    integer rate_cycles=0,rate_issued=0,rate_active=0;
+    always @(posedge clk) if(!reset) begin
+        rate_cycles<=rate_cycles+1;
+        if(dut.cpu.core.i_issue) rate_issued<=rate_issued+1;
+        if(dut.cpu.core.throttle_active_cycle) rate_active<=rate_active+1;
+    end
     pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE),.LOWMEM_CACHE(LOWMEM_CACHE),.PEGC_ENABLE(PEGC_ENABLE)) dut(
-        .cpu_speed_sel(2'b0),.pegc_analog16(1'b1),.pegc_display_enable(1'b1),.pegc_gdc_5mhz(1'b1),
+        .cpu_speed_sel(tb_cpu_speed),.pegc_analog16(1'b1),.pegc_display_enable(1'b1),.pegc_gdc_5mhz(1'b1),
         .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_pixel_clk(clk),
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
@@ -54,6 +71,7 @@ module z486_xms_resident_tb;
     integer checked_words=0;
     reg [7:0] irq_mask=8'hff;
     integer irq_accepted=0,irq_eoi=0;
+    integer irq_window=0,irq_window_start=0;  // clocks with IRQ0 unmasked
     always @(posedge clk) if(PIT_PM_TEST) begin
         if(reset || irq_mask[0]) interrupt_do<=0;
         else if(interrupt_done) begin
@@ -172,7 +190,11 @@ module z486_xms_resident_tb;
                     bus_readdata=16'hffff;
                     if(PIT_PM_TEST && held_address==2) begin
                         bus_readdata={8'hff,irq_mask};
-                        if(held_write) irq_mask=held_data[7:0];
+                        if(held_write) begin
+                            if(irq_mask[0] && !held_data[0]) irq_window_start=ticks;
+                            if(!irq_mask[0] && held_data[0]) irq_window=irq_window+ticks-irq_window_start;
+                            irq_mask=held_data[7:0];
+                        end
                     end
                     if(PIT_PM_TEST && held_write && held_address==0 && held_data[7:0]==8'h20)
                         irq_eoi=irq_eoi+1;
@@ -200,7 +222,7 @@ module z486_xms_resident_tb;
                         if(PIT_PM_TEST) begin
                             if(irq_accepted<3 || irq_eoi<irq_accepted || irq_mask!=8'hff)
                                 $fatal(1,"incomplete protected IRQ control accepted=%0d eoi=%0d mask=%h",irq_accepted,irq_eoi,irq_mask);
-                            $display("PASS: protected32 IRQ/IRETD and real-mode restoration; accepted=%0d EOI=%0d",irq_accepted,irq_eoi);
+                            $display("PASS: protected32 IRQ/IRETD and real-mode restoration; accepted=%0d EOI=%0d window=%0d",irq_accepted,irq_eoi,irq_window);
                         end
                         for(integer j=0;j<16'h664;j=j+1)
                             if(has_resident && j>=16'h70 && memory[20'h058d0+j]!==resident_original[j])
@@ -222,6 +244,7 @@ module z486_xms_resident_tb;
                             for(integer a=32'h40000;a<32'ha0000;a=a+1) $fwrite(dump_fd,"%c",memory[a]);
                             $fclose(dump_fd);
                         end
+                        $display("RATE speed=%0d cycles=%0d issued=%0d active=%0d",tb_cpu_speed,rate_cycles,rate_issued,rate_active);
                         $display("PASS: actual z486 resident XMS call; preserved driver code, verified %0d data bytes, resize=%0d DDR=%0d",checked_words*8,resized,ddr_commands);
                         $finish;
                     end
@@ -325,5 +348,5 @@ module z486_xms_resident_tb;
             $display("XMS EIP=%h uaddr=%h DDR=%0d AX=%h BX=%h CX=%h DX=%h SI=%h DI=%h SP=%h DS=%h",dut.cpu.eip,dut.cpu.core.uaddr,ddr_commands,dut.cpu.core.EAX,dut.cpu.core.EBX,dut.cpu.core.ECX,dut.cpu.core.EDX,dut.cpu.core.ESI,dut.cpu.core.EDI,dut.cpu.core.ESP,dut.cpu.core.seg_unit.desc_cache[3].base);
         end
     end
-    initial begin #(WATCHDOG_NS); $fatal(1,"XMS watchdog EIP=%h uaddr=%h DDR=%0d triple=%b",dut.cpu.eip,dut.cpu.core.uaddr,ddr_commands,dut.cpu.triple_fault); end
+    initial begin #1; repeat(watchdog_scale) #(WATCHDOG_NS); $fatal(1,"XMS watchdog EIP=%h uaddr=%h DDR=%0d triple=%b",dut.cpu.eip,dut.cpu.core.uaddr,ddr_commands,dut.cpu.triple_fault); end
 endmodule

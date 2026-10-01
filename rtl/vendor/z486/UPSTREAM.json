@@ -18,7 +18,7 @@
     "PC98 entry ROM reads a registered opcode/prefix tag and waits for the matching result instead of routing speculative next-window decode into M10K",
     "PC98 memory ModR/M EAs always stage base/index before displacement/segment relocation, with live-address equivalence assertion",
     "optional bank-aware upper conventional instruction cache, direct-store line invalidation, and speculative-fetch discard on full cache invalidation",
-    "PC98 runtime Full/60/30/15 execution-rate selections using upstream cpu_throttle; actual host clock propagated from SYSFREQ",
+    "PC98 runtime Full/33/8/3 MHz execution-rate selections (OSD CPU speed) using cpu_throttle with a 20-bit debt repaid on every non-execution cycle; actual host clock propagated from SYSFREQ. The throttle gates new D2 launches (i_entry/chain/prestart) instead of holding a resident D2 at D2->EX (that split hung or lost a delay-slot GPR write), and REP strings take their RPTI restart exit at high debt.",
     "Preserve visible real-mode CS across CR0.PE transitions; track entry CPL0 until CS reload, fixing HIMEMX block-resize corruption.",
     "Commit the successor VIPT load WB after older hardwired-load memory tokens (write and forward priority); fixes mov r,[m] followed by add r,[m] keeping the MOV value (PC-98 Doom R_PrecacheLevel).",
     "Deferred memory/shift GPR tokens stop committing and forwarding once a younger load WB has written their register or a younger RMW-fast step replaced OPR_R (they still recommit through stalls to deliver late OPR_R data, e.g. POP).",

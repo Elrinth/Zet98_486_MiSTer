@@ -7,7 +7,8 @@ relative to the IDT base, taken as the lowest gate address seen unless
 """
 import argparse
 
-TYPES = {1: 'GATE', 2: 'MODE', 3: 'TRIPLE', 4: 'PORT_F0', 5: 'RESETVEC', 6: 'PF', 7: 'WALK', 8: 'WATCHWR', 9: 'EXTWR', 10: 'IOWR', 11: 'IORD'}
+TYPES = {1: 'GATE', 2: 'MODE', 3: 'TRIPLE', 4: 'PORT_F0', 5: 'RESETVEC', 6: 'PF', 7: 'WALK', 8: 'WATCHWR', 9: 'EXTWR', 10: 'IOWR', 11: 'IORD',
+         12: 'FAR', 13: 'MATCHWR', 14: 'SAMPLE'}
 EXC = {0: '#DE', 1: '#DB', 2: 'NMI', 3: '#BP', 4: '#OF', 5: '#BR', 6: '#UD', 7: '#NM', 8: '#DF',
        10: '#TS', 11: '#NP', 12: '#SS', 13: '#GP', 14: '#PF', 16: '#MF', 17: '#AC'}
 
@@ -39,6 +40,17 @@ for e in entries[-a.last:]:
     vm = (e >> 8) & 1; pe = (e >> 7) & 1; seq = e & 0x7f
     what = TYPES.get(t, '?%d' % t)
     extra = ''
+    if t == 12:
+        ip = (e >> 92) & 0xffff; sp = (e >> 76) & 0xffff
+        print('%3d FAR      %04x:%04x SP=%04x  from %04x:%04x  VM=%d PE=%d' % (seq, cs, ip, sp, pay >> 16, pay & 0xffff, vm, pe))
+        continue
+    if t == 13:
+        ip = (e >> 92) & 0xffff; sp = (e >> 76) & 0xffff
+        print('%3d MATCHWR  at %04x:%04x SP=%04x  [%08x] = %08x (be %x)' % (seq, cs, ip, sp, (e >> 8) & 0xffffffff, pay, (e >> 40) & 15))
+        continue
+    if t == 14:
+        print('%3d SAMPLE   %04x:%08x VM=%d PE=%d  EFLAGS %08x IF=%d' % (seq, cs, eip, vm, pe, pay, (pay >> 9) & 1))
+        continue
     if t == 1:
         v = (pay - idt) // 8
         extra = 'vec %02Xh %s gate@%08x' % (v, EXC.get(v, ''), pay)

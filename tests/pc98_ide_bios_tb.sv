@@ -27,13 +27,22 @@ module pc98_ide_bios_tb;
     wire ddr_read, ddr_write;
     wire ddr_busy=0, ddr_readdatavalid=0;
     wire [63:0] ddr_readdata=0;
+    // +cpu_speed=N drives the z486 execution-rate throttle (0=full); slower
+    // settings scale the watchdog unless +watchdog_scale=N overrides it.
+    reg [1:0] tb_cpu_speed=0;
+    integer watchdog_scale=1,speed_arg=0;
+    initial begin
+        if($value$plusargs("cpu_speed=%d",speed_arg)) tb_cpu_speed=speed_arg[1:0];
+        watchdog_scale=tb_cpu_speed==0 ? 1 : tb_cpu_speed==1 ? 4 : tb_cpu_speed==2 ? 16 : 40;
+        void'($value$plusargs("watchdog_scale=%d",watchdog_scale));
+    end
     pc98_ao486 #(.LOWMEM_CACHE(LOWMEM_CACHE)) dut (
         .pegc_analog16(1'b0),.pegc_display_enable(1'b0),.pegc_gdc_5mhz(1'b0),
         .pegc_mode256(),.pegc_single_page(),.pegc_pixel_clk(clk),
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
         .pegc_video_readdatavalid(),.pegc_video_readdata(),
-        .cpu_speed_sel(2'b0),.*);
+        .cpu_speed_sel(tb_cpu_speed),.*);
 
     reg [7:0] memory [0:1048575];
     reg [7:0] ports [0:65535];
@@ -178,7 +187,7 @@ module pc98_ide_bios_tb;
         @(negedge clk); reset = 0;
     end
     initial begin
-        #(WATCHDOG_NS);
+        #1; repeat(watchdog_scale) #(WATCHDOG_NS);
         $fatal(1, "CPU watchdog: transfers=%0d boots=%0d IRQs=%0d PC=%h", transactions, boot_count,
                irq_count, dut.cpu.eip);
     end

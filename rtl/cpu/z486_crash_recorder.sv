@@ -19,6 +19,7 @@
 // 642h/644h reads) and dumps every 10 s without freezing for good.
 //   [123:108] CS  [107:76] EIP  [75:44] payload (gate address, EFLAGS, data)
 //   [43:41] #PF code  [40:9] CR2  [8] VM  [7] PE  [6:0] sequence
+//   type 14 (DE_TRIGGER): periodic CS:EIP sample, payload = EFLAGS
 // DE_TRIGGER=1 (-RecorderDivide): armed from power-on, real-mode vector reads
 // are logged too, and the first divide error (vector 0) freezes the ring
 // instead of reset-type events: the last entry is the faulting CS:EIP. I/O
@@ -89,6 +90,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg pause = 0;                   // IO_MODE: recording paused while dumping
     reg [15:0] prev_cs = 0;
     reg [15:0] prev_ip = 0;
+    // DE_TRIGGER: type 14 samples CS:EIP and EFLAGS every 2^20 clocks, so a
+    // hang shows where it spins and whether interrupts are enabled.
+    reg [19:0] sample_div = 0;
+    reg sample_req = 0;
     wire de_at_ip = DE_TRIGGER && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS && eip[15:0] == DE_FREEZE_IP[15:0];
     wire de_far = DE_TRIGGER && (cs != prev_cs || de_at_ip);
     wire de_match = DE_TRIGGER && mem_write && (mem_addr[31:8] == DE_STACK ||mem_data[15:0] == DE_MATCH || mem_data[31:16] == DE_MATCH ||
@@ -108,6 +113,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         end else if (gate_read && !pe && DE_TRIGGER) begin ev_type = 4'd1; ev_payload = gate_addr; end
         else if (de_match) begin ev_type = 4'd13; ev_payload = mem_data; end
         else if (de_far) begin ev_type = 4'd12; ev_payload = {prev_cs, prev_ip}; end
+        else if (DE_TRIGGER && sample_req) begin ev_type = 4'd14; ev_payload = eflags; end
         else if (de_io_wr) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
         else if (de_io_rd) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
         else if (pf_d2) begin ev_type = 4'd7; ev_payload = cr3; end
@@ -123,7 +129,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     end
     wire [127:0] entry = ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
-                         ev_type >= 4'd10 ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
+                         (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd7 ? {ev_type, 15'd0, a20, walk_pde, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type >= 4'd8 ? {ev_type, 12'd0, mem_be, mem_addr, ev_payload, pf_code, pf_addr, vm, pe, seq}
                                          : {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq};
@@ -138,6 +144,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         else up_div <= up_div + 1'b1;
     wire timed_freeze = DE_TRIGGER && DE_FREEZE_SECONDS != 0 && up_seconds >= DE_FREEZE_SECONDS;
     always @(posedge clk) begin
+        sample_div <= sample_div + 1'b1;
+        if (sample_div == 0) sample_req <= 1'b1;
+        else if (ev_valid && ev_type == 4'd14 && armed && !frozen && !pause) sample_req <= 1'b0;
         prev_pe <= pe; prev_vm <= vm;
         prev_cs <= cs; prev_ip <= eip[15:0];
         pf_d1 <= page_fault; pf_d2 <= pf_d1 && pe;

@@ -118,7 +118,7 @@ try {
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
     [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
     $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
-    'FullOnly' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
+    'OSD Full/33/8/3 MHz' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
     $Seed | Set-Content -LiteralPath (Join-Path $buildRoot 'fitter-seed.txt')
     $BuildCpus | Set-Content -LiteralPath (Join-Path $buildRoot 'build-cpus.txt')
     $BuildMemoryGB | Set-Content -LiteralPath (Join-Path $buildRoot 'build-memory-gb.txt')

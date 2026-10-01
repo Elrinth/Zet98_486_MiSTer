@@ -17,6 +17,8 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 ## Features
 
 - **CPU:** z486 (486-class) at 90 MHz, **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
+  An OSD **CPU speed** setting slows the CPU for older speed-sensitive games
+  (see [game setup notes](#game-setup-notes)).
 - **Graphics:** 640x400 16 colours from 4096, GRCG and EGC, 256-colour PEGC,
   hardware scrolling and split screens, Kanji text with the character generator.
 - **Sound:** PC-9801-86 board: YM2608 OPNA (FM, SSG, rhythm) and 86 PCM, plus the beeper.
@@ -261,7 +263,16 @@ EMM386.EXE.
 | EDGE | - | Disk A in FDD0. For the intro, put disk C in FDD1 and choose START. The intro's split-screen frames are correct from B221. |
 | Mime | - | Keyboard works from B207 (8259 priority fix). |
 | Touhou 1-5 (Japanese originals) | - | All start; the English-patched 4 and 5 on the test disk show a black screen. |
+| Valis and other early (V30-era) games | CPU speed | Games that time themselves by CPU loops (written for an 8-10 MHz V30) can run too fast at Full; try **CPU speed: V30** (or 286). Not yet hardware-tested. |
 | Rusty, Nightslave, Bomber Quest, Brandish 2, Briganty, Branmarker 2, Dead of the Brain, Gate of Souls, Groundseed, Harlem Blade, Lemmings, Star Cruiser II, Starfire, The Screamer, Xenon, Yu-No | - | Reach the title or gameplay with either BIOS. |
+
+**CPU speed** (main menu): **Full** is the 90 MHz z486. **386/486** (~8 MIPS),
+**286** (~2 MIPS, a 286 at 10-12 MHz) and **V30** (~0.8 MIPS, a V30 at 8-10 MHz)
+limit only how fast the CPU executes instructions; the timer, video, sound,
+disk and DMA keep their real speed, so music tempo and frame timing do not
+change. Games that time themselves with the timer or vertical sync are already
+correct at Full; use the slower settings for games that count CPU loops. The
+setting takes effect immediately and can be changed while a game runs.
 
 BIOS: the known-working `boot.rom` is built from MAME's PC-9801VM set (see
 `docs/OPEN_BIOS_NOTES.md`). The PC-9801UX, PC-9821, PC-9821Ce2, PC-9821V13 and
@@ -292,7 +303,9 @@ not timing closure or a measured historical-CPU performance equivalence.
 
 Build #142 adds native HDM/FDI/NFD/HDI loading, CPU speed selection and MPU
 MIDI. Full90 diagnostics pass and the user confirms NightSlave MIDI music.
-**Use Full speed:**60/30 selections stall during DOS startup. Popful Mail has
+**Use Full speed:**60/30 selections stall during DOS startup (root cause found
+in simulation after B231 and fixed; the OSD option returned with Full/386-486/
+286/V30 settings, not yet hardware-tested; see [CPU speed control](rtl/Z486_PC98.md)). Popful Mail has
 striped graphics; Metal Force and Burning Dragon remain unresolved. A revised
 disk ROM boots the previously failing Xanadu HDI into user-confirmed gameplay
 and Lemmings into its intro through a temporary loader on #142. The integrated
