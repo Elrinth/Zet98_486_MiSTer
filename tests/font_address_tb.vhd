@@ -121,6 +121,35 @@ begin
                         report "bit 15 right half wrong" severity failure;
             end loop;
         end loop;
+        -- User-defined character writes (port A9h) with a zero high byte:
+        -- NP2kai treats code 0056h/0057h as the user character (bit 7 of A1h
+        -- dropped), never as ANK 'V'/'W'. Compare with the 80h-high-byte form.
+        for row in 16#56# to 16#57# loop
+            for half in 0 to 1 loop
+                output(16#a3#,row); output(16#a5#,half*32+3);
+                output(16#a1#,16#80#);
+                wait until falling_edge(clk);
+                port_number<=x"00a9"; value<=x"5a"; wr<='1';
+                wait for 1 ns;
+                assert font_write='1' report "A9h write strobe missing" severity failure;
+                left_sel:=bank; left_addr:=address;
+                wait until falling_edge(clk); wr<='0';
+                output(16#a1#,0);
+                wait until falling_edge(clk);
+                port_number<=x"00a9"; value<=x"5a"; wr<='1';
+                wait for 1 ns;
+                assert font_write='1' and bank=left_sel and address=left_addr
+                    report "User character write with zero high byte missed the user character" severity failure;
+                assert not (bank="00" and unsigned(address)>=16#800#+row*16 and unsigned(address)<16#800#+row*16+16)
+                    report "User character write overwrote ANK glyph" severity failure;
+                wait until falling_edge(clk); wr<='0';
+                -- A read of the same code is still the ANK glyph.
+                wait until falling_edge(clk);
+                assert bank="00" and unsigned(address)=16#800#+row*16+3
+                    report "ANK read of code 56h/57h changed" severity failure;
+            end loop;
+        end loop;
+        report "PASS: zero-high-byte user character writes 56h/57h (both halves), ANK reads unchanged";
         report "PASS: text-VRAM right halves by low-byte bit 7 and by bit 15, all rows";
         report "PASS: 8192 ANK addresses and 282624 FONT.ROM addresses across 92 JIS rows";
         report "PASS: full FONT.ROM loader bank boundaries, range limits and write strobe";

@@ -16,6 +16,8 @@ architecture test of pc98_data_bus_tb is
     signal BNKAB_ODAT : std_logic_vector(7 downto 0) := (others => '0');
     alias CB_RD1 : std_logic is enables(2);
     signal CB_RDAT0 : std_logic_vector(15 downto 0) := (others => '0');
+    signal G_RD1, FONT_CB : std_logic := '0';
+    signal G_RDAT0 : std_logic_vector(15 downto 0) := (others => '0');
     alias COM_DOE : std_logic is enables(3);
     signal COM_ODAT : std_logic_vector(7 downto 0) := (others => '0');
     alias DBIO_DOE : std_logic is enables(4);
@@ -51,6 +53,7 @@ architecture test of pc98_data_bus_tb is
     alias KBoe : std_logic is enables(17);
     alias KNJ0_DOE : std_logic is enables(18);
     signal KNJ0_ODAT : std_logic_vector(7 downto 0) := (others => '0');
+    alias FONT_BYTE : std_logic_vector(7 downto 0) is KNJ0_ODAT;
     alias KNJ1_DOE : std_logic is enables(19);
     signal KNJ1_ODAT : std_logic_vector(7 downto 0) := (others => '0');
     alias KNJ2_DOE : std_logic is enables(20);
@@ -157,6 +160,9 @@ begin
             BNKAB_ODAT <= std_logic_vector(resize(random, BNKAB_ODAT'length));
             advance;
             CB_RDAT0 <= std_logic_vector(resize(random, CB_RDAT0'length));
+            advance;
+            G_RDAT0 <= std_logic_vector(resize(random, G_RDAT0'length));
+            G_RD1 <= random(20); FONT_CB <= random(21) and random(22);
             advance;
             COM_ODAT <= std_logic_vector(resize(random, COM_ODAT'length));
             advance;
@@ -307,6 +313,7 @@ begin
         -- FDC byte 5A must reach either memory lane; memory B6/C3 must
         -- reach the FDC low lane for even/odd DMA memory addresses.
         enables <= (others => '0'); tramdoe <= "00"; aramdoe <= "00";
+        G_RD1 <= '0'; FONT_CB <= '0';
         DMAen <= '1'; DMA_H2L <= '0'; DMA_L2H <= '0';
         FDC_DOE <= '1'; FDC_ODAT <= x"5a"; check;
         assert dbus = x"ff5a" severity failure;
@@ -337,6 +344,7 @@ begin
             end loop;
             -- FDC-to-memory writes select just one memory byte lane.
             enables <= (others=>'0'); tramdoe<="00"; aramdoe<="00";
+            G_RD1<='0'; FONT_CB<='0';
             FDC_DOE<=random(6); LDR_OE<=random(7);
             DMA_H2L<='1'; DMA_L2H<='0'; check;
             assert mem_wdata(7 downto 0)=legacy_bus(7 downto 0)

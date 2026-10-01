@@ -13,8 +13,10 @@
 # six CPU rates and 24 memory phases for both ports; 80ns must fail.
 # Unused upper plane outputs can disappear; require at least one 16-bit word.
 foreach port {cpu sub} {
-    set read_source [get_registers "*|ram|${port}_read_words*"]
-    set read_target [get_registers "*|ram|[string toupper $port]RDAT*"]
+    set read_source [get_registers -nowarn "*|ram|${port}_read_words*"]
+    set read_target [get_registers -nowarn "*|ram|[string toupper $port]RDAT*"]
+    # The GDC port (sub) is unused since graphics VRAM moved to block RAM.
+    if {$port eq "sub"} {continue}
     if {[get_collection_size $read_source] < 16 || [get_collection_size $read_target] < 16} {
         error "Expected completed $port read source and capture registers"
     }

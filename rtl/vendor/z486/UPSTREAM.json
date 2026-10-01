@@ -22,7 +22,8 @@
     "Preserve visible real-mode CS across CR0.PE transitions; track entry CPL0 until CS reload, fixing HIMEMX block-resize corruption.",
     "Commit the successor VIPT load WB after older hardwired-load memory tokens (write and forward priority); fixes mov r,[m] followed by add r,[m] keeping the MOV value (PC-98 Doom R_PrecacheLevel).",
     "Deferred memory/shift GPR tokens stop committing and forwarding once a younger load WB has written their register or a younger RMW-fast step replaced OPR_R (they still recommit through stalls to deliver late OPR_R data, e.g. POP).",
-    "A VIPT EX op whose destination is the register of a deferred memory token whose optimistic (DLY grace) read missed (mem_opt_wait) is routed to the slow path instead of capturing stale OPR_R (mov eax,[uncached]; and eax,[m])."
+    "A VIPT EX op whose destination is the register of a deferred memory token whose optimistic (DLY grace) read missed (mem_opt_wait) is routed to the slow path instead of capturing stale OPR_R (mov eax,[uncached]; and eax,[m]).",
+    "486 XADD (0F C0/C1) and CMPXCHG (0F B0/B1): D1 decodes them with the ADD/CMP r/m,r skeletons and enters optimizer-owned microcode at 9D1-9EA (scripts/ucode_optimize.py, copied from the doublej472 fork with the new PATCHES); CMPXCHG branches on ZF through JNcond with a decoded E condition. Registers change only after the memory write completed (XCHG m,r order)."
   ],
   "merged_forks": [
     {

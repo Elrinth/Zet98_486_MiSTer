@@ -504,7 +504,10 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/snac_psx_pad.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/stick_mouse.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_atapi.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/pc98_artic.sv
+set_global_assignment -name VHDL_FILE ../../VIDEO/font_prefetch.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/graphics/gvram_m10k_lanes.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/graphics/gvram_m10k.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/pegc_raster.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/graphics/pc98_pegc_control.sv

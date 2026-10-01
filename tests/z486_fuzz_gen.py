@@ -13,6 +13,7 @@ that defines the flags it reads. Memory operands stay inside the scratch areas:
 cached low RAM, uncached upper RAM and a 16 KB DDR window.
 """
 import json
+import os
 import random
 import sys
 
@@ -26,6 +27,9 @@ REGS = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi']
 R16 = {'eax': 'ax', 'ebx': 'bx', 'ecx': 'cx', 'edx': 'dx', 'esi': 'si', 'edi': 'di'}
 R8 = {'eax': 'al', 'ebx': 'bl', 'ecx': 'cl', 'edx': 'dl'}
 CC = ['e', 'ne', 'l', 'ge', 'le', 'g', 'b', 'ae', 'be', 'a', 's', 'ns']
+# Z486_FUZZ_486=1 adds 486 XADD/CMPXCHG blocks (existing seeds are unchanged
+# without it).
+EXT486 = os.environ.get('Z486_FUZZ_486') == '1'
 
 
 def gen(seed, blocks, block_len):
@@ -91,7 +95,45 @@ def gen(seed, blocks, block_len):
         if k == 3: return [f'mov {a},{absolute()}', f'shl {a},{rnd.randrange(1,8)}', f'add {a},{frame()}', f'mov {f},{a}']
         return [f'{rnd.choice(["add","sub"])} {f},{a}', f'mov {a},{f}', f'imul {a},{frame()}']
 
+    def ext486():
+        a, b = r(), r()
+        lock = rnd.choice(['', 'lock '])
+        k = rnd.randrange(12)
+        size = rnd.choice(['byte', 'word', 'dword', 'dword'])
+        def reg(x):
+            if size == 'byte':
+                return R8.get(x, 'bl')
+            return R16[x] if size == 'word' else x
+        acc = {'byte': 'al', 'word': 'ax', 'dword': 'eax'}[size]
+        pre, m = mem_op(size)
+        # Registers that a later reuse of m must not see modified.
+        free = [x for x in ['ebx', 'ecx', 'edx', 'esi', 'edi'] if x not in m]
+        if a not in free and k == 10:
+            a = rnd.choice(free)
+        if b not in free and k == 11:
+            b = rnd.choice(free)
+        tail = rnd.choice([[], [f'set{rnd.choice(CC)} {R8[rnd.choice(list(R8))]}'],
+                           [f'{rnd.choice(["adc","sbb"])} {r()},{r()}']])
+        if k == 0: return [f'xadd {reg(a)},{reg(b)}'] + tail
+        if k in (1, 2): return pre + [f'{lock}xadd {m},{reg(a)}'] + tail
+        if k == 3: return [f'cmpxchg {reg(a)},{reg(b)}'] + tail
+        if k == 4: return [f'mov {acc},{reg(a)}', f'cmpxchg {reg(a)},{reg(b)}'] + tail
+        if k in (5, 6): return pre + [f'{lock}cmpxchg {m},{reg(a)}'] + tail
+        if k in (7, 8):
+            # Compare-and-swap idiom: load, compute, LOCK CMPXCHG (usually equal).
+            new = rnd.choice(free)
+            return pre + [f'mov {acc},{m}', f'lea {new},[eax+{rnd.randrange(1, 9)}]',
+                          f'{lock}cmpxchg {m},{reg(new) if size != "byte" else R8.get(new, "dl")}'] + tail
+        if k == 9:
+            label[0] += 1
+            return pre + [f'{lock}cmpxchg {m},{reg(a)}', f'jnz .x{label[0]}',
+                          f'add {b},0x{rnd.getrandbits(16):x}', f'.x{label[0]}:']
+        if k == 10: return pre + [f'{lock}xadd {m},{reg(a)}', f'mov {reg(b)},{m}']
+        return pre + [f'mov {reg(b)},{m}', f'{lock}xadd {m},{reg(a)}', f'add {a},{b}']
+
     def one():
+        if EXT486 and rnd.random() < 0.2:
+            return ext486()
         if rnd.random() < 0.3:
             return idiom()
         k = rnd.randrange(34)
@@ -134,7 +176,7 @@ def gen(seed, blocks, block_len):
         if k == 32: return pre + [f'cmp {a},{m}', f'set{rnd.choice(CC)} {R8[rnd.choice(list(R8))]}']
         return [f'bswap {a}']
 
-    out += ['bits 16', 'cpu 486', 'org 100h', 'cli', 'cld', 'mov ax,cs', 'mov ds,ax',
+    out += ['bits 16', 'cpu 586' if EXT486 else 'cpu 486', 'org 100h', 'cli', 'cld', 'mov ax,cs', 'mov ds,ax',
             'xor al,al', 'out 0f2h,al', 'lgdt [gdtr]', 'mov eax,cr0', 'or al,1', 'mov cr0,eax',
             'jmp dword 8:pm32', 'align 8', 'gdt:', 'dq 0', 'dq 00cf9a010000ffffh', 'dq 00cf92000000ffffh',
             'gdtr:', 'dw $-gdt-1', 'dd 10000h+gdt', 'bits 32', 'pm32:', 'mov ax,10h', 'mov ds,ax', 'mov es,ax', 'mov ss,ax',

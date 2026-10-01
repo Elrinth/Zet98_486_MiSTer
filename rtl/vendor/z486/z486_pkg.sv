@@ -1058,6 +1058,10 @@ localparam [11:0] UADDR_PAGE_FAULT     = 12'h8E9;  // #PF(14) - page fault
 localparam [11:0] UADDR_INVALID_LOCK   = 12'h82B;  // #UD for invalid LOCK usage
 localparam [11:0] UADDR_BSWAP          = 12'h9C4;  // Optimizer-owned 486 BSWAP entry
 localparam [11:0] UADDR_NOP            = 12'h0B6;  // XCHG reg,AX entry (90h = NOP); INVD/WBINVD
+localparam [11:0] UADDR_XADD_R         = 12'h9D1;  // Optimizer-owned 486 XADD r,r
+localparam [11:0] UADDR_XADD_M         = 12'h9D4;  // Optimizer-owned 486 XADD m,r
+localparam [11:0] UADDR_CMPXCHG_R      = 12'h9DA;  // Optimizer-owned 486 CMPXCHG r,r
+localparam [11:0] UADDR_CMPXCHG_M      = 12'h9E1;  // Optimizer-owned 486 CMPXCHG m,r
 localparam [11:0] UADDR_CALL_GATE_386  = 12'h5BE;  // 386 call-gate handler
 localparam [11:0] UADDR_MORE_PRIVILEGE = 12'h5FB;  // Cross-privilege call path
 
