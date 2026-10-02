@@ -124,12 +124,13 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         else if (gate_read && (pe ? !gate_addr[2] : DE_TRIGGER)) begin ev_type = 4'd1; ev_payload = gate_addr; end
         else if (pe != prev_pe || vm != prev_vm) begin ev_type = 4'd2; ev_payload = eflags; end
         else if (watch_write) begin ev_type = 4'd8; ev_payload = mem_data; end
-        else if (ext_sample) begin ev_type = 4'd9; ev_payload = mem_data; end
+        else if (ext_sample && !DE_TRIGGER) begin ev_type = 4'd9; ev_payload = mem_data; end
         else ev_valid = 1'b0;
     end
-    wire [127:0] entry = ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
+    wire [127:0] entry = ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
+                         ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
-                         (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
+                         (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, eip, vm, pe, seq} :
                          ev_type == 4'd7 ? {ev_type, 15'd0, a20, walk_pde, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type >= 4'd8 ? {ev_type, 12'd0, mem_be, mem_addr, ev_payload, pf_code, pf_addr, vm, pe, seq}
                                          : {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq};

@@ -61,7 +61,7 @@ for e in entries[-a.last:]:
     elif t == 6:
         extra = 'PTE %08x' % pay
     elif t in (10, 11):
-        print('%3d %-5s port %04x = %08x  at %04x:%04x' % (seq, what, cs, eip, pay >> 16, pay & 0xffff))
+        print('%3d %-5s port %04x = %08x  at %04x:%08x' % (seq, what, cs, eip, pay >> 16, cr2 if cr2 else pay & 0xffff))
         continue
     elif t in (8, 9):
         print('%3d %-8s addr %08x = %08x (be %x)  PE=%d VM=%d' % (seq, what, eip, pay, cs & 15, pe, vm))
