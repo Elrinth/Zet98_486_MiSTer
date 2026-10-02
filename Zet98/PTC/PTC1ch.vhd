@@ -40,6 +40,8 @@ signal	LOADING		:std_logic;						-- control word written, count not yet
 signal	LSBHOLD		:std_logic_vector(7 downto 0);
 signal	WDATL		:std_logic_vector(7 downto 0);
 signal	lWRC		:std_logic;
+signal	OUTR		:std_logic;						-- OUT (readable copy of CNTOUT)
+signal	LATCHED		:std_logic;						-- latched count not read yet
 begin
 
 	process(clk,rstn)
@@ -83,13 +85,28 @@ begin
 		end if;
 	end process;
 
-	process(clk,rstn)begin
+	-- Counter latch: the count is held until it has been read (both bytes in
+	-- LSB/MSB mode); a second latch before that is ignored. Without a pending
+	-- latch a read returns the running count, as on the 8253.
+	process(clk,rstn)
+	variable lRDL	:std_logic;
+	begin
 		if(rstn='0')then
 			LATCOUNT<=(others=>'0');
+			LATCHED<='0';
+			lRDL:='0';
 		elsif(clk' event and clk='1')then
-			if(CNTLAT='1')then
+			if(LATCHED='0')then
 				LATCOUNT<=CURCOUNT;
+				if(CNTLAT='1')then
+					LATCHED<='1';
+				end if;
+			elsif(lRDL='1' and RD='0')then
+				if(RWMODE/="11" or DATH_Ln='1')then
+					LATCHED<='0';
+				end if;
 			end if;
+			lRDL:=RD;
 		end if;
 	end process;
 
@@ -109,7 +126,7 @@ begin
 			CURCOUNT<=(others=>'0');
 			RETCOUNT<=(others=>'0');
 			PERCOUNT<=(others=>'0');
-			CNTOUT<='0';
+			OUTR<='0';
 			LOADING<='0';
 			LSBHOLD<=(others=>'0');
 			WDATL<=(others=>'0');
@@ -138,9 +155,9 @@ begin
 			if(CTLWR='1')then
 				LOADING<='1';
 				if(CTLMODE="000")then
-					CNTOUT<='0';
+					OUTR<='0';
 				else
-					CNTOUT<='1';
+					OUTR<='1';
 				end if;
 			elsif(done)then
 				RETCOUNT<=newcnt;
@@ -150,12 +167,12 @@ begin
 				when "000" | "100" =>
 					CURCOUNT<=newcnt; PERCOUNT<=newcnt;
 					LOADING<='0';
-					CNTOUT<='0';
+					OUTR<='0';
 				when others =>					-- 2, 3: reload later unless just programmed
 					if(LOADING='1')then
 						CURCOUNT<=newcnt; PERCOUNT<=newcnt;
 						LOADING<='0';
-						CNTOUT<='1';
+						OUTR<='1';
 					end if;
 				end case;
 			elsif(LOADING='0')then
@@ -163,7 +180,7 @@ begin
 				when "000" =>
 					if(CNTIN='1')then
 						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
+							OUTR<='1';
 						else
 							CURCOUNT<=DECVAL;
 						end if;
@@ -172,54 +189,70 @@ begin
 					if(CNTIN='1')then
 						if(CURCOUNT>x"0000")then
 							if(CURCOUNT=x"0001")then
-								CNTOUT<='1';
+								OUTR<='1';
 							end if;
 							CURCOUNT<=DECVAL;
 						else
-							CNTOUT<='0';
+							OUTR<='0';
 						end if;
 					end if;
 				when "001" | "101" =>
 					if(CNTBGN='1')then
 						CURCOUNT<=RETCOUNT;
-						CNTOUT<='0';
+						OUTR<='0';
 					elsif(CNTIN='1')then
 						if(CURCOUNT>x"0000")then
 							if(CURCOUNT=x"0001")then
-								CNTOUT<='1';
+								OUTR<='1';
 							end if;
 							CURCOUNT<=DECVAL;
 						elsif(OPMODE="101")then
-							CNTOUT<='0';
+							OUTR<='0';
 						end if;
 					end if;
 				when "010" | "110" =>
 					if(CNTIN='1')then
 						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
+							OUTR<='1';
 							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
 						else
-							CNTOUT<='0';
+							OUTR<='0';
 							CURCOUNT<=DECVAL;
 						end if;
 					end if;
 				when "011" | "111" =>
-					if(CNTIN='1')then
-						if(CURCOUNT=x"0001")then
-							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
-						else
-							CURCOUNT<=DECVAL;
+					-- Square wave as on the 8253: the count steps down by 2 and
+					-- reloads at the end of each half, so a count written without
+					-- a control word applies from the next half. OUT starts high;
+					-- with an odd count the high half lasts (N+1)/2 inputs and the
+					-- low half (N-1)/2. IRQ0 (rising edge) comes once per period.
+					-- Windows 95's VTD times itself from latched mode 3 reads.
+					if(OPBCD='1')then
+						if(CNTIN='1')then
+							if(CURCOUNT=x"0001")then
+								CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
+							else
+								CURCOUNT<=DECVAL;
+							end if;
 						end if;
-					end if;
-					-- Square wave: OUT is high for the first half of each period
-					-- ((N+1)/2 counts) and low for the second, as on the 8253. A
-					-- reload restarts high, so the next rising edge (IRQ0) comes
-					-- after a full period; low-first made the BIOS interval timer,
-					-- which reloads from its callback, tick every half period.
-					if(CURCOUNT>HALFVAL)then
-						CNTOUT<='1';
-					else
-						CNTOUT<='0';
+						if(CURCOUNT>HALFVAL)then
+							OUTR<='1';
+						else
+							OUTR<='0';
+						end if;
+					elsif(CNTIN='1')then
+						if(CURCOUNT=x"0002" or (OUTR='0' and CURCOUNT=x"0003"))then
+							OUTR<=not OUTR;
+							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
+						elsif(CURCOUNT(0)='1')then
+							if(OUTR='1')then
+								CURCOUNT<=CURCOUNT-x"0001";
+							else
+								CURCOUNT<=CURCOUNT-x"0003";
+							end if;
+						else
+							CURCOUNT<=CURCOUNT-x"0002";
+						end if;
 					end if;
 				when others =>
 				end case;
@@ -278,5 +311,6 @@ begin
 	RDAT<=	LATCOUNT(7 downto 0) when DATH_Ln='0' else
 			LATCOUNT(15 downto 8);
 	OE<=RD;
+	CNTOUT<=OUTR;
 
 end rtl;

@@ -7,6 +7,7 @@
 -- must not change the mode.
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 use std.env.all;
 entity pit_mode3_tb is end;
 architecture test of pit_mode3_tb is
@@ -31,6 +32,9 @@ begin
         procedure put(a:std_logic_vector(1 downto 0); v:std_logic_vector(7 downto 0)) is begin
             addr<=a; wdat<=v; cs<='1'; wr<='1'; cycles(1); cs<='0'; wr<='0'; cycles(2);
         end;
+        procedure get(a:std_logic_vector(1 downto 0); v: out std_logic_vector(7 downto 0)) is begin
+            addr<=a; cs<='1'; rd<='1'; cycles(1); v:=rdat; cs<='0'; rd<='0'; cycles(2);
+        end;
         procedure load is begin     -- control word 36h, count N (LSB, MSB)
             put("11",x"36"); put("00",x"10"); put("00",x"00");
         end;
@@ -42,9 +46,26 @@ begin
             prev := cntout(0);
         end;
         variable r : boolean;
-        variable high_run : natural := 0;
+        variable high_run, wpos : natural := 0;
+        variable lo, hi : std_logic_vector(7 downto 0);
+        impure function cnt return natural is begin
+            return to_integer(unsigned(hi & lo));
+        end;
     begin
         cycles(3); rstn<='1'; cycles(3);
+        -- readback: mode 3 counts down by 2 (Windows 95's VTD times itself from
+        -- these reads); a latched count is held until read, live otherwise
+        load;
+        for i in 1 to 3 loop tick(r); end loop;
+        put("11",x"00");
+        for i in 1 to 2 loop tick(r); end loop;
+        get("00",lo); get("00",hi);
+        assert cnt=N-6 report "mode 3 readback: latched " & integer'image(cnt) & ", expected " & integer'image(N-6) severity failure;
+        get("00",lo); get("00",hi);
+        assert cnt=N-10 report "mode 3 readback: live " & integer'image(cnt) & ", expected " & integer'image(N-10) severity failure;
+        for i in 1 to 4 loop tick(r); end loop;   -- reload N at the half, then one input
+        put("11",x"00"); get("00",lo); get("00",hi);
+        assert cnt=N-2 report "mode 3 readback: second half " & integer'image(cnt) & ", expected " & integer'image(N-2) severity failure;
         load; prev:=cntout(0);
         assert cntout(0)='1' report "mode 3 OUT not high right after the count is loaded" severity failure;
         -- free running: high for N/2 inputs, then low for N/2
@@ -94,14 +115,16 @@ begin
                 put("00",x"10"); put("00",x"00");
             end if;
         end loop;
+        wpos:=ticks-last_rise;      -- inputs into the current period
         put("00",x"20"); put("00",x"00");
         rises:=0;
         for i in 1 to 8*N loop
             tick(r);
             if r then
                 rises:=rises+1;
-                if rises=1 then
-                    assert ticks-last_rise=N report "new count applied mid-period" severity failure;
+                if rises=1 then   -- the running half keeps N, the next one uses 2N
+                    assert (wpos<N/2 and ticks-last_rise=N/2+N) or (wpos>=N/2 and ticks-last_rise=N) report "new count not applied at the next half: " &
+                        integer'image(ticks-last_rise) severity failure;
                 else
                     assert ticks-last_rise=2*N report "new count not applied at the reload" severity failure;
                 end if;
@@ -134,7 +157,7 @@ begin
             end if;
         end loop;
         assert rises>=5 report "too few mode 0 edges" severity failure;
-        report "PASS: 8253 mode 3 starts high, reloads keep the full period, latch keeps the mode";
+        report "PASS: 8253 mode 3 counts by 2, starts high, reloads keep the full period, latch keeps the mode";
         report "PASS: count rewrites apply at the next reload; control words set OUT and wait for the count (no spurious IRQ0 edge)";
         finish;
     end process;
