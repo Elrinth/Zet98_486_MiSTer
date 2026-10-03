@@ -119,6 +119,8 @@ module z486
     output     [31:0]  dbg_walk_pte,
     output     [31:0]  dbg_cr3,
     output     [15:0]  dbg_SP,          // PC98 crash recorder: stack pointer (low word)
+    output             dbg_issue,       // PC98 crash recorder: instruction issue pulse
+    output     [31:0]  dbg_issue_eip,   // and the issued instruction's EIP
 
     // A fault while delivering #DF shuts down the 386 and requests reset.
     output reg          triple_fault_reset
@@ -2971,6 +2973,15 @@ always_ff @(posedge clk) begin
     end else if (i_issue) begin
         i <= i_bus;
         i.entry_point <= d2_entry_r;
+    end else if (any_fault_r) begin
+        // Fault delivery also runs while i still holds the faulting
+        // instruction or a younger, squashed one. A Jcc kind left here makes
+        // the delivery code's IND = SIGMA + constant (gate high dword, TSS
+        // stack) add the Jcc displacement instead: Win95 KERNEL32
+        // "mov [eax],imm32 / jne +37h" took a store #PF and read the IDT gate
+        // at +0A7h instead of +74h, forever. Registered fault: no late
+        // paging term on this input; the first such uStep is ~20 clocks on.
+        i.rel_branch_kind <= REL_BRANCH_NONE;
     end
     if (interrupt_entry)
         i.rel_branch_kind <= REL_BRANCH_NONE;
@@ -3592,5 +3603,8 @@ assign dbg_pf_addr   = latched_pf_addr;
 assign dbg_eflags    = EFLAGS;
 assign dbg_page_fault = page_fault;
 assign dbg_cr3       = CR3;
+assign dbg_issue     = i_issue;
+assign dbg_issue_eip = (uc_exec && recipe_rni && (uc_dest == DEST_eIP))
+    ? (is_dword ? eip_source_value : {16'h0, eip_source_value[15:0]}) : EIP;
 
 endmodule

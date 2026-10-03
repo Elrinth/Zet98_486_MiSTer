@@ -190,17 +190,28 @@ assign result = overflow ? (is_sar ? sar_overflow_result : 32'd0) : shifted[31:0
 // therefore the selected low-word bit; do not route the full 64-bit barrel
 // result back into the architectural flag write path.
 assign bit_test_cf = alu_operand[count[4:0]];
-// SHIFT2 writes the barrel result into SIGMA on the same edge that starts the
-// existing one-cycle deferred flag retirement.  Derive Z/S/P from that
-// registered result during the retirement cycle instead of placing the
-// barrel, width selection, and zero reduction in front of the flag flops.
-// shift1_size is the operand size captured by the preceding SHIFT1 setup.
-assign flags_pf = ~^sigma[7:0];
-assign flags_zf = shift1_size == 2'd0 ? sigma[7:0] == 8'd0 :
-                  shift1_size == 2'd1 ? sigma[15:0] == 16'd0 :
-                                             sigma[31:0] == 32'd0;
-assign flags_sf = shift1_size == 2'd0 ? sigma[7] :
-                  shift1_size == 2'd1 ? sigma[15] : sigma[31];
+// SHIFT2 captures the barrel result on the same edge that starts the existing
+// one-cycle deferred flag retirement.  Derive Z/S/P from that registered copy
+// during the retirement cycle instead of placing the barrel, width selection,
+// and zero reduction in front of the flag flops.  The copy is private: SIGMA
+// gets the barrel result on the same edge, but a stack instruction chained in
+// that cycle (SHR AH,7 / RET in Windows 95 VMM's semaphore wait) overwrites
+// SIGMA with its new stack pointer first, and Z/S/P came from that value.
+// The size is captured too, so a following SHIFT1 setup cannot change it.
+logic [31:0] flags_result;
+logic [1:0]  flags_size;
+always_ff @(posedge clk) begin
+    if (exec && is_shift2 && count_nonzero) begin
+        flags_result <= result;
+        flags_size <= shift1_size;
+    end
+end
+assign flags_pf = ~^flags_result[7:0];
+assign flags_zf = flags_size == 2'd0 ? flags_result[7:0] == 8'd0 :
+                  flags_size == 2'd1 ? flags_result[15:0] == 16'd0 :
+                                       flags_result[31:0] == 32'd0;
+assign flags_sf = flags_size == 2'd0 ? flags_result[7] :
+                  flags_size == 2'd1 ? flags_result[15] : flags_result[31];
 
 always_comb begin
     setup_result = alu_dst;

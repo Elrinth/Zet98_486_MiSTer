@@ -339,6 +339,17 @@ module z486_xms_resident_tb;
           dut.cpu.core.mem_req_current,dut.cpu.core.uc_is_write,dut.cpu.core.uc_is_check_write,dut.cpu.core.vipt_slow_submit,
           dut.cpu.core.paging_is_write_access,dut.cpu.core.pg_cpl,dut.cpu.core.paging_inst.req_linear,dut.cpu.eip);
 `endif
+`ifdef FLAG_TRACE
+    // Per-cycle flag pipeline view while EIP is inside [ftrace_lo, ftrace_hi).
+    reg [31:0] ftrace_lo=32'h0, ftrace_hi=32'h0;
+    initial begin void'($value$plusargs("ftrace_lo=%h",ftrace_lo)); void'($value$plusargs("ftrace_hi=%h",ftrace_hi)); end
+    always @(posedge clk) if(!reset && dut.cpu.eip>=ftrace_lo && dut.cpu.eip<ftrace_hi)
+        $display("FT t=%0d eip=%h ua=%h issue=%b exec=%b stall=%b shcommit=%b zf=%b zf_fwd=%b eflags=%h aluop=%0d",
+            ticks, dut.cpu.eip, dut.cpu.core.uaddr, dut.cpu.core.i_issue, dut.cpu.core.data_unit_inst.exec,
+            dut.cpu.core.stall, dut.cpu.core.data_unit_inst.sh_flags_commit,
+            dut.cpu.core.data_unit_inst.eflags[6], dut.cpu.core.data_unit_inst.eflags_fwd[6],
+            dut.cpu.core.data_unit_inst.eflags, dut.cpu.core.data_unit_inst.aluop);
+`endif
     reg [31:0] last_eip=0;
     integer shown=0;
     always @(posedge clk) if(!reset && dut.cpu.eip!=last_eip) begin
