@@ -4172,6 +4172,12 @@ begin
 		rstn		=>irstn
 	);
 	
+	-- 640 KB interface status (CCh): bits 5 and 4 set (as NP2kai). NEC's BIOS
+	-- turns the motor on and then waits for bit 4 (drive ready) before every
+	-- 2DD access; with the bit stuck at 0 its INT 1Bh looped forever (The Black
+	-- Onyx's IPL). The 1 MB interface (94h) reads 44h as before.
+	FDC_READY<=not FDCIF_H_Dn;
+
 	FDCNT_RD	:IO_RDP port map(
 		CS		=>FDCNT_CS,
 		RD		=>iord,
@@ -4180,7 +4186,7 @@ begin
 		
 		bit7	=>'0',
 		bit6	=>'1',
-		bit5	=>'0',
+		bit5	=>FDC_READY,
 		bit4	=>FDC_READY,
 		bit3	=>'0',
 		bit2	=>'1',
