@@ -10,6 +10,7 @@ module z486_pc98_adapter #(
     input wire fabric_idle,
     input wire [1:0] cpu_speed_sel,
     output wire [35:0] debug_state,
+    output wire [17:0] debug_gate,       // trace builds: {IDT gate read, VM, gate address 15..0}
     output wire crash_tx,               // debug builds: crash recorder UART
     input wire cache_upper_ram,
     input wire interrupt_do,
@@ -51,6 +52,8 @@ module z486_pc98_adapter #(
     wire [2:0] dbg_pf_code;
     wire dbg_page_fault;
     wire [31:0] dbg_walk_pde, dbg_walk_pte, dbg_cr3;
+    wire dbg_issue;
+    wire [31:0] dbg_issue_eip;
     wire real_mode = !protected_mode;
     reg second_inta;
     reg write_accepted;
@@ -68,6 +71,7 @@ module z486_pc98_adapter #(
     wire cpu_reset_n = reset_release[1];
     // Trace/debug snapshot only: with a 16-bit EIP (real/V86 mode) the upper
     // half carries CS, so the trace's X lines read CS:IP.
+    assign debug_gate = {dbg_gate_read, dbg_vm, dbg_gate_addr[15:0]};
     assign debug_state = {(eip[31:16] == 16'd0 ? {dbg_cs, eip[15:0]} : eip),
         triple_fault,write_accepted,valid,ready};
     wire [1:0] first_lane = byte_enable[0] ? 2'd0 : byte_enable[1] ? 2'd1 :
@@ -127,6 +131,7 @@ module z486_pc98_adapter #(
         .dbg_gate_read(dbg_gate_read), .dbg_gate_addr(dbg_gate_addr), .dbg_pf_code(dbg_pf_code),
         .dbg_pf_addr(dbg_pf_addr), .dbg_eflags(dbg_eflags), .dbg_page_fault(dbg_page_fault),
         .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3), .dbg_SP(dbg_sp),
+        .dbg_issue(dbg_issue), .dbg_issue_eip(dbg_issue_eip),
         .triple_fault_reset(triple_fault)
     );
 `ifdef ZET98_Z486_DEBUG
@@ -163,6 +168,48 @@ module z486_pc98_adapter #(
     localparam [15:0] RECORDER_MATCH = 16'h0e62;
     localparam [15:0] RECORDER_MATCH2 = 16'h0058;
 `endif
+`ifdef ZET98_RECORDER_FREEZE_EIP_HI
+    localparam [15:0] RECORDER_FREEZE_EIP_HI = `ZET98_RECORDER_FREEZE_EIP_HI;
+`else
+    localparam [15:0] RECORDER_FREEZE_EIP_HI = 16'h0000;
+`endif
+`ifdef ZET98_RECORDER_POST
+    localparam integer RECORDER_POST = `ZET98_RECORDER_POST;
+`else
+    localparam integer RECORDER_POST = 0;
+`endif
+`ifdef ZET98_RECORDER_QUIET
+    localparam integer RECORDER_QUIET = `ZET98_RECORDER_QUIET;
+    localparam integer RECORDER_QUIET_AFTER = `ZET98_RECORDER_QUIET_AFTER;
+`else
+    localparam integer RECORDER_QUIET = 0;
+    localparam integer RECORDER_QUIET_AFTER = 0;
+`endif
+`ifdef ZET98_RECORDER_STACK
+    localparam [23:0] RECORDER_STACK = `ZET98_RECORDER_STACK;
+`else
+    localparam [23:0] RECORDER_STACK = 24'h000351;
+`endif
+`ifdef ZET98_RECORDER_WATCH_ADDR
+    localparam [31:0] RECORDER_WATCH_ADDR = `ZET98_RECORDER_WATCH_ADDR;
+`else
+    localparam [31:0] RECORDER_WATCH_ADDR = 32'h0;
+`endif
+`ifdef ZET98_RECORDER_FREEZE_DATA
+    localparam [31:0] RECORDER_FREEZE_DATA = `ZET98_RECORDER_FREEZE_DATA;
+`else
+    localparam [31:0] RECORDER_FREEZE_DATA = 32'h0;
+`endif
+`ifdef ZET98_RECORDER_LOG_DATA
+    localparam [31:0] RECORDER_LOG_DATA = `ZET98_RECORDER_LOG_DATA;
+`else
+    localparam [31:0] RECORDER_LOG_DATA = 32'h0;
+`endif
+`ifdef ZET98_RECORDER_ITRACE
+    localparam RECORDER_ITRACE = `ZET98_RECORDER_ITRACE;   // log every issued CS:EIP, freeze on the freeze window
+`else
+    localparam RECORDER_ITRACE = 0;
+`endif
 `ifdef ZET98_RECORDER_DE
     localparam RECORDER_DE = 1;   // freeze on the first real-mode divide error
 `else
@@ -173,7 +220,13 @@ module z486_pc98_adapter #(
                           .DE_MATCH(RECORDER_MATCH), .DE_MATCH2(RECORDER_MATCH2),
                           .DE_FREEZE_IP(RECORDER_FREEZE_IP),
                           .DE_FREEZE_VECTOR(RECORDER_FREEZE_VECTOR),
-                          .DE_FREEZE_SECONDS(RECORDER_FREEZE_SECONDS)) crash_recorder (
+                          .DE_FREEZE_SECONDS(RECORDER_FREEZE_SECONDS),
+                          .DE_FREEZE_EIP_HI(RECORDER_FREEZE_EIP_HI), .DE_POST(RECORDER_POST),
+                          .DE_QUIET(RECORDER_QUIET), .DE_QUIET_AFTER(RECORDER_QUIET_AFTER),
+                          .DE_STACK(RECORDER_STACK), .ITRACE(RECORDER_ITRACE),
+                          .DE_WATCH_ADDR(RECORDER_WATCH_ADDR),
+                          .DE_LOG_DATA(RECORDER_LOG_DATA),
+                          .DE_FREEZE_DATA(RECORDER_FREEZE_DATA)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
@@ -182,7 +235,7 @@ module z486_pc98_adapter #(
         .mem_write(avm_write && !avm_waitrequest), .mem_addr({address, 2'b00}), .mem_data(write_data),
         .mem_be(byte_enable), .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
         .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),
-        .io_rdata(io_read_data), .tx(crash_tx));
+        .io_rdata(io_read_data), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .tx(crash_tx));
 `else
     assign crash_tx = 1'b1;
 `endif

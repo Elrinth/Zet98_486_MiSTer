@@ -197,11 +197,12 @@ module pc98_ao486 #(
 
 `ifdef ZET98_Z486
     wire [35:0] debug_cpu_state;
+    wire [17:0] debug_gate;
     wire crash_tx;
     z486_pc98_adapter #(.EXT_RAM_MB(EXT_RAM_MB), .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ)) cpu (
         .cpu_speed_sel(cpu_speed_sel),
         .fabric_idle(!fabric_busy),
-        .debug_state(debug_cpu_state),
+        .debug_state(debug_cpu_state), .debug_gate(debug_gate),
         .crash_tx(crash_tx),
 `else
     ao486 cpu (
@@ -230,24 +231,33 @@ module pc98_ao486 #(
 `ifdef ZET98_CPU_SNAPSHOT
     reg [15:0] debug_completed, debug_io_address, debug_io_data;
     reg debug_previous_ack;
+    reg debug_io_pulse, debug_io_write;      // one clock per completed I/O access (trace builds)
     always @(posedge clk) begin
+        debug_io_pulse <= 0;
         if(reset) begin
             debug_completed <= 0; debug_previous_ack <= 0;
-            debug_io_address <= 0; debug_io_data <= 0;
+            debug_io_address <= 0; debug_io_data <= 0; debug_io_write <= 0;
         end else begin
             debug_previous_ack <= bus_ack;
             if(bus_ack && !debug_previous_ack && bus_strobe) begin
                 debug_completed <= debug_completed+1'b1;
                 if(bus_io) begin
+                    debug_io_pulse <= 1; debug_io_write <= bus_write;
                     debug_io_address <= {bus_address[15:1],!bus_select[0]};
                     debug_io_data <= bus_write ? bus_writedata : bus_readdata;
                 end
             end
         end
     end
-    assign debug_snapshot = {debug_cpu_state[35:4], physical_address,1'b0,
+`ifdef ZET98_CD_TRACE
+    // The CD/IO trace streamer takes the IDT gate reads in place of the address.
+    wire [30:0] snapshot_address = {debug_gate, 13'b0};
+`else
+    wire [30:0] snapshot_address = physical_address;
+`endif
+    assign debug_snapshot = {debug_cpu_state[35:4], snapshot_address,1'b0,
         debug_io_address,debug_io_data,debug_completed,
-        4'b0,debug_cpu_state[3:0],
+        debug_io_pulse,debug_io_write,2'b0,debug_cpu_state[3:0],
         cache_invalidate,cpu_reset,interrupt_do,interrupt_done,
         bus_strobe,bus_ack,bus_io,crash_tx};   // bit 0: crash recorder UART (z486_crash_recorder)
 `else

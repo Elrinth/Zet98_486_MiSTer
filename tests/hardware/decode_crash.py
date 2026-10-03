@@ -8,7 +8,7 @@ relative to the IDT base, taken as the lowest gate address seen unless
 import argparse
 
 TYPES = {1: 'GATE', 2: 'MODE', 3: 'TRIPLE', 4: 'PORT_F0', 5: 'RESETVEC', 6: 'PF', 7: 'WALK', 8: 'WATCHWR', 9: 'EXTWR', 10: 'IOWR', 11: 'IORD',
-         12: 'FAR', 13: 'MATCHWR', 14: 'SAMPLE'}
+         12: 'FAR', 13: 'MATCHWR', 14: 'SAMPLE', 15: 'ISSUE'}
 EXC = {0: '#DE', 1: '#DB', 2: 'NMI', 3: '#BP', 4: '#OF', 5: '#BR', 6: '#UD', 7: '#NM', 8: '#DF',
        10: '#TS', 11: '#NP', 12: '#SS', 13: '#GP', 14: '#PF', 16: '#MF', 17: '#AC'}
 
@@ -16,10 +16,15 @@ p = argparse.ArgumentParser()
 p.add_argument('capture')
 p.add_argument('--idt', type=lambda x: int(x, 16))
 p.add_argument('--last', type=int, default=256)
+p.add_argument('--branches', action='store_true')
+p.add_argument('--all', action='store_true')
+p.add_argument('--stores', action='store_true')
 a = p.parse_args()
 lines = [l.strip() for l in open(a.capture)]
 dumps, cur = [], None
 ALL = '--all' in __import__('sys').argv
+BRANCHES = '--branches' in __import__('sys').argv   # ITRACE=2 capture
+STORES = '--stores' in __import__('sys').argv       # ITRACE=3 capture
 for l in lines:
     if l == 'B':
         cur = []
@@ -47,6 +52,15 @@ for e in entries[-a.last:]:
     if t == 13:
         ip = (e >> 92) & 0xffff; sp = (e >> 76) & 0xffff
         print('%3d MATCHWR  at %04x:%04x SP=%04x  [%08x] = %08x (be %x)' % (seq, cs, ip, sp, (e >> 8) & 0xffffffff, pay, (e >> 40) & 15))
+        continue
+    if t == 8 and STORES:
+        print('%3d STORE    %04x eip %08x  [%08x] = %08x (be %x)' % (seq, cs, eip, (e >> 8) & 0xffffffff, pay, (e >> 40) & 15))
+        continue
+    if t == 15:
+        if BRANCHES:
+            print('%3d BRANCH   %04x:%08x <- %08x VM=%d PE=%d' % (seq, cs, eip, pay, vm, pe))
+        else:
+            print('%3d ISSUE    %04x:%08x VM=%d PE=%d  EFLAGS %08x' % (seq, cs, eip, vm, pe, pay))
         continue
     if t == 14:
         print('%3d SAMPLE   %04x:%08x VM=%d PE=%d  EFLAGS %08x IF=%d' % (seq, cs, eip, vm, pe, pay, (pay >> 9) & 1))

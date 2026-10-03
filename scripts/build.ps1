@@ -36,6 +36,10 @@ param(
     [string]$RecorderFreezeCs,
     # With -RecorderFreezeCs: freeze when execution reaches that CS at this IP (hex).
     [string]$RecorderFreezeIp,
+    # With -RecorderFreezeIp: the freeze EIP must also have these bits 31..16 (hex).
+    [string]$RecorderFreezeEipHi,
+    # With -RecorderFreezeIp: keep logging this many entries after the freeze IP (1-255).
+    [int]$RecorderPost = 0,
     # With -RecorderDivide: also freeze on the first real-mode read of this
     # interrupt vector (hex, e.g. 6 for invalid opcode).
     [string]$RecorderFreezeVector,
@@ -44,6 +48,26 @@ param(
     # With -RecorderDivide: log memory writes whose data holds either of these
     # two 16-bit values (hex, "FB5D,2F2F"; default 0E62,0058).
     [string]$RecorderMatch,
+    # With -RecorderDivide: freeze after this many CS:EIP samples in a row with
+    # no other event (a stalled CPU), counted from -RecorderQuietAfter seconds.
+    [int]$RecorderQuiet = 0,
+    # With -RecorderDivide and -RecorderFreezeIp: log every issued instruction
+    # (CS:EIP) and freeze when execution enters the freeze window.
+    [switch]$RecorderITrace,
+    # With -RecorderITrace: log only branch targets (from/to EIP) for longer history.
+    [switch]$RecorderITraceBranches,
+    # With -RecorderITrace: log only stores of this 32-bit value (hex) with their EIP.
+    [string]$RecorderLogData,
+    # With -RecorderITrace and -RecorderFreezeIp: freeze when an instruction in the
+    # freeze window stores exactly this 32-bit value (hex).
+    [string]$RecorderFreezeData,
+    # With -RecorderITrace: freeze on a store of exactly RecorderMatch (hi,lo)
+    # to this physical dword (hex) instead of anywhere in the RecorderStack block.
+    [string]$RecorderWatchAddr,
+    [int]$RecorderQuietAfter = 45,
+    # With -RecorderDivide: log every write to this 256-byte block (hex address
+    # bits 31..8, default 000351).
+    [string]$RecorderStack,
     # CD trace debug build: CD-ROM events on the UART (replaces MIDI).
     [switch]$CdTrace,
     [ValidateRange(1, 99)]
@@ -132,6 +156,30 @@ try {
             if ($RecorderFreezeSeconds -gt 0) {
                 Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_SECONDS=$RecorderFreezeSeconds"
             }
+            if ($RecorderITrace) {
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_ITRACE=$(if ($RecorderLogData) { 3 } elseif ($RecorderITraceBranches) { 2 } else { 1 })"
+                if ($RecorderFreezeData) {
+                    if ($RecorderFreezeData -notmatch '^[0-9A-Fa-f]{1,8}$') { throw 'RecorderFreezeData must be 1-8 hex digits.' }
+                    Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_DATA=32'h$RecorderFreezeData"
+                }
+                if ($RecorderLogData) {
+                    if ($RecorderLogData -notmatch '^[0-9A-Fa-f]{1,8}$') { throw 'RecorderLogData must be 1-8 hex digits.' }
+                    Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_LOG_DATA=$([Convert]::ToInt64($RecorderLogData, 16))"
+                }
+            }
+            if ($RecorderWatchAddr) {
+                if ($RecorderWatchAddr -notmatch '^[0-9A-Fa-f]{1,8}$') { throw 'RecorderWatchAddr must be 1-8 hex digits.' }
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_WATCH_ADDR=$([Convert]::ToInt64($RecorderWatchAddr, 16))"
+            }
+            if ($RecorderQuiet -gt 0) {
+                if ($RecorderQuiet -gt 255) { throw 'RecorderQuiet must be 1-255.' }
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_QUIET=$RecorderQuiet"
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_QUIET_AFTER=$RecorderQuietAfter"
+            }
+            if ($RecorderStack) {
+                if ($RecorderStack -notmatch '^[0-9A-Fa-f]{1,6}$') { throw 'RecorderStack must be 1-6 hex digits.' }
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_STACK=$([Convert]::ToInt32($RecorderStack, 16))"
+            }
             if ($RecorderMatch) {
                 if ($RecorderMatch -notmatch '^[0-9A-Fa-f]{1,4},[0-9A-Fa-f]{1,4}$') { throw 'RecorderMatch must be two hex words, e.g. FB5D,2F2F.' }
                 $m = $RecorderMatch.Split(',')
@@ -148,6 +196,14 @@ try {
                 if ($RecorderFreezeIp) {
                     if ($RecorderFreezeIp -notmatch '^[0-9A-Fa-f]{1,4}$') { throw 'RecorderFreezeIp must be 1-4 hex digits.' }
                     Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_IP=$([Convert]::ToInt32($RecorderFreezeIp, 16))"
+                    if ($RecorderFreezeEipHi) {
+                        if ($RecorderFreezeEipHi -notmatch '^[0-9A-Fa-f]{1,4}$') { throw 'RecorderFreezeEipHi must be 1-4 hex digits.' }
+                        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_EIP_HI=$([Convert]::ToInt32($RecorderFreezeEipHi, 16))"
+                    }
+                    if ($RecorderPost -gt 0) {
+                        if ($RecorderPost -gt 255) { throw 'RecorderPost must be 1-255.' }
+                        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_POST=$RecorderPost"
+                    }
                 }
             }
         }

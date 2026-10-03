@@ -7,11 +7,13 @@ module cd_trace_tb;
     reg [91:0] trace = 0;
     reg hdd = 0, fdd = 0;
     reg [63:0] pad1 = 0;
+    reg [63:0] sample = 0;
+    reg io_ev = 0, io_wr = 0;
     wire tx;
-    pc98_cd_trace #(.CLK_HZ(CLK_HZ)) dut(.clk(clk), .trace(trace), .hdd_busy(hdd), .fdd_busy(fdd), .pad1(pad1), .video(72'h0),
+    pc98_cd_trace #(.CLK_HZ(CLK_HZ)) dut(.clk(clk), .io_ev(io_ev), .io_wr(io_wr), .gate(18'h0), .trace(trace), .hdd_busy(hdd), .fdd_busy(fdd), .pad1(pad1), .video(72'h0),
         .pcm_ctl(1'b0), .pcm_port(8'h0), .pcm_data(8'h0), .pcm_push(1'b0),
         .gfx_wr(1'b0), .gfx_reg(4'h0), .gfx_data(16'h0),
-        .cpu_sample(64'h0), .frame_ev(1'b0), .frame_data(72'h0), .tx(tx));
+        .cpu_sample(sample), .frame_ev(1'b0), .frame_data(72'h0), .tx(tx));
 
     // UART receiver model: sample mid-bit.
     string text = "";
@@ -45,6 +47,9 @@ module cd_trace_tb;
     end
 
     task set_status(input [7:0] s); trace[90:83] = s; endtask
+    task task_io(input [63:0] s, input w);
+        @(negedge clk); sample = s; io_wr = w; io_ev = 1; @(negedge clk); io_ev = 0; repeat (3) @(negedge clk);
+    endtask
     task wait_ms(input integer n); repeat (n * (CLK_HZ / 1000)) @(posedge clk); endtask
     initial begin
         set_status(8'h15);
@@ -69,12 +74,31 @@ module cd_trace_tb;
         // Starvation for 3 ms.
         wait_ms(1); trace[82] = 1; wait_ms(3); trace[82] = 0;
         // Pad bytes: a change is reported; a second change within 100 ms waits.
+        // Ring-0 I/O: a read of 43h is logged; a PIC write and a V86 access are not.
+        task_io(64'hc0012345_0043_0085, 0); task_io(64'hc0012345_0002_0060, 1);
+        task_io(64'h0e9e01ed_0043_0085, 0); task_io(64'hc0054321_0432_0000, 1);
+        task_io(64'hc0054321_0432_0000, 1);   // identical repeat: not logged
+        // A V86 sector write: task file then command 30h at D800:0874
+        task_io(64'hd8000956_0646_00bb, 1); task_io(64'hd800095e_0648_00e2, 1);
+        task_io(64'hd8000966_064a_002e, 1); task_io(64'hd8000949_064c_00e0, 1);
+        task_io(64'hd8000874_064e_0030, 1);
+        // two sequential reads: only the first is logged
+        task_io(64'hd8000874_064e_0020, 1); task_io(64'hd8000956_0646_00bc, 1); task_io(64'hd8000874_064e_0020, 1);
+        @(negedge clk); sample = 64'hc03714d5_0000_0000; repeat (5) @(negedge clk);
+        sample = 64'hc03714d6_0000_0000; repeat (3) @(negedge clk);   // short step: not logged
+        wait_ms(1);
         pad1 = 64'h735affff_7f80_8080; wait_ms(5); pad1 = 64'h735affff_ff80_8080;
         wait_ms(140);
         $display("%s", text);
         if (text.len() == 0) $fatal(1, "no output");
         if (contains(" C 47 00 00 02 00 00 05 00 00 00", 32) != 1) $fatal(1, "command line");
         if (contains(" S 11", 5) != 1) $fatal(1, "status line");
+        if (contains(" I c0 01 23 45 00 43 00 85 00", 29) != 1) $fatal(1, "ring-0 I/O read line");
+        if (contains(" I c0 05 43 21 04 32 00 00 01", 29) != 1) $fatal(1, "ring-0 I/O write line");
+        if (contains(" I ", 3) != 2) $fatal(1, "PIC or V86 I/O must not be logged");
+        if (contains(" D 30 d8 00 08 74 e0 2e e2 bb", 29) != 1) $fatal(1, "ATA command line");
+        if (contains(" J c0 37 14 d5", 14) != 1) $fatal(1, "watched EIP line (once per arrival)");
+        if (contains(" D 20 ", 6) != 1) $fatal(1, "sequential read must be logged once");
         if (contains(" F 00 0d 01", 11) != 1) $fatal(1, "slow fetch line");
         if (contains(" F ", 3) != 1) $fatal(1, "short fetch must not be reported");
         if (contains(" U", 2) != 1) $fatal(1, "starvation start line");

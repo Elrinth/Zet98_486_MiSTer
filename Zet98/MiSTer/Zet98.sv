@@ -613,6 +613,7 @@ pc98_cd_trace #(.CLK_HZ(SYS_CLK_KHZ*1000)) cd_trace_uart (
 	.frame_ev(frame_ev), .frame_data(frame_data),
 	// {EIP, last I/O port, last I/O data} from the CPU snapshot
 	.cpu_sample({cpu_debug_snapshot[127:96], cpu_debug_snapshot[63:48], cpu_debug_snapshot[47:32]}),
+	.io_ev(cpu_debug_snapshot[15]), .io_wr(cpu_debug_snapshot[14]), .gate(cpu_debug_snapshot[95:78]),
 	.tx(UART_TXD)
 );
 `else

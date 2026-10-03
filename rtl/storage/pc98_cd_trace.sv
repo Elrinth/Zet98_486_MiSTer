@@ -29,6 +29,19 @@
 //                                            in the previous frame (1024-clock units since
 //                                            vsync, ffff = none), area 1 start (PRAM 0-2)
 //   tttttt X ee ee ee ee aa aa dd dd         every 100 ms: CPU EIP, last I/O port and data
+//   tttttt I ee ee ee ee pp pp dd dd ww      ring-0 I/O (EIP >= C0000000): EIP, port, data,
+//                                            ww 01 write / 00 read; PIC, PIT, CG font, 5Fh
+//                                            and mouse ports are left out, and so are
+//                                            repeats of the previous identical access
+//   tttttt D cc ss ss oo oo ll ll ll ll      ATA command (write to 64Eh) from any mode: command,
+//                                            CS:IP (EIP when 32-bit), then LBA 27..0 from
+//                                            64Ch/64Ah/648h/646h (dev/head, cyl hi, cyl lo, sector)
+//                                            (a read of the next sequential sector is not logged)
+//   tttttt J ee ee ee ee                     control transfer to C037xxxx (Windows 95 IFSMgr init)
+//                                            or to V86/real code (CS:IP, not FD80/FB5x stubs) once
+//                                            IFSMgr has opened IFS$HLP$ (C03712A0-C03712CF)
+//   tttttt G gg gg vv ee ee ee ee            interrupt/exception entry once armed (see J): IDT gate
+//                                            address bits 15..0, VM flag, CS:IP/EIP
 //   tttttt O                                 events were lost (FIFO full)
 // tttttt is a millisecond timestamp, all numbers hex.
 module pc98_cd_trace #(
@@ -46,6 +59,8 @@ module pc98_cd_trace #(
     input wire [3:0] gfx_reg,
     input wire [15:0] gfx_data,
     input wire [63:0] cpu_sample,        // {EIP, last I/O port, last I/O data}
+    input wire io_ev, io_wr,             // strobe: an I/O access completed (port/data in cpu_sample)
+    input wire [17:0] gate,              // {IDT gate read, VM, gate address 15..0}
     input wire frame_ev,                 // strobe: one per frame
     input wire [71:0] frame_data,
     output reg tx = 1
@@ -96,7 +111,58 @@ module pc98_cd_trace #(
     reg [15:0] gfx_valid = 0;
     wire gfx_change = gfx_wr && (!gfx_valid[gfx_reg] || gfx_last[gfx_reg] != gfx_data);
     reg [6:0] video_wait = 0;
+    // Ring-0 I/O for the Windows 95 boot trace; the strobe is one clock behind
+    // the sample, so it is delayed by one more clock here.
+    reg io_ev_d = 0, io_wr_d = 0;
+    wire [15:0] io_port = cpu_sample[31:16];
+    wire io_noisy = io_port == 16'h00 || io_port == 16'h02 || io_port == 16'h08 || io_port == 16'h0a ||
+                    io_port == 16'h71 || io_port == 16'h77 || io_port == 16'h5f ||
+                    io_port == 16'ha1 || io_port == 16'ha3 || io_port == 16'ha5 || io_port == 16'ha9 ||
+                    io_port[15:4] == 12'h7fd;
+    // Polling loops (GDC status, IDE status) repeat the same access: only the
+    // first of a run of identical ones (EIP, port, data, direction) is logged.
+    reg [64:0] io_last = 0;
+    wire io_trace = io_ev_d && cpu_sample[63:60] == 4'hc && !io_noisy && {cpu_sample, io_wr_d} != io_last;
+    // ATA task file snoop for D lines (byte writes to the even ports)
+    reg [7:0] ata_cnt = 0, ata_sec = 0, ata_cyl_lo = 0, ata_cyl_hi = 0, ata_dev = 0;
+    // Sequential single-sector reads (command 20h at the previous LBA + 1) are
+    // not logged: only the first sector of each run.
+    reg [27:0] ata_prev = 0;
+    wire [27:0] ata_lba = {ata_dev[3:0], ata_cyl_hi, ata_cyl_lo, ata_sec};
+    wire ata_go = io_ev_d && io_wr_d && io_port == 16'h064e;
+    wire ata_cmd = ata_go && !(cpu_sample[7:0] == 8'h20 && ata_lba == ata_prev + 1'b1);
+    // Branch points of VMM's UNICODE.BIN loader (Windows 95, VMM init code)
+    wire [31:0] cpu_eip = cpu_sample[63:32];
+    wire [15:0] eip_lo = cpu_eip[15:0];
+    // V86/real code is sampled as CS:IP (EIP < 10000h): watch it too, except the
+    // BIOS timer path and VMM's V86 callback stubs that run on every tick.
+    wire v86_code = cpu_eip[31:28] != 4'hc && cpu_eip[31:16] != 16'hfd80 &&
+                    cpu_eip[31:16] != 16'hfb50 && cpu_eip[31:16] != 16'hfb5c && cpu_eip[31:16] != 16'hfb5d;
+    // V86 logging is armed when IFSMgr returns from opening IFS$HLP$ (C03712AEh;
+    // the sample runs ~14h ahead), so the FIFO holds the IOCTL call's own path.
+    reg v86_armed = 0;
+    reg gate_d = 0;
+    wire gate_ev = v86_armed && gate[17] && !gate_d;
+    wire eip_watch = cpu_eip[31:16] == 16'hc037 || (v86_armed && v86_code);
+    reg [31:0] eip_last = 0;
+    // Only control transfers: an EIP that is not a short forward step from the last one.
+    wire [31:0] eip_step = cpu_eip - eip_last;
+    wire eip_hit = eip_watch && cpu_eip != eip_last && eip_step > 32'd16;
     always @(posedge clk) begin
+        io_ev_d <= io_ev; io_wr_d <= io_wr;
+        eip_last <= cpu_eip;
+        gate_d <= gate[17];
+        if (cpu_eip >= 32'hc03712a0 && cpu_eip < 32'hc03712d0) v86_armed <= 1;
+        if (ata_go) ata_prev <= ata_lba;
+        if (io_ev_d && io_wr_d) case (io_port)
+            16'h0644: ata_cnt <= cpu_sample[7:0];
+            16'h0646: ata_sec <= cpu_sample[7:0];
+            16'h0648: ata_cyl_lo <= cpu_sample[7:0];
+            16'h064a: ata_cyl_hi <= cpu_sample[7:0];
+            16'h064c: ata_dev <= cpu_sample[7:0];
+            default: ;
+        endcase
+        if (io_ev_d && cpu_sample[63:60] == 4'hc && !io_noisy) io_last <= {cpu_sample, io_wr_d};
         a_req_d <= a_req; starving_d <= starving; status_d <= status;
         if (a_req && !a_req_d) begin fetch_ms <= 0; fetch_flags <= 0; end
         else if (a_req) begin
@@ -128,6 +194,14 @@ module pc98_cd_trace #(
         else if (!starving && starving_d) begin ev_type <= "u"; ev_data <= {64'b0, starve_ms}; end
         else if (!a_req && a_req_d && fetch_ms >= 12) begin
             ev_type <= "F"; ev_data <= {56'b0, fetch_ms, 5'b0, fetch_flags};
+        end else if (gate_ev) begin
+            ev_type <= "G"; ev_data <= {24'b0, gate[15:0], 7'b0, gate[16], cpu_eip};
+        end else if (eip_hit) begin
+            ev_type <= "J"; ev_data <= {48'b0, cpu_eip};
+        end else if (ata_cmd) begin
+            ev_type <= "D"; ev_data <= {8'b0, cpu_sample[7:0], cpu_sample[63:32], ata_dev, ata_cyl_hi, ata_cyl_lo, ata_sec};
+        end else if (io_trace) begin
+            ev_type <= "I"; ev_data <= {8'b0, cpu_sample, 7'b0, io_wr_d};
         end else if (x_due) begin
             ev_type <= "X"; ev_data <= {16'b0, cpu_sample}; x_due <= 0;
         end else if (frame_ev) begin
@@ -163,9 +237,9 @@ module pc98_cd_trace #(
     end
 
     // ---- event FIFO ---------------------------------------------------------------
-    (* ramstyle="M10K, no_rw_check" *) reg [111:0] fifo[0:63];
-    reg [5:0] wp = 0, rp = 0;
-    wire [5:0] wp_next = wp + 1'b1;
+    (* ramstyle="M10K, no_rw_check" *) reg [111:0] fifo[0:255];
+    reg [7:0] wp = 0, rp = 0;
+    wire [7:0] wp_next = wp + 1'b1;
     reg lost = 0;
     reg [111:0] rec;
     reg pop = 0;
@@ -198,6 +272,10 @@ module pc98_cd_trace #(
             "E": payload_bytes = 3;
             "V": payload_bytes = 9;
             "X": payload_bytes = 8;
+            "I": payload_bytes = 9;
+            "D": payload_bytes = 9;
+            "J": payload_bytes = 4;
+            "G": payload_bytes = 7;
             "W": payload_bytes = 2;
             default: payload_bytes = 0;
         endcase

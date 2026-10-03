@@ -40,6 +40,9 @@
 // real-mode read of that interrupt vector (e.g. 6, invalid opcode).
 // DE_FREEZE_SECONDS != 0 (-RecorderFreezeSeconds): also freeze that many
 // seconds after the core starts, to capture whatever loop a hang runs.
+// DE_QUIET != 0 (-RecorderQuiet): also freeze once that many samples in a row
+// were logged with nothing else in between, so the ring keeps the events
+// that led into a stall (Win95 on B235 stops all memory writes and IRQs).
 // It is never reset (only by loading the core) so it survives CPU resets.
 module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
@@ -51,7 +54,32 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [15:0] DE_FREEZE_CS = 16'h0000,
                              parameter [16:0] DE_FREEZE_IP = 17'h00000,
                              parameter [8:0] DE_FREEZE_VECTOR = 9'h000,
-                             parameter integer DE_FREEZE_SECONDS = 0) (
+                             parameter integer DE_FREEZE_SECONDS = 0,
+                             // -RecorderFreezeEipHi: the freeze IP must also have these EIP bits 31..16.
+                             parameter [15:0] DE_FREEZE_EIP_HI = 16'h0000,
+                             // -RecorderPost: on the freeze IP, keep logging this many entries first.
+                             parameter integer DE_POST = 0,
+                             // -RecorderQuiet: freeze after this many consecutive type 14 samples
+                             // with no other event (a CPU that stopped making progress), counted
+                             // only DE_QUIET_AFTER seconds after the core starts.
+                             parameter integer DE_QUIET = 0,
+                             parameter integer DE_QUIET_AFTER = 0,
+                             // -RecorderITrace (with DE_TRIGGER): log every issued
+                             // instruction as type 15 instead (CS, EIP, EFLAGS) and freeze
+                             // when one issues inside the DE_FREEZE_CS/IP/EIP_HI window.
+                             // ITRACE = 2 logs only non-sequential issues (branch targets),
+                             // with the previous issued EIP as the payload instead of EFLAGS.
+                             parameter integer ITRACE = 0,
+                             // -RecorderWatchAddr: with ITRACE, watch only this dword and
+                             // match the whole {DE_MATCH, DE_MATCH2} value.
+                             parameter [31:0] DE_WATCH_ADDR = 32'h0,
+                             // ITRACE = 3: log only stores of exactly DE_LOG_DATA (type 8,
+                             // with the last issued EIP and the address), e.g. every copy of
+                             // a handle value, until the watch freeze.
+                             parameter [31:0] DE_LOG_DATA = 32'h0,
+                             // ITRACE 1/2: freeze instead when an instruction in the freeze
+                             // window stores exactly this value (e.g. a handle into an ioreq).
+                             parameter [31:0] DE_FREEZE_DATA = 32'h0) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -74,6 +102,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     input wire io_wr, io_rd,         // one pulse per completed I/O access
     input wire [15:0] io_addr,
     input wire [31:0] io_wdata, io_rdata,
+    input wire insn_issue,           // ITRACE: one pulse per issued instruction
+    input wire [31:0] insn_eip,
     output wire tx
 );
     // ---- capture -----------------------------------------------------------
@@ -94,8 +124,19 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     // hang shows where it spins and whether interrupts are enabled.
     reg [19:0] sample_div = 0;
     reg sample_req = 0;
-    wire de_at_ip = DE_TRIGGER && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS && eip[15:0] == DE_FREEZE_IP[15:0];
-    wire de_far = DE_TRIGGER && (cs != prev_cs || de_at_ip);
+    // With DE_FREEZE_EIP_HI the match is a 16-byte window (the sampled EIP runs a
+    // few bytes ahead of the instruction in straight-line code).
+    wire de_at_ip = DE_TRIGGER && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS &&
+                    (DE_FREEZE_EIP_HI == 16'h0000 ? eip[15:0] == DE_FREEZE_IP[15:0]
+                                                  : eip[31:16] == DE_FREEZE_EIP_HI && eip[15:4] == DE_FREEZE_IP[15:4]);
+    reg [7:0] quiet = 0;
+    reg [31:0] prev_issue_eip = 0;   // ITRACE = 2: last issued EIP
+    wire insn_sequential = insn_eip > prev_issue_eip && insn_eip <= prev_issue_eip + 32'd15;
+    always @(posedge clk) if (insn_issue) prev_issue_eip <= insn_eip;
+    reg post_active = 0;
+    reg [7:0] post_count = 0;
+    reg de_at_ip_d = 0;   // log the freeze IP once per arrival, not every clock in the window
+    wire de_far = DE_TRIGGER && (cs != prev_cs || (de_at_ip && !de_at_ip_d));
     wire de_match = DE_TRIGGER && mem_write && (mem_addr[31:8] == DE_STACK ||mem_data[15:0] == DE_MATCH || mem_data[31:16] == DE_MATCH ||
                                                 mem_data[15:0] == DE_MATCH2 || mem_data[31:16] == DE_MATCH2);
     wire ide_port = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h0432;
@@ -106,7 +147,23 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     wire de_io_rd = DE_TRIGGER && io_rd && !de_busy && io_addr != 16'h0060 && io_addr != 16'h00a0;
     always @* begin
         ev_valid = 1'b1; ev_type = 4'd0; ev_payload = 32'd0;
-        if (IO_MODE) begin
+        if (ITRACE) begin
+            // A store into the DE_STACK block holding DE_MATCH in either half
+            // (a watched object being overwritten) is logged and freezes.
+            if (mem_write && (DE_WATCH_ADDR != 0
+                    ? mem_addr[31:2] == DE_WATCH_ADDR[31:2] && mem_data == {DE_MATCH, DE_MATCH2}
+                    : mem_addr[31:8] == DE_STACK &&
+                      (mem_data[31:16] == DE_MATCH || mem_data[15:0] == DE_MATCH))) begin
+                ev_type = 4'd13; ev_payload = mem_data;
+            end else if (ITRACE == 3) begin
+                if (mem_write && mem_data == DE_LOG_DATA) begin ev_type = 4'd8; ev_payload = mem_data; end
+                else ev_valid = 1'b0;
+            end else if (insn_issue && (ITRACE != 2 || !insn_sequential)) begin
+                ev_type = 4'd15; ev_payload = ITRACE == 2 ? prev_issue_eip : eflags;
+            end
+            else if (triple_fault) ev_type = 4'd3;
+            else ev_valid = 1'b0;
+        end else if (IO_MODE) begin
             if (io_wr_ev) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
             else if (io_rd_ev) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
@@ -127,7 +184,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         else if (ext_sample && !DE_TRIGGER) begin ev_type = 4'd9; ev_payload = mem_data; end
         else ev_valid = 1'b0;
     end
-    wire [127:0] entry = ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
+    wire [127:0] entry = (ITRACE == 3 && ev_type == 4'd8) ?
+                             {ev_type, cs, prev_issue_eip, mem_data, mem_be, mem_addr, pe, seq} :
+                         ev_type == 4'd15 ? {ev_type, cs, insn_eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
+                         ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
                          (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, eip, vm, pe, seq} :
@@ -150,6 +210,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         else if (ev_valid && ev_type == 4'd14 && armed && !frozen && !pause) sample_req <= 1'b0;
         prev_pe <= pe; prev_vm <= vm;
         prev_cs <= cs; prev_ip <= eip[15:0];
+        de_at_ip_d <= de_at_ip;
         pf_d1 <= page_fault; pf_d2 <= pf_d1 && pe;
         if (mem_write && mem_addr[31:20] != 0) ext_writes <= ext_writes + 1'b1;
         if (pe || IO_MODE || DE_TRIGGER) armed <= 1'b1;
@@ -158,14 +219,42 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             newest <= entry;
             wp <= wp + 1'b1;
             seq <= seq + 1'b1;
+            if (ITRACE && DE_FREEZE_DATA == 0 && ev_type == 4'd15 && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS &&
+                insn_eip[31:16] == DE_FREEZE_EIP_HI && insn_eip[15:4] == DE_FREEZE_IP[15:4]) begin
+                if (DE_POST == 0) frozen <= 1'b1;
+                else post_active <= 1'b1;
+            end
+            if (ITRACE && (ev_type == 4'd3 || ev_type == 4'd13)) begin
+                if (DE_POST == 0 || ev_type == 4'd3) frozen <= 1'b1;
+                else post_active <= 1'b1;
+            end
+            if (DE_TRIGGER && DE_QUIET != 0) begin
+                if (ev_type != 4'd14) quiet <= 0;
+                else if (up_seconds >= DE_QUIET_AFTER) begin
+                    quiet <= quiet + 1'b1;
+                    if (quiet == DE_QUIET[7:0] - 1'b1) frozen <= 1'b1;
+                end
+            end
+            if (post_active) begin
+                post_count <= post_count + 1'b1;
+                if (post_count == DE_POST[7:0]) frozen <= 1'b1;
+            end
             if (DE_TRIGGER ? (ev_type == 4'd1 && !pe && gate_addr == 32'd0 ||
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
-                              gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00} ||
-                              DE_FREEZE_CS != 0 && ev_type == 4'd12 && cs == DE_FREEZE_CS &&
-                              (!DE_FREEZE_IP[16] || de_at_ip))
+                              gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
+            if (DE_TRIGGER && DE_FREEZE_CS != 0 && ev_type == 4'd12 && cs == DE_FREEZE_CS &&
+                (!DE_FREEZE_IP[16] || de_at_ip)) begin
+                if (DE_POST == 0) frozen <= 1'b1;
+                else post_active <= 1'b1;
+            end
         end
         if (armed && timed_freeze) frozen <= 1'b1;
+        // The watched store may complete in a cycle with no logged event.
+        if (ITRACE && ITRACE != 3 && DE_FREEZE_DATA != 0 && armed && !pause && mem_write &&
+            mem_data == DE_FREEZE_DATA &&
+            prev_issue_eip[31:16] == DE_FREEZE_EIP_HI && prev_issue_eip[15:4] == DE_FREEZE_IP[15:4])
+            frozen <= 1'b1;
         ring_q <= ring[raddr];
     end
 
