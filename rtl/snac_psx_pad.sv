@@ -33,6 +33,9 @@ module snac_psx_pad #(
     output reg [1:0] analog = 0,
     output reg [15:0] right1 = 16'h8080, right2 = 16'h8080,
     output reg [1:0] mbtn1 = 0, mbtn2 = 0,
+    // Buttons for keyboard emulation, {F1, Ctrl, Esc, Enter, Shift, Space,
+    // X, Z} = {R2, L2, Select, Start, Triangle, Square, Circle, Cross}.
+    output reg [7:0] keys1 = 0, keys2 = 0,
     // Debug (trace builds): port 1's last read, {ID, 5Ah, buttons lo/hi,
     // right X/Y, left X/Y}.
     output reg [63:0] raw1 = 0
@@ -95,12 +98,16 @@ module snac_psx_pad #(
         !buttons_lo[7] || st_left,                          // left
         !buttons_lo[5] || st_right                          // right
     };
+    wire [7:0] key_buttons = !present ? 8'b0 : ~{
+        buttons_hi[1], buttons_hi[0], buttons_lo[0], buttons_lo[3],
+        buttons_hi[4], buttons_hi[7], buttons_hi[5], buttons_hi[6]
+    };
 
     always @(posedge clk) begin
         if (!en_sync[1]) begin
             state <= IDLE; timer <= 0; att <= 1; cmd <= 1; sclk <= 1;
             joy1 <= 0; joy2 <= 0; user_out <= 7'h7f;
-            analog <= 0; mbtn1 <= 0; mbtn2 <= 0;
+            analog <= 0; mbtn1 <= 0; mbtn2 <= 0; keys1 <= 0; keys2 <= 0;
             step1 <= 0; step2 <= 0; configured <= 0; missing1 <= 0; missing2 <= 0;
         end else begin
             user_out <= {1'b1, sclk, 1'b1, 1'b1, cmd, port ? 1'b1 : att, port ? att : 1'b1};
@@ -156,11 +163,11 @@ module snac_psx_pad #(
                         end
                     end
                     if (step == 0 && port) begin
-                        joy2 <= mapped; mbtn2 <= mouse_buttons;
+                        joy2 <= mapped; mbtn2 <= mouse_buttons; keys2 <= key_buttons;
                         analog[1] <= present && analog_mode; right2 <= mouse_xy;
                     end else if (step == 0) begin
                         raw1 <= {id, handshake, buttons_lo, buttons_hi, right_x, right_y, left_x, left_y};
-                        joy1 <= mapped; mbtn1 <= mouse_buttons;
+                        joy1 <= mapped; mbtn1 <= mouse_buttons; keys1 <= key_buttons;
                         analog[0] <= present && analog_mode; right1 <= mouse_xy;
                     end
                     port <= !port; state <= IDLE; timer <= FRAME;

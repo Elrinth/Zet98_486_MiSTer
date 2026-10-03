@@ -205,6 +205,7 @@ parameter CONF_STR = {
 	"P3o6,SNAC PS pads,On,Off;",
 	"P3o7,Stick mouse,On,Off;",
 	"P3o8,Mouse stick,Right,Left;",
+	"P3oDE,Pad to keyboard,Numpad,Cursor keys,Buttons only,Off;",
 	"P4,Boot & storage;",
 	"P4OR,Empty boot,Wait for disk,Start BIOS;",
 	"P4R9,Eject FD0;",
@@ -225,7 +226,9 @@ parameter CONF_STR = {
 	"P5OK,DIP2-6 Int.HDD,Disconnect,Connect;",
 	"P5OL,DIP2-7 FDD Motor,Control,ON;",
 	"P5o1,DIP2-8 GDC clock,2.5MHz,5MHz;",
-	"J,Fire 1,Fire 2,Mouse L,Mouse R;",
+	"J,Fire 1 / Z,Fire 2 / X,Mouse L,Mouse R,Space,Shift,Enter,Esc,Ctrl,F1;",
+	"jn,B,A,L,R,Y,X,Start,Select;",
+	"jp,B,A,L,R,Y,X,Start,Select;",
 	"V,v",`BUILD_DATE
 };
 
@@ -342,6 +345,7 @@ wire [15:0] joystick_0, joystick_1;
 // PlayStation pads on the user port (SNAC) add to USB joysticks 1 and 2.
 wire  [5:0] snac_joy1, snac_joy2;
 wire  [1:0] snac_analog, snac_mbtn1, snac_mbtn2;
+wire  [7:0] snac_keys1, snac_keys2;
 wire [15:0] snac_right1, snac_right2;
 wire [63:0] snac_raw1;
 wire [15:0] joystick_r0, joystick_r1, joystick_l0, joystick_l1;
@@ -352,7 +356,7 @@ snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
 	.clk(clk_sys), .enable(!status[38]), .swap_sticks(swap_sticks), .user_in(USER_IN), .user_out(USER_OUT),
 	.joy1(snac_joy1), .joy2(snac_joy2),
 	.analog(snac_analog), .right1(snac_right1), .right2(snac_right2),
-	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2), .raw1(snac_raw1)
+	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2), .keys1(snac_keys1), .keys2(snac_keys2), .raw1(snac_raw1)
 );
 // Right stick of USB controllers or SNAC DualShocks moves the PC-98 mouse;
 // buttons "Mouse L/R" (USB) and L3/L1, R3/R1 (SNAC) click. A USB mouse
@@ -379,6 +383,17 @@ wire  [5:0] joy0_bits = {joystick_0[5:4], dirs0} | snac_joy1;
 wire  [5:0] joy1_bits = {joystick_1[5:4], dirs1} | snac_joy2;
 wire  [5:0] joyA = ~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
 wire  [5:0] joyB = ~{joy1_bits[5:4],joy1_bits[0],joy1_bits[1],joy1_bits[2],joy1_bits[3]};
+// Pads also press PC-98 keys: directions as numeric keypad 8/2/4/6 or the
+// cursor keys, buttons as Z, X, space, SHIFT, return, ESC, CTRL and f.1
+// (SNAC: Cross, Circle, Square, Triangle, Start, Select, L2, R2). Most games
+// have no joystick support. The joystick port gets the pads either way.
+wire  [1:0] pad_key_mode = status[46:45];   // Numpad, Cursor keys, Buttons only, Off
+wire  [3:0] pad_dirs = dirs0 | dirs1 | snac_joy1[3:0] | snac_joy2[3:0];
+wire  [3:0] pad_dir_keys = {pad_dirs[0], pad_dirs[1], pad_dirs[2], pad_dirs[3]};  // right, left, down, up
+wire  [7:0] pad_btn_keys = {joystick_0[13:8] | joystick_1[13:8], joystick_0[5:4] | joystick_1[5:4]} |
+	snac_keys1 | snac_keys2;
+wire [15:0] pad_keys = pad_key_mode == 2'd3 ? 16'd0 : {pad_btn_keys,
+	pad_key_mode == 2'd1 ? pad_dir_keys : 4'd0, pad_key_mode == 2'd0 ? pad_dir_keys : 4'd0};
 
 wire        ioctl_download;
 wire  [7:0] ioctl_index;
@@ -822,6 +837,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 
 	.pJoyA(joyA),
 	.pJoyB(joyB),
+	.pPadKeys(pad_keys),
 
 	.pFDSYNC(fdsync),
 	.pFDEJECT(fdeject),

@@ -78,6 +78,8 @@ port(
 	-- Joystick ports (Port_A, Port_B)
 	pJoyA       : inout std_logic_vector( 5 downto 0);
 	pJoyB       : inout std_logic_vector( 5 downto 0);
+	-- Gamepad buttons and directions held as PC-98 keys (KBCONV PADCODE order)
+	pPadKeys    : in std_logic_vector(15 downto 0)	:=(others=>'0');
 
 --MiSTer diskimage
 	pFDSYNC		:in std_logic_Vector(1 downto 0);
@@ -665,6 +667,7 @@ port(
 	emuen		:in std_logic;
 	emurx		:out std_logic;
 	emurxdat	:out std_logic_vector(7 downto 0);
+	padkeys	:in std_logic_vector(15 downto 0)	:=(others=>'0');
 
 	monout	:out std_logic_vector(7 downto 0);
 	
@@ -3840,6 +3843,7 @@ begin
 		emuen		=>EMUEN,
 		emurx		=>EMU_KBRX,
 		emurxdat	=>EMU_KBRXDAT,
+		padkeys	=>pPadKeys,
 		
 		monout	=>open,
 		

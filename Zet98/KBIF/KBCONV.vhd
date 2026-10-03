@@ -26,6 +26,8 @@ port(
 	emuen		:in std_logic;
 	emurx		:out std_logic;
 	emurxdat	:out std_logic_vector(7 downto 0);
+	-- Gamepad keys held (any clock domain), PADCODE order below.
+	padkeys	:in std_logic_vector(15 downto 0)	:=(others=>'0');
 	monout	:out std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
@@ -189,6 +191,20 @@ signal kb_qcount : integer range 0 to 16;
 signal kb_qpop, kb_qactive, kb_qoverflow : std_logic;
 signal kb_qdata : std_logic_vector(7 downto 0);
 signal kb_clock_release : std_logic;
+
+-- Gamepad keys enter as PC-98 codes between keyboard sequences and go
+-- through the same make/break/typematic handling as table results.
+type PADCODE_T is array (0 to 15) of std_logic_vector(7 downto 0);
+constant PADCODE : PADCODE_T := (
+	x"43", x"4b", x"46", x"48",	-- keypad 8, 2, 4, 6
+	x"3a", x"3d", x"3b", x"3c",	-- cursor up, down, left, right
+	x"29", x"2a", x"34", x"70",	-- Z, X, space, SHIFT
+	x"1c", x"00", x"74", x"62"	-- return, ESC, CTRL, f.1
+);
+signal pk_s1, pk_s2, pk_sent : std_logic_vector(15 downto 0);
+signal pk_scan : integer range 0 to 15;
+signal injsel : std_logic;
+signal INJDAT : std_logic_vector(6 downto 0);
 	
 begin
 --	MONOUT<="00000000" when KBSTATE=KS_IDLE else
@@ -209,6 +225,16 @@ begin
 	process(clk)begin
 		if(clk' event and clk='1')then
 			semuen<=emuen;
+		end if;
+	end process;
+
+	process(clk,rstn)begin
+		if(rstn='0')then
+			pk_s1<=(others=>'0');
+			pk_s2<=(others=>'0');
+		elsif(clk' event and clk='1')then
+			pk_s1<=padkeys;
+			pk_s2<=pk_s1;
 		end if;
 	end process;
 	
@@ -308,6 +334,10 @@ begin
 			presswr<='0';
 			presswd<='0';
 			RXED<='0';
+			pk_sent<=(others=>'0');
+			pk_scan<=0;
+			injsel<='0';
+			INJDAT<=(others=>'0');
 		elsif(clk' event and clk='1')then
 			KB_WRn<='1';
 			presswr<='0';
@@ -411,6 +441,7 @@ begin
 						end if;
 					end if;
 				when KS_IDLE =>
+					injsel<='0';
 					if(kb_qpop='1')then
 						if(kb_qdata=x"e0")then
 							E0en<='1';
@@ -420,6 +451,21 @@ begin
 							KBSTATE<=KS_RDTBL;
 							TBLADR<=kb_qdata;
 							WAITCNT<=2;
+						end if;
+					elsif(semuen='0' and E0en='0' and F0en='0')then
+						-- No keyboard sequence open: report one changed pad key.
+						if(pk_s2(pk_scan)/=pk_sent(pk_scan))then
+							injsel<='1';
+							INJDAT<=PADCODE(pk_scan)(6 downto 0);
+							F0en<=not pk_s2(pk_scan);
+							pk_sent(pk_scan)<=pk_s2(pk_scan);
+							KBSTATE<=KS_RDTBL;
+							WAITCNT<=2;
+						end if;
+						if(pk_scan=15)then
+							pk_scan<=0;
+						else
+							pk_scan<=pk_scan+1;
 						end if;
 					end if;
 				when KS_RDTBL =>
@@ -499,7 +545,7 @@ begin
 	
 	NTBL	:ktbln port map(TBLADR,clk,NTBLDAT);
 	E0TBL	:ktble0 port map(TBLADR,clk,E0TBLDAT);
-	TBLDAT<=E0TBLDAT when E0en='1' else NTBLDAT;
+	TBLDAT<=INJDAT when injsel='1' else E0TBLDAT when E0en='1' else NTBLDAT;
 --	KP		:keypress port map(TBLDAT,clk,presswd,presswr,pressed);
 	
 	process(clk,rstn)
