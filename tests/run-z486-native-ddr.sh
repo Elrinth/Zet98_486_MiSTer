@@ -5,7 +5,7 @@ out=${NATIVE_DDR_OUT:-$(mktemp -d)}
 mkdir -p "$out"
 if [[ -z ${NATIVE_DDR_OUT:-} ]]; then trap 'rm -rf "$out"' EXIT; fi
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
-for name in native_ddr pegc_cpu stack_allocation; do
+for name in native_ddr native_exec pegc_cpu stack_allocation; do
     nasm -f bin "tests/hardware/${name}_probe.asm" -o "$out/$name.bin"
 done
 cp rtl/vendor/z486/*.hex "$out/"
@@ -25,7 +25,7 @@ for native in 0 1; do
         rtl/graphics/pc98_pegc_palette.sv rtl/graphics/pc98_pegc_memory.sv \
         rtl/graphics/pc98_pegc_ddr_arbiter.sv tests/z486_xms_resident_tb.sv \
         > "$out/compile-$native.log" 2>&1 || { tail -n 70 "$out/compile-$native.log";exit 1; }
-    for name in native_ddr pegc_cpu stack_allocation; do
+    for name in native_ddr native_exec pegc_cpu stack_allocation; do
         (cd "$out"; "./obj-$native/Vz486_xms_resident_tb" "+program=$out/$name.bin") \
             > "$out/$name-$native.log" 2>&1 || { tail -n 20 "$out/$name-$native.log";exit 1; }
         echo "NATIVE_DDR=$native $name"
