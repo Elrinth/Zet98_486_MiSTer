@@ -53,5 +53,25 @@ B241; this fault predates the framebuffer optimization.
 A separate 100-launch BusyBox hardware baseline on B241 recorded three
 SIGSEGV stops and 97 normal exits. Local evidence is in `build/linux-ip/`.
 
-Hardware validation of the fix is pending. B241 was released before this
-CPU correction; it retains the known Linux startup failure.
+The corrected 90 MHz/64 MB core was checked on the MiSTer with the same
+OpenBIOS 2026-10-04.1. The deterministic probe passed four times, and the
+100-launch ptrace batch recorded 100 normal exits and no SIGSEGV. A fresh
+copy of the original image then completed 100 direct `ip` launches: all
+returned the expected no-argument status 1, with no crash in the kernel
+log. The original compressed image and BIOS were not modified.
+
+The supplied kernel still reports `ip: socket: Function not implemented`
+for `ip addr`, `ip link`, and `ip route`, as on the baseline. This is separate
+from the corrected userspace startup fault.
+
+Quartus build `quartus-20261004-223923-218d4d` fits at 41,286/41,910 ALMs,
+539/553 M10Ks and 50 DSPs. Worst reported slack is -7.303 ns, with 10
+negative timing checks; timing is not closed. This is within the user's
+accepted 12 ns threshold for a hardware-qualified build. Pixel-clock and
+FEC routing audits pass. The RBF SHA-256 is
+`769a69589ae2dfe7cf6fe3e4f320e7533dd499eabfa2cbe677e38fc0c4124104`.
+
+DOS QUALIFY passes on the same RBF: long-line output, all four DIVTEST
+rounds, all 4,008 STRTEST cases, and MEMTEST with 531 KB conventional memory
+and 16,384 KB XMS report no failures. B241 was released before this CPU
+correction; it retains the known Linux startup failure.
