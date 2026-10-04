@@ -84,9 +84,9 @@ Candidate RBF: `PC98_Z486_90_WRITE_COMPLETE.rbf`, 4,601,608 bytes,
 SHA-256 `b092e17f5031a8d0433b3c29aeb736e308641b75287c85b921b656ba2c48fbab`.
 
 Two fresh B242 Doom runs both finish 11,520 game ticks in 1,870 real ticks,
-using `doom -timedemo demo1 -nosound -nomusic -nosfx`. The candidate's one
-matched run finishes in 1,814 real ticks: **3.09% higher throughput**
-(`1870 / 1814 - 1`), or 2.99% less time. All final counters were verified
+using `doom -timedemo demo1 -nosound -nomusic -nosfx`. Two matched candidate
+runs finish in 1,814 and 1,816 real ticks: **3.03% higher throughput**
+using their mean (`1870 / 1815 - 1`), or 2.94% less time. All final counters were verified
 visually after return to DOS. No absolute FPS conversion is made from this
 PC-98 port's timer counts. This measures the sound-disabled timedemo;
 other application gains depend on their memory access patterns.
