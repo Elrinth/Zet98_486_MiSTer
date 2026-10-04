@@ -20,6 +20,15 @@ EOI. OPNA extended-port enable and OPNA mute follow A460h bits 0 and 1. The
 existing FM/speaker mixer gain is retained, with half-scale PCM added using
 the existing saturating adder.
 
+A468h bit 4 falling edges acknowledge the refill latch. Repeated writes with
+bit 4 clear preserve the request while the FIFO is low. After replenishing the
+FIFO above its threshold, a bit-4-clear write also acknowledges a stale request.
+AVSDRV uses a read/clear/write sequence before and after refilling without
+writing bit 4 high between refills. Requiring only a written falling edge left
+the request set after a successful refill. The focused driver-sequence test
+reproduces that failure on the previous implementation and checks repeated
+refills plus preservation of low-FIFO requests.
+
 This is an initial playback implementation. Analog volume uses a linear
 approximation; recording, external analog inputs and full mixer routing are
 not implemented. Overflow writes are discarded and underflow holds the last

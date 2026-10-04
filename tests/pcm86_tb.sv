@@ -113,7 +113,7 @@ module pcm86_tb;
         if(dut.count!=0 || irq) $fatal(1,"FIFO empty/masked IRQ failed");
         wr(16'ha468,0);wr(16'ha46c,1);wr(16'ha468,8'h08);
         if(dut.count!=0 || audio_l!==0 || audio_r!==0) $fatal(1,"FIFO reset did not clear sample/state");
-        $display("PASS: PCM86 six formats, signed big-endian samples, 32 KB FIFO, held writes, wrap/concurrent refill, full/empty, IRQ threshold/ack (bit 4 1->0 only)/mask, mute/reset; %0d stream samples",stream_index);
+        $display("PASS: PCM86 six formats, signed big-endian samples, 32 KB FIFO, held writes, wrap/concurrent refill, full/empty, IRQ threshold/ack/request preservation/mask, mute/reset; %0d stream samples",stream_index);
         $finish;
     end
     initial begin #20000000; $fatal(1,"PCM FIFO watchdog"); end

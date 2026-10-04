@@ -19,10 +19,11 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     reg [1:0] board_control;
     reg [3:0] volume;
     reg mute, irq_pending, write_seen;
-    // Last bit 4 written to A468h. As in NP2kai pcm86_oa468, the refill
-    // interrupt is acknowledged only by a 1 -> 0 change of that bit; other
-    // A468h writes with bit 4 clear must not drop a pending request (a lost
-    // request lets the FIFO run dry: ~0.1 s gaps in Policenauts' title music).
+    // Last bit 4 written to A468h. Preserve low-FIFO requests on repeated
+    // control writes with bit 4 clear (the Policenauts lost-refill fix).
+    // Once refilled above the threshold, a bit-4-clear write must clear the
+    // stale request even without a preceding bit-4-set write: AVSDRV uses
+    // IN A468 / AND AL,EF / OUT A468 both before and after each refill.
     reg ack_bit;
     reg [15:0] threshold, count;
     reg [14:0] rdptr, wrptr;
@@ -136,7 +137,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
                 16'ha468:begin
                     control<=writedata & 8'hef;
                     if(writedata[2:0]!=control[2:0]) phase<=0;
-                    if(ack_bit && !writedata[4]) irq_pending<=0;
+                    if(!writedata[4] && (ack_bit || next_count>threshold)) irq_pending<=0;
                     ack_bit<=writedata[4];
                 end
                 16'ha46a:if(control[5]) threshold<=writedata==255 ? 16'h7ffc : ({8'b0,writedata}+16'd1)<<7;
