@@ -3000,3 +3000,27 @@ this timing report under the less-than-12 release criterion and approved
 launch after the above game checks; static timing still has negative slack.
 Release filenames: `PC98_Z486_90_B240_20261004.rbf` and
 `PC98_Open_BIOS_2026-10-04.1.zip`.
+
+### 2026-10-04: Ultima VIII English input and NP2kai intro comparison
+
+The released B240 RBF and OpenBIOS 2026-10-04.1 above, CPU Full, run the supplied
+English Ultima VIII HDI. The owner confirmed character input and gameplay on
+the existing development copy, whose executable has an earlier four-byte
+manual-prompt bypass. That result alone does not exercise the original prompt.
+
+A separate disposable HDI restores the original translated `U8.EXE`, SHA-256
+`0b41e2fc64ae91f421a3a37767822a63134efbb4cd81c27b35479ea8e79a9499`,
+and enables `HIMEM.SYS /TESTMEM:OFF` while retaining the disabled EMM386 line.
+The preparation audit changes only the four restored executable bytes and
+the three CONFIG.SYS bytes enabling HIMEM. Original assets are unchanged.
+Hardware shows the word prompt asking for `IF` (`b241...0005`); typing it is
+accepted. After the intro, Escape reaches character creation (`...0008`),
+and entering `Avatar` starts the game (`...0009`). This verifies both input
+prompts on the original executable; it is not a full playthrough.
+
+Headless NP2kai, PC-9801VX model with the owner's PC-9821Ce2 ROMs, 486DX,
+64 MB, renders the same underscored intro text as the core. The disk itself
+contains `I_brandish_you_to_the_world_of`, and both machines display it.
+This translation text is not evidence of a core or OpenBIOS font fault.
+Private disk copies, ROMs, screenshots and preparation manifests remain
+under ignored `build/b241/`; none are included in the source repository.

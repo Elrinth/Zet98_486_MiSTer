@@ -253,7 +253,8 @@ Save the settings and start `DOOM` (or `DOOM2`).
 
 ## Game setup notes
 
-Tested on the MiSTer with builds B207-B221 (2026-09-28/29). "Profile" is the memory
+Tested on the MiSTer with builds B207-B221 (2026-09-28/29), with the Ultima VIII
+input check repeated on B240 (2026-10-04). "Profile" is the memory
 setup in CONFIG.SYS/AUTOEXEC.BAT (the test disk's `PROFILE.BAT` numbers):
 **HIMEM** = HIMEM.SYS only, full extended memory; **EMS** = HIMEM.SYS plus
 EMM386.EXE.
@@ -261,7 +262,7 @@ EMM386.EXE.
 | Game | Needs | Notes |
 |---|---|---|
 | Doom II | HIMEM | Its DX386 extender refuses to start under EMM386 ("already in virtual 86 mode"). |
-| Ultima VIII Pagan (English, PC-98) | HIMEM, a PC-9821 BIOS | Under EMM386: "DPMI error 4002". The PC-9801VM `boot.rom` shows stripes; the open BIOS shows the title. Keyboard input at the word prompt is still being investigated. |
+| Ultima VIII Pagan (English, PC-98) | HIMEM without EMM386; latest OpenBIOS or a PC-9821 BIOS | B240 with OpenBIOS 2026-10-04.1 accepts the original executable's word prompt and character-name input, then starts the game. The English translation contains literal underscores between intro words; NP2kai displays them too. Under EMM386: "DPMI error 4002". The PC-9801VM `boot.rom` shows stripes. |
 | Flame Zapper Kotsujin | EMS | Returns to DOS under HIMEM only. |
 | Sorcer Kingdom | EMS | Loading a save with the mouse works (B207+). |
 | Crystal Rinal | - | Asks 1/2/0 at start: 1 is the normal version. |
