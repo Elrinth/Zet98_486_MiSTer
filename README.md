@@ -16,6 +16,14 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B240 fixes Policenauts PCM gaps and removes two CPU pipeline delays. Earlier
+comparisons against B239 measured about 18% more Dhrystone throughput in
+simulation and a 9% gain in the Doom timedemo. Use
+[Open PC-98 BIOS 2026-10-04.1](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-04.1)
+for the matching Policenauts/EMM386 floppy fix. This pair was checked on MiSTer:
+Policenauts and Cyberblock Metal Orange music is smooth, and Hokuto no Ken's
+N88-BASIC title and story scenes run with keyboard input.
+
 - **CPU:** z486 (486-class) at 90 MHz, **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
   An OSD **CPU speed** setting slows the CPU for older speed-sensitive games
   (see [game setup notes](#game-setup-notes)).
@@ -478,6 +486,13 @@ With Docker Desktop running, from PowerShell:
 ```powershell
 ./scripts/build.ps1
 ```
+
+The B240 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
+-SoundBoard PC9801_86 -OpnaBackend JT08 -RegisterPacking Normal -RawIde
+-MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2 -Seed 12`.
+Pipeline value 2 keeps the effective-address register, removes the registered
+decoder entry delay and enables early data requests. The larger October 2026
+upstream z486 rewrite is not included.
 
 The script uses the locally installed `theypsilon/quartus-lite-c5:17.0` image
 by default. Override `-Image` and `-DockerContext` if needed. It compiles an

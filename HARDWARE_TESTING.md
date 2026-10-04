@@ -2961,3 +2961,42 @@ B165 `quartus-20260926-040918-b417ff` (seed 8): setup -6.868 ns, hold +0.081, re
 B167 `quartus-20260926-051822-db14a9` (seed 8, EGC word engine connected, disk ROM sets 054Dh bit 6, core renamed PC98): 41,514/41,910 ALMs, setup -7.83 ns. Hardware: black screen from power-on. Cause: the EGC engine reports busy during soft reset, which covers the boot.rom load; the EGC path then drove the SDRAM write data (zero) while the loader drove address and strobe, so the BIOS was stored as zeros. Fixed by gating EGC bus ownership with `srstn` and `not LDR_OE`.
 B168 (B167 + audio decimator) did not fit (4,240 of 4,191 LABs).
 B169 `quartus-20260926-071228-c5bf45` (seed 8): EGC boot fix, one floppy converter shared by both drives, NFD removed, loading icon replaced by the LOADING D0/D1 caption, 48 kHz audio decimator. 39,478/41,910 ALMs (94%), 504/553 RAM blocks, setup -6.84 ns. Hardware (remote keyboard and screenshots): boots MS-DOS 6.20 from the Night A/B VHD; unmodified Rusty selects its EGC driver and shows "Start / Continue / Options" correctly, and the first story scene renders with English text. The same disk on non-EGC builds (GDC driver) shows the malformed menu. The owner's recordings with Audio filter On/Off differ by under 0.2 dB below 10 kHz and 0.8-3.4 dB above 10 kHz on the tested music. Not default-promoted.
+
+### 2026-10-04: B240 PR2, PCM and matching OpenBIOS release checks
+
+Tested build `quartus-20261004-160424-f355d9`: z486 90 MHz, 64 MB,
+PC-9801-86/JT08, normal packing, raw IDE, MIDI UART, PEGC, upper RAM I-cache,
+pipeline registers 2, seed 12. RBF SHA-256:
+`ef1953863d30c7a66d9f8ce51b42d773f4524ba8ba2ff6c39ea45807d76111ef`.
+OpenBIOS executable commit `2043a82`, production ROM SHA-256:
+`2ce33fcacde1fa75c3ce3cde4c2d2ed7ccd3c7b608fd94bd78018eff5be0ef00`.
+The ROM contains the project's free font. CPU setting: Full.
+
+- **Policenauts:** the user confirmed smooth intro/title PCM with NEC BIOS
+  and again with the corrected OpenBIOS. Core fix `bddc1df` acknowledges
+  AVSDRV's bit-4-clear writes after refill; DMA fix `db3a180` supplies port 19h
+  byte-pointer reset and FFFFh non-auto-init completion counts. OpenBIOS drains
+  stale virtual DMA completion after unmasking, before the FDC command.
+- **Hokuto no Ken, N88-BASIC:** boot menu, title and multiple story scenes
+  passed; Space advances the story. Captures `b240...004e` through `...0053`.
+  This is a startup/interactive-story check, not a full playthrough.
+- **Cyberblock Metal Orange:** unchanged `moA.hdm`/`moB.hdm`, intro, title menu
+  and New Start story scene reached (`b240...0054` through `...0059`). The user
+  confirmed "yes it's smooth for me, so it's OKAY!" and "Music is smooth" in
+  response to the music/disk-loading question. Audible quality comes from
+  that listening confirmation, not the screenshots.
+- Earlier PR2 comparison, recovered from the preceding development session:
+  Dhrystone 443819 cycles / 125153 instructions (3.546 CPI) with all registers,
+  versus 376346 / 125153 (3.007 CPI) with decoder-entry and late-request delays
+  removed: 17.9% more throughput. Doom timedemo elapsed time 932 s versus
+  854 s: 9.1% higher throughput. These are earlier B239/PR2 comparisons, not
+  a fresh benchmark of the PCM/DMA-fixed binary. The October upstream CPU
+  rewrite has not been ported.
+
+41388/41910 ALMs, 43439 registers, 539/553 M10K blocks, 50 DSPs. Worst slack
+-7.916 ns, 10 reported negative checks. HPS peripheral placement (including
+UART), FEC routing and global pixel-clock audits pass. The maintainer accepted
+this timing report under the less-than-12 release criterion and approved
+launch after the above game checks; static timing still has negative slack.
+Release filenames: `PC98_Z486_90_B240_20261004.rbf` and
+`PC98_Open_BIOS_2026-10-04.1.zip`.

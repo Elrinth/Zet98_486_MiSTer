@@ -34,8 +34,10 @@ plays smoothly on the 90 MHz PR2 candidate with both NEC PC-9801VM BIOS and
 OpenBIOS. The OpenBIOS test used BIOS commit `2043a82`, which drains stale
 virtual DMA terminal-count status after arming the floppy channel, and core
 RBF SHA-256 `ef1953863d30c7a66d9f8ce51b42d773f4524ba8ba2ff6c39ea45807d76111ef`.
-This confirms that specific game/driver setup; the candidate still fails
-full-design timing and is not a timing-qualified release.
+This confirms that specific game/driver setup. The B240 build reports worst
+slack -7.916 ns and 10 negative timing checks; it is accepted for release under
+the maintainer's less-than-12 criterion after hardware testing. This acceptance
+does not mean that static timing has closed.
 
 This is an initial playback implementation. Analog volume uses a linear
 approximation; recording, external analog inputs and full mixer routing are
