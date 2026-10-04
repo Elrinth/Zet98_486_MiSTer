@@ -16,6 +16,11 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B242 fixes a CPU stack-page fault restart bug that could crash Linux BusyBox
+when starting `ip`. With OpenBIOS 2026-10-04.1, the corrected core completed
+200 `ip` launches without a segfault and passed hardware QUALIFY. No BIOS
+update is needed. See the [fault-restart validation notes](rtl/cpu/STACK_PAGE_FAULT.md).
+
 B241 adds native DWORD transfers for the linear PEGC framebuffer. At the
 same 90 MHz, a matched Doom timedemo completed 11,520 gametics in 1,872
 reported realtics versus B240's 2,008: **7.3% more throughput**, with sound
@@ -494,7 +499,7 @@ With Docker Desktop running, from PowerShell:
 ./scripts/build.ps1
 ```
 
-The B241 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
+The B242 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
 -SoundBoard PC9801_86 -OpnaBackend JT08 -RegisterPacking Normal -RawIde
 -MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2 -Seed 12
 -NativeDdr -NativeDdrFramebufferOnly`.

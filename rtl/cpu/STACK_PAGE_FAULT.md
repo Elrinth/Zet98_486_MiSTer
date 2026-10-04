@@ -1,5 +1,8 @@
 # Restarting a page-faulting stack write
 
+This correction is included in B242, using the hardware-qualified bitstream
+and build profile recorded below.
+
 The PC-98 Linux BusyBox i486 image intermittently segfaulted during libc
 initialization, including when starting `ip`. This reproduced on B241 with
 OpenBIOS 2026-10-04.1. The same extracted executable runs on the host CPU.
