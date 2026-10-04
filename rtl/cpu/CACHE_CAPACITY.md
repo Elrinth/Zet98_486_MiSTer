@@ -1,4 +1,4 @@
-# Optional 16 KB L1 caches
+# Optional larger L1 caches
 
 `scripts/build.ps1 -Cpu z486 -Z486ICacheKB 16` selects 256 sets instead of
 128 in the existing four-way, 16-byte-line instruction cache. The default
@@ -7,14 +7,14 @@ default also remains 8 KB. The memory map, replacement policy and cache
 coherence protocol are unchanged. No executable or game is identified.
 
 The 8 KB fitted instruction cache stores each 128-bit-wide data way in four M10K blocks,
-with only 128 entries. A 256-entry way may fit in those same four blocks.
-This is a resource-layout hypothesis until the 16 KB FPGA build finishes.
+with only 128 entries. Fitting confirms that a 256-entry way uses those
+same four blocks, doubling useful storage without another M10K.
 The existing physical-address tag and index calculations already support
 this size; all index bits remain below the 4 KB page boundary.
 
 The data cache uses 32-bit-wide ways at a depth of 512 DWORDs. Doubling
 that depth is expected to require eight additional M10K blocks across the
-four ways. FPGA fitting must confirm both resource estimates.
+four ways. The combined-cache build must confirm that resource estimate.
 
 `tests/run-z486-icache-capacity.sh` compares both sizes using the actual CPU
 and PC-98 bridges. Its generated 12 KB instruction working set is warmed,
@@ -42,7 +42,7 @@ Simulation results with early store completion and buffered RAM reads:
 
 This synthetic test deliberately exceeds the smaller cache. Its large
 speedup demonstrates the capacity mechanism, not an application speedup.
-FPGA fit, timing and a matched hardware Doom comparison are pending.
+A matched hardware Doom comparison is pending.
 
 The data-capacity comparison, with 16 repeated reads of the 12 KB array,
 reports 1,136,569 to 836,157 cycles (26.43% fewer) and 24,576 to zero DDR
@@ -76,3 +76,45 @@ are inside `synthesis translate_off` and do not change FPGA logic.
 PCM86 format/FIFO/IRQ/refill/sample-rate tests and DMA terminal-count,
 byte-pointer and ownership checks pass on this tree. Hardware listening is
 separate from these simulation checks.
+
+## Instruction-cache FPGA fit
+
+The 90 MHz/64 MB, PR2, native-framebuffer-only, seed-12 build from `6cace92`
+fits with 41,289/41,910 ALMs, 539/553 M10Ks and 50 DSPs. The read-buffer
+candidate with the original 8 KB instruction cache uses 41,392 ALMs and
+the same number of RAM blocks/DSPs. The RAM report confirms four M10Ks per
+128-bit data way at a depth of 256, versus 128 previously.
+
+Worst slack is -7.485 ns with ten negative timing checks: within the user's
+12 ns allowance, but not timing closure. Pixel global-clock, fitted HPS
+peripherals and SDRAM FEC route audits pass.
+
+RBF `PC98_Z486_90_ICACHE16.rbf`: 4,604,368 bytes, SHA-256
+`89214228e7e1f5ecab1bab2b36220473bb366e13eaac3531d9a00361fadcd2e8`.
+Build evidence: `build/quartus-20261005-005846-153c0d/`.
+
+## Experimental 32 KB instruction cache
+
+`-Z486ICacheKB 32` selects 512 sets in the physically indexed instruction
+cache. The data cache stays separately selectable at 8/16 KB; its preread
+uses untranslated page-offset bits and is therefore limited to 16 KB.
+
+The 32 KB option also places the two small replacement tables in MLABs,
+reclaiming their two M10K blocks for instruction data. The attribute keeps
+read-during-write semantics and does not specify `no_rw_check`. The FPGA
+resource estimate for 32 KB instruction/8 KB data is 553 M10Ks; the physical
+build must confirm fit and timing before hardware use.
+
+`tests/run-z486-cache-capacity.sh instruction32` compares 16/32 KB with a
+24 KB instruction routine and SMC in the new upper index range. Its measured
+repeat phase changes from 2,142,706 to 231,499 cycles and 96,128 to zero DDR
+commands. Both runs issue 168,244 instructions overall. This intentionally
+cache-sensitive result is not a Doom measurement.
+
+The 32/8 KB configuration also passes the complete memory-completion suite
+in both read-buffer modes (52 stack-fault cases, other memory faults,
+reset, CPU speeds and driver initialization), graphics, cache mapping and
+invalidation, and eight differential 486 fuzz seeds of 1,200 blocks each.
+FPGA and hardware qualification remain pending. Evidence is under
+`build/icache32/`, including the exact hardware patch over `e570d00` used
+by `build/quartus-20261005-015147-678804/`.

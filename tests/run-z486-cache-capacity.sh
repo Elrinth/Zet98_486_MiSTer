@@ -3,10 +3,14 @@ set -euo pipefail
 ulimit -c 0
 cd "$(dirname "$0")/.."
 kind=${1:-instruction}
+sizes=(7 8)
+asm_flags=()
 case "$kind" in
     instruction) varied=ICACHE; fixed=DCACHE; fixed_bits=7; probe=icache_capacity;;
+    instruction32) varied=ICACHE; fixed=DCACHE; fixed_bits=7; probe=icache_capacity;
+        sizes=(8 9); asm_flags=(-DADD_COUNT=4800);;
     data) varied=DCACHE; fixed=ICACHE; fixed_bits=8; probe=dcache_capacity;;
-    *) echo 'Expected instruction or data comparison' >&2; exit 2;;
+    *) echo 'Expected instruction, instruction32 or data comparison' >&2; exit 2;;
 esac
 out=${CACHE_CAPACITY_OUT:-${ICACHE_CAPACITY_OUT:-${DCACHE_CAPACITY_OUT:-}}}
 if [[ -z $out ]]; then out=$(mktemp -d); trap 'rm -rf "$out"' EXIT; fi
@@ -15,9 +19,9 @@ out=$(cd "$out"; pwd)
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 cp rtl/vendor/z486/*.hex "$out/"
 for name in "$probe" native_exec native_ddr pegc_cpu stack_allocation deferred_shift_load; do
-    nasm -f bin "tests/hardware/${name}_probe.asm" -o "$out/$name.bin"
+    nasm -f bin "${asm_flags[@]}" "tests/hardware/${name}_probe.asm" -o "$out/$name.bin"
 done
-for bits in 7 8; do
+for bits in "${sizes[@]}"; do
     verilator --binary --timing -j 3 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
         -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU \
         -DZET98_Z486_PIPELINE_REGS=2 -DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY \
@@ -52,11 +56,11 @@ for bits in 7 8; do
     }
     cat "$out/cache-$bits.log"
 done
-python3 - "$out" "$probe" <<'PY'
+python3 - "$out" "$probe" "${sizes[@]}" <<'PY'
 import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 measurements = []
-for bits in (7, 8):
+for bits in map(int, sys.argv[3:]):
     log = (root / f'{sys.argv[2]}-{bits}.log').read_text()
     reports = re.findall(r'CPU REPORT .*cycles=(\d+) DDR=(\d+)', log)
     assert len(reports) == 2, reports

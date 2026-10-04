@@ -36,7 +36,7 @@ param(
     [ValidateRange(0, 7)]
     [int]$Z486PipelineRegs = 7,
     # Independently selectable L1 capacities; keep the released 8 KB defaults.
-    [ValidateSet(8, 16)]
+    [ValidateSet(8, 16, 32)]
     [int]$Z486ICacheKB = 8,
     [ValidateSet(8, 16)]
     [int]$Z486DCacheKB = 8,
@@ -172,8 +172,13 @@ try {
     }
     $Z486PipelineRegs | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-pipeline-regs.txt')
     $Z486ICacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-icache-kb.txt')
-    if ($Z486ICacheKB -eq 16) {
-        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_ICACHE_SET_BITS=8"
+    if ($Z486ICacheKB -ne 8) {
+        $instructionSetBits = if ($Z486ICacheKB -eq 32) { 9 } else { 8 }
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_ICACHE_SET_BITS=$instructionSetBits"
+    }
+    if ($Z486ICacheKB -eq 32) {
+        # Reclaim the two small replacement-table M10Ks for instruction data.
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_PLRU_MLAB=1"
     }
     $Z486DCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-dcache-kb.txt')
     if ($Z486DCacheKB -eq 16) {

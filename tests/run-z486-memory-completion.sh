@@ -12,7 +12,9 @@ cache_flags=()
 for cache in ICACHE DCACHE; do
     option="Z486_${cache}_SET_BITS"
     value=${!option:-7}
-    [[ $value == 7 || $value == 8 ]] || { echo "$option must be 7 or 8" >&2; exit 2; }
+    [[ $value == 7 || $value == 8 || ( $cache == ICACHE && $value == 9 ) ]] || {
+        echo "$option: supported set bits are 7/8 (also 9 for ICACHE)" >&2; exit 2;
+    }
     cache_flags+=("-DZET98_Z486_${cache}_SET_BITS=$value")
 done
 out=${MEMORY_COMPLETION_OUT:-${WRITE_COMPLETE_OUT:-${READ_HIT_OUT:-}}}

@@ -56,6 +56,18 @@
 `define Z486_REPLICATE
 `endif
 
+// Optional replacement-table placement for the 32 KB instruction-cache build.
+// Preserve read-during-write semantics; do not request no_rw_check here.
+`ifdef Z486_ALTERA
+`ifdef ZET98_Z486_PLRU_MLAB
+`define Z486_PLRU_RAM (* ramstyle = "MLAB" *)
+`else
+`define Z486_PLRU_RAM
+`endif
+`else
+`define Z486_PLRU_RAM
+`endif
+
 // L1 cache tag width in physical address bits (27 = 128 MiB); addresses that
 // differ only above it share a line and must never be cached.
 `ifndef Z486_L1_PHYS_ADDR_BITS

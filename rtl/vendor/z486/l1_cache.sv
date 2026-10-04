@@ -123,7 +123,7 @@ wire cpu_protect_write = PROTECT_UMA_ROM && cpu_write && (cpu_addr[24:18] == 7'b
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way1 [0:NUM_SETS-1];
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way2 [0:NUM_SETS-1];
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way3 [0:NUM_SETS-1];
-reg [2:0] plru_set [0:NUM_SETS-1];
+`Z486_PLRU_RAM reg [2:0] plru_set [0:NUM_SETS-1];
 
 `Z486_BLOCK_RAM reg [31:0] data_way0 [0:(NUM_SETS << WORD_OFFSET_BITS)-1];
 `Z486_BLOCK_RAM reg [31:0] data_way1 [0:(NUM_SETS << WORD_OFFSET_BITS)-1];

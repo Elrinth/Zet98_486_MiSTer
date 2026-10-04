@@ -1,12 +1,16 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ; General instruction-working-set benchmark, with SMC in the upper cache sets.
-; The 12 KB routine exceeds an 8 KB cache but fits a 16 KB cache. Nothing in
+; The default 12 KB routine exceeds 8 KB and fits 16 KB; ADD_COUNT=4800
+; instead compares a 24 KB routine against 16/32 KB caches. Nothing in
 ; this test or the cache configuration depends on a game or executable name.
 bits 16
 cpu 486
 org 1000h
 %define CODE_BASE 01000000h
+%ifndef ADD_COUNT
 %define ADD_COUNT 2400
+%endif
+%define PATCH_ADD (ADD_COUNT*11/12)
 %define ADD_VALUE 01010101h
 %define EXPECTED ((ADD_COUNT * ADD_VALUE) & 0ffffffffh)
 cli
@@ -48,8 +52,8 @@ loop repeat_code
 mov dx,7fe4h
 mov ax,2
 out dx,ax
-; Offset 11003 has index bit 11 set: exercise the newly added half of sets.
-mov dword [CODE_BASE+3+5*2200],2*ADD_VALUE
+; Offset 11003/22003 exercises the extra index bit in the 16/32 KB cache.
+mov dword [CODE_BASE+3+5*PATCH_ADD],2*ADD_VALUE
 call edi
 cmp eax,(EXPECTED+ADD_VALUE) & 0ffffffffh
 jne fail
@@ -58,7 +62,7 @@ mov dword [CODE_BASE+3],2*ADD_VALUE
 call edi
 cmp eax,(EXPECTED+2*ADD_VALUE) & 0ffffffffh
 jne fail
-cmp dword [CODE_BASE+3+5*2200],2*ADD_VALUE
+cmp dword [CODE_BASE+3+5*PATCH_ADD],2*ADD_VALUE
 jne fail
 mov ax,600dh
 report:

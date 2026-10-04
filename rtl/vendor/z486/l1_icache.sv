@@ -2,7 +2,7 @@
 // Details: doc/z486/implementation_notes.md#src-24-z486-l1-icache-sv-1
 `include "z486_platform.svh"
 module l1_icache #(
-    // 8KB icache (128 sets x 4 ways x 16 B); use SET_BITS=8 for 16KB.
+    // 8KB icache (128 sets x 4 ways x 16 B); use 8 for 16KB or 9 for 32KB.
     parameter integer SET_BITS = 7
 ) (
     input         clk,
@@ -78,7 +78,7 @@ wire cpu_uncacheable = !cache_enable;
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way1 [0:NUM_SETS-1];
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way2 [0:NUM_SETS-1];
 `Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way3 [0:NUM_SETS-1];
-reg [2:0] plru_set [0:NUM_SETS-1];
+`Z486_PLRU_RAM reg [2:0] plru_set [0:NUM_SETS-1];
 
 `Z486_BLOCK_RAM reg [127:0] data_way0 [0:NUM_SETS-1];
 `Z486_BLOCK_RAM reg [127:0] data_way1 [0:NUM_SETS-1];
