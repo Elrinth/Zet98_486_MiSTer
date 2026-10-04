@@ -27,6 +27,10 @@ param(
     [switch]$RawIde,
     [switch]$MidiUart,
     [switch]$PackedGraphics,
+    # z486 PC98 timing registers (bit 0 entry ROM, bit 1 effective address, bit 2
+    # late data requests). 7 = all (released builds); fewer = faster per clock.
+    [ValidateRange(0, 7)]
+    [int]$Z486PipelineRegs = 7,
     [switch]$Z486DebugUart,
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
@@ -148,6 +152,11 @@ try {
     $BuildMemoryGB | Set-Content -LiteralPath (Join-Path $buildRoot 'build-memory-gb.txt')
     Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') `
         -Value "`nset_global_assignment -name NUM_PARALLEL_PROCESSORS $BuildCpus"
+    if ($Z486PipelineRegs -ne 7) {
+        if ($Cpu -ne 'z486') { throw 'Z486PipelineRegs requires z486.' }
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_PIPELINE_REGS=$Z486PipelineRegs"
+    }
+    $Z486PipelineRegs | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-pipeline-regs.txt')
     if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'

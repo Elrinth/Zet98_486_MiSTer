@@ -116,8 +116,14 @@ module z486_pc98_adapter #(
         else if (valid && !io && !inta && write && ready) write_accepted <= 0;
     end
 
+`ifdef ZET98_Z486_PIPELINE_REGS
+    localparam [2:0] PIPELINE_REGS = `ZET98_Z486_PIPELINE_REGS;
+`else
+    localparam [2:0] PIPELINE_REGS = 3'b111;
+`endif
     z486 #(.PROTECT_UMA_ROM(0), .DCACHE_SET_BITS(7), .ICACHE_SET_BITS(7),
            .ENABLE_X87(0), .PC98_MODE(1), .PC98_EXT_RAM_MB(EXT_RAM_MB),
+           .PC98_PIPELINE_REGS(PIPELINE_REGS),
            .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ)) core (
         .clk(clk), .reset_n(cpu_reset_n), .cache_invalidate(cache_invalidate),
         .cache_upper_ram(cache_upper_ram),

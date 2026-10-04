@@ -104,14 +104,24 @@ protected32:
     mov ss,ax
     mov esp,0ff00h
 %ifdef CPU_TEST
-    mov ecx,5000
+    ; Bound a missing-IRQ failure, but finish based on delivered interrupts.
+    ; A fixed 5000-iteration delay can end before the third timer tick when
+    ; the CPU pipeline is faster, despite correct interrupt delivery.
+    mov ecx,100000
 %else
     mov ecx,5000000
 %endif
     sti
 .wait:
+%ifdef CPU_TEST
+    cmp word [irq_count],3
+    jae .irq_ready
+%endif
     dec ecx
     jnz .wait
+%ifdef CPU_TEST
+.irq_ready:
+%endif
     cli
     mov byte [completed],1
     jmp word 18h:protected16_exit

@@ -17,6 +17,7 @@
     "PC98 empty-pipe ROM launches use the registered D1 skeleton, adding one launch cycle",
     "PC98 entry ROM reads a registered opcode/prefix tag and waits for the matching result instead of routing speculative next-window decode into M10K",
     "PC98 memory ModR/M EAs always stage base/index before displacement/segment relocation, with live-address equivalence assertion",
+    "Selectable PC98_PIPELINE_REGS: bit 0 decoder entry register, bit 1 effective-address register, bit 2 late demand requests. B240 uses 2: effective-address staging retained, entry delay removed and early data requests enabled. Upstream October rewrite not merged.",
     "optional bank-aware upper conventional instruction cache, direct-store line invalidation, and speculative-fetch discard on full cache invalidation",
     "PC98 runtime Full/33/8/3 MHz execution-rate selections (OSD CPU speed) using cpu_throttle with a 20-bit debt repaid on every non-execution cycle; actual host clock propagated from SYSFREQ. The throttle gates new D2 launches (i_entry/chain/prestart) instead of holding a resident D2 at D2->EX (that split hung or lost a delay-slot GPR write), and REP strings take their RPTI restart exit at high debt.",
     "Preserve visible real-mode CS across CR0.PE transitions; track entry CPL0 until CS reload, fixing HIMEMX block-resize corruption.",

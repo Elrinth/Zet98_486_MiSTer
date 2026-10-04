@@ -20,6 +20,10 @@ module z486
 #(
     parameter PC98_MODE = 0,
     parameter PC98_EXT_RAM_MB = 0,
+    // PC98_MODE timing registers (each costs execution cycles): bit 0 registered
+    // decoder entry ROM, bit 1 registered effective address, bit 2 no early
+    // data requests. The registered D1 launch always follows PC98_MODE.
+    parameter [2:0] PC98_PIPELINE_REGS = PC98_MODE ? 3'b111 : 3'b000,
     parameter PROTECT_UMA_ROM = 0,
     parameter DCACHE_SET_BITS = 7,   // dcache size: 7 = 8KB, 8 = 16KB
     parameter ICACHE_SET_BITS = 7,   // icache size: 7 = 8KB, 8 = 16KB
@@ -1044,7 +1048,7 @@ assign pf_spec_global_kill = pf_snoop_kill_r || cr3_write ||
 //=============================================================================
 // Unit 2: Decode1 (structural decode)
 //=============================================================================
-decoder #(.REGISTERED_ENTRY(PC98_MODE)) decoder_inst (
+decoder #(.REGISTERED_ENTRY(PC98_PIPELINE_REGS[0])) decoder_inst (
     .clk        (clk),
     .reset_n    (reset_n),
 
@@ -1749,7 +1753,7 @@ assign d2_agu_dec = ea_decode_of(d2_entry);
 // addition -> segment relocation otherwise exceeds one 100 MHz cycle.
 wire d2_ea_needs_split = d2_valid && d2_push &&
     (d2_entry.ea_complex || d2_entry.ea_uses_post_pop_esp ||
-     (PC98_MODE && d2_entry.has_modrm && d2_entry.modrm[7:6] != 2'b11 &&
+     (PC98_PIPELINE_REGS[1] && d2_entry.has_modrm && d2_entry.modrm[7:6] != 2'b11 &&
       !d2_entry.has_moffs));
 wire [31:0] d2_agu_base  = onehot_gpr_mux(d2_agu_dec.base_sel);
 wire [31:0] d2_agu_index = onehot_gpr_mux(d2_agu_dec.index_sel);
@@ -2271,7 +2275,7 @@ assign d2_vipt_rmw = d2_vipt_rmw_candidate &&
 // path. Use the existing registered demand stage; fast load/store recipes
 // and instruction prefetch remain enabled.
 paging_unit #(
-    .EARLY_DATA_REQUESTS(!PC98_MODE),
+    .EARLY_DATA_REQUESTS(!PC98_PIPELINE_REGS[2]),
     .VGA_BASE       (VGA_BASE),
     .VGA_TOP        (VGA_TOP)
 ) paging_inst (
@@ -3272,7 +3276,7 @@ end
 // Unit 9: Address and integer datapath
 //=============================================================================
 
-address_unit #(.REGISTERED_EA(PC98_MODE)) address_unit_inst (
+address_unit #(.REGISTERED_EA(PC98_PIPELINE_REGS[1])) address_unit_inst (
     .clk(clk),
     .reset_n(reset_n),
     .instr_issue(i_issue),
