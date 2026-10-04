@@ -40,6 +40,7 @@ architecture rtl of DMA8237 is
 signal	M2Men		:std_logic;
 signal	CH0AHOLD	:std_logic;
 signal	CONTEN		:std_logic;
+signal	BYTE_CLEAR	:std_logic;
 signal	COMPRESS	:std_logic;
 signal	ROTPRI		:std_logic;
 signal	CURPRI		:integer range 0 to 3;
@@ -134,6 +135,10 @@ end component;
 
 begin
 	
+	-- Standard 8237 clear-byte-pointer register (PC-98 port 19h).
+	-- EMM386 uses this instead of disabling the global controller.
+	BYTE_CLEAR<='1' when PCS='1' and PWR='1' and PADDR="1100" else '0';
+
 	DRQX<=DREQ when DRQlog='0' else not DREQ;
 	DRQV<=DRQX or SREQ;
 	
@@ -145,7 +150,7 @@ begin
 		PWDATA	=>PWDATA,
 		PDOE	=>CHPDOE(0),
 		
-		CONTEN	=>not CONTEN,
+		CONTEN	=>not CONTEN and not BYTE_CLEAR,
 		CHEN	=>not CHMASK(0),
 		DIRMODE	=>CH0TMODE,
 		AUTOINI	=>CHAUTOINI(0),
@@ -180,7 +185,7 @@ begin
 		PWDATA	=>PWDATA,
 		PDOE	=>CHPDOE(1),
 		
-		CONTEN	=>not CONTEN,
+		CONTEN	=>not CONTEN and not BYTE_CLEAR,
 		CHEN	=>not CHMASK(1),
 		DIRMODE	=>CH1TMODE,
 		AUTOINI	=>CHAUTOINI(1),
@@ -215,7 +220,7 @@ begin
 		PWDATA	=>PWDATA,
 		PDOE	=>CHPDOE(2),
 		
-		CONTEN	=>not CONTEN,
+		CONTEN	=>not CONTEN and not BYTE_CLEAR,
 		CHEN	=>not CHMASK(2),
 		DIRMODE	=>CH2TMODE,
 		AUTOINI	=>CHAUTOINI(2),
@@ -250,7 +255,7 @@ begin
 		PWDATA	=>PWDATA,
 		PDOE	=>CHPDOE(3),
 		
-		CONTEN	=>not CONTEN,
+		CONTEN	=>not CONTEN and not BYTE_CLEAR,
 		CHEN	=>not CHMASK(3),
 		DIRMODE	=>CH3TMODE,
 		AUTOINI	=>CHAUTOINI(3),

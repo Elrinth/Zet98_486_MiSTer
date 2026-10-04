@@ -106,9 +106,13 @@ begin
 				end if;
 				if(CURCOUNT=x"0000")then
 					TC<='1';
-					CURCOUNT<=BASECOUNT;
 					if(AUTOINI='1')then
+						CURCOUNT<=BASECOUNT;
 						CURADDR<=BASEADDR;
+					else
+						-- Monitors use the residual count to copy DMA bounce buffers.
+						-- A completed non-auto-init transfer must read back FFFFh.
+						CURCOUNT<=x"ffff";
 					end if;
 				else
 					CURCOUNT<=CURCOUNT-1;

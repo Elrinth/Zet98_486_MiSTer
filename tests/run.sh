@@ -77,6 +77,8 @@ bash tests/run-opna-timer.sh
 ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/DMA/DMASW.vhd tests/dma_grant_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" dma_grant_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" dma_grant_tb --assert-level=error
+bash tests/run-dma-byte-pointer.sh
+bash tests/run-dma-terminal-count.sh
 ghdl -a --std=08 --workdir="$out" rtl/startup_mute.vhd tests/startup_mute_tb.vhd
 ghdl -e --std=08 --workdir="$out" startup_mute_tb
 ghdl -r --std=08 --workdir="$out" startup_mute_tb --assert-level=error
