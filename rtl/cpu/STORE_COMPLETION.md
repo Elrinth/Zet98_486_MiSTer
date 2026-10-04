@@ -40,5 +40,49 @@ The 64,000-byte fill/copy/readback workload reports:
 - Both modes issue 128,045 instructions, charge 576,227 active execution
   cycles, and send 72,000 DDR commands. Only wait cycles are removed.
 
-These are simulation results, not measured Doom FPS. FPGA fit, timing and
-hardware application qualification are pending.
+The PCM86 FIFO, all sample rates, AVSDRV refill/acknowledgement, DMA terminal
+count, byte-pointer and grant-ownership regressions also pass. These tests
+do not substitute for listening to a game on hardware.
+
+## Hardware comparison with B242
+
+The candidate uses the same 90 MHz, 64 MB, PR2, native-framebuffer-only
+configuration, OpenBIOS 2026-10-04.1 and MiSTer settings as B242. The core
+source is commit `3bbef91cb7ef0bfbe66ff36a0531086229d89536`.
+
+Two runs of the existing `tests/hardware/extbench.asm` benchmark on each
+core measure 120 video frames per operation. The DOS/XMS driver and disk
+are identical. Reported KB/s (first/second run):
+
+- Extended RAM STOSD: 21,836/21,836 to 24,922/24,922 (+14.13%).
+- Extended RAM MOVSD: 11,150/11,148 to 11,904/11,906 (+6.78%).
+- Conventional RAM STOSD: 28,416/28,416 to 30,237/30,237 (+6.41%).
+- Conventional RAM MOVSD: 6,288/6,288 to 6,452/6,452 (+2.61%).
+- XMS driver move conventional to extended: 19,288/19,288 to
+  21,734/21,734 (+12.68%).
+- XMS driver move extended to conventional: 11,962/11,962 to
+  12,790/12,790 (+6.92%).
+- LODSD reads are effectively unchanged (less than 0.1% variation).
+
+The gains above compare the means of the two runs. Absolute rates assume
+the benchmark's 56.42 Hz refresh; comparisons use the same video mode.
+These are memory benchmarks, not whole-application speedups.
+
+Hardware `QUALIFY` passes four division rounds, 4,008 string-instruction
+cases and the conventional/XMS memory check with zero failures. The Linux
+stack page-fault probe passes three times. The 100-launch BusyBox `ip`
+check reports 100 normal exits and zero SIGSEGVs. The supplied Linux
+kernel's separate "socket: Function not implemented" result is unchanged.
+
+The candidate fits at 41,353/41,910 ALMs, 539/553 M10K blocks and 50 DSPs.
+B242 uses 41,286 ALMs with the same RAM/DSP counts. Worst slack is
+-7.132 ns (B242: -7.303 ns), with ten negative timing checks. This meets
+the user's less-than-12 ns allowance but is not timing closure. Pixel
+global-clock, fitted HPS peripheral and SDRAM FEC route audits pass.
+
+Candidate RBF: `PC98_Z486_90_WRITE_COMPLETE.rbf`, 4,601,608 bytes,
+SHA-256 `b092e17f5031a8d0433b3c29aeb736e308641b75287c85b921b656ba2c48fbab`.
+
+Two fresh B242 Doom runs both finish 11,520 game ticks in 1,870 real ticks,
+using `doom -timedemo demo1 -nosound -nomusic -nosfx`. The candidate's
+matched timedemo is still running; no Doom speedup is claimed yet.
