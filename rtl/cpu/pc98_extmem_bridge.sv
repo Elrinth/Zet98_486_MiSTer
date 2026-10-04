@@ -6,7 +6,8 @@
 // This bridge shares the CPU clock with MiSter's DDR user interface.
 module pc98_extmem_bridge #(
     parameter RAM_MB = 16,
-    parameter READ_CACHE = 1'b1
+    parameter READ_CACHE = 1'b1,
+    parameter EARLY_READ_HIT = 1'b1
 ) (
     input wire clk, reset,
     input wire [31:1] address,
@@ -15,7 +16,7 @@ module pc98_extmem_bridge #(
     input wire write, strobe,
     output wire mapped,
     output wire ack,
-    output reg [15:0] readdata,
+    output wire [15:0] readdata,
     output wire [28:0] ddr_address,
     output wire [63:0] ddr_writedata,
     output wire [7:0] ddr_byteenable, ddr_burstcount,
@@ -32,12 +33,19 @@ module pc98_extmem_bridge #(
     reg line_valid;
     reg [31:3] line_address;
     reg [63:0] line_data;
+    reg [15:0] held_readdata;
     integer byte_lane;
     wire [31:0] byte_address = {address,1'b0};
     assign mapped = byte_address >= 32'h00100000 &&
         byte_address < RAM_MB * 32'h00100000 &&
         !(byte_address >= 32'h00f00000 && byte_address < 32'h01000000);
-    assign ack = state == ACK && !reset && !cancelled && strobe;
+    wire read_hit = READ_CACHE && !write && line_valid && line_address==address[31:3];
+    // A resident DDR word needs no new memory command. Present its selected
+    // halfword in the request cycle, then hold the normal registered response
+    // until strobe falls. Misses and stores retain their existing handshake.
+    wire early_read_hit = EARLY_READ_HIT && state==IDLE && mapped && read_hit;
+    assign ack = !reset && strobe && ((state==ACK && !cancelled) || early_read_hit);
+    assign readdata = early_read_hit ? line_data[{address[2:1],4'b0} +:16] : held_readdata;
     // All DDR accesses are confined to the 256 MB region used by MiSTer ao486.
     // This module's mapped range uses only its first 16/64 MB.
     assign ddr_address = {4'h3,held_address[27:3]};
@@ -61,8 +69,8 @@ module pc98_extmem_bridge #(
                 held_select<=select;
                 held_write<=write;
                 cancelled<=0;
-                if(READ_CACHE && !write && line_valid && line_address==address[31:3]) begin
-                    readdata<=line_data[{address[2:1],4'b0} +:16];
+                if(read_hit) begin
+                    held_readdata<=line_data[{address[2:1],4'b0} +:16];
                     state<=ACK;
                 end else state<=ISSUE;
             end
@@ -78,7 +86,7 @@ module pc98_extmem_bridge #(
                                 line_data[({held_address[2:1],4'b0}+byte_lane*8) +:8]<=held_data[byte_lane*8+:8];
                 end
                 else if (ddr_readdatavalid) begin
-                    readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
+                    held_readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
                     line_valid<=READ_CACHE;
                     line_address<=held_address[31:3];
                     line_data<=ddr_readdata;
@@ -88,7 +96,7 @@ module pc98_extmem_bridge #(
             READ_DATA: begin
                 if (!strobe) cancelled<=1;
                 if (ddr_readdatavalid) begin
-                    readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
+                    held_readdata<=ddr_readdata[{held_address[2:1],4'b0} +:16];
                     if(!cancelled && strobe) begin
                         line_valid<=READ_CACHE;
                         line_address<=held_address[31:3];

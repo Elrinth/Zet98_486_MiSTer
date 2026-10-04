@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 module pc98_extmem_bridge_tb;
     parameter READ_CACHE=1;
+    parameter EARLY_READ_HIT=1;
     reg clk=0, reset=1;
     always #5 clk=!clk;
     reg [31:1] address=0;
@@ -15,7 +16,7 @@ module pc98_extmem_bridge_tb;
     wire ddr_read, ddr_write;
     reg ddr_busy=0, ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
-    pc98_extmem_bridge #(.RAM_MB(64),.READ_CACHE(READ_CACHE)) dut(.*);
+    pc98_extmem_bridge #(.RAM_MB(64),.READ_CACHE(READ_CACHE),.EARLY_READ_HIT(EARLY_READ_HIT)) dut(.*);
     pc98_extmem_bridge #(.RAM_MB(16)) map16(
         .clk(clk),.reset(reset),.address(address),.select(select),.writedata(writedata),
         .write(write),.strobe(1'b0),.mapped(mapped16),.ddr_busy(1'b0),
@@ -75,12 +76,15 @@ module pc98_extmem_bridge_tb;
         end
     endtask
     task finish_request;
+        reg [15:0] accepted_data;
         begin
             @(negedge clk);
             while(!ack) @(negedge clk);
+            accepted_data=readdata;
             repeat(3) begin
                 @(negedge clk);
                 if(!ack) $fatal(1,"ACK was not held until request release");
+                if(!write && readdata!==accepted_data) $fatal(1,"read data changed while ACK held");
             end
             strobe=0;
             @(negedge clk);
@@ -108,11 +112,28 @@ module pc98_extmem_bridge_tb;
         before_commands=commands;
         reference_word=initial_word((32'h30000000+32'h02100100)>>3);
         for(lane=0;lane<4;lane=lane+1) begin
-            start(0,32'h02100100+lane*2,3,0); finish_request;
+            start(0,32'h02100100+lane*2,3,0);
+            #1;
+            if(ack !== (READ_CACHE && EARLY_READ_HIT && lane!=0))
+                $fatal(1,"cache hit completion latency mismatch lane=%0d",lane);
+            if(ack && readdata!==reference_word[lane*16+:16])
+                $fatal(1,"early read returned wrong halfword");
+            finish_request;
             if(readdata!==reference_word[lane*16+:16]) $fatal(1,"buffered DDR lane mismatch");
         end
         if(commands-before_commands != (READ_CACHE ? 1 : 4))
             $fatal(1,"consecutive halfword reads did not reuse the fetched DDR word");
+        // Reset must suppress even a combinational hit and invalidate the
+        // resident word before a new request can use it.
+        start(0,32'h02100100,3,0);
+        reset=1; #1;
+        if(ack || ddr_read || ddr_write) $fatal(1,"reset did not suppress a warm read");
+        strobe=0;
+        repeat(2) @(negedge clk);
+        reset=0;
+        start(0,32'h02100100,3,0); #1;
+        if(ack) $fatal(1,"read buffer hit survived reset");
+        finish_request;
         for(a=0;a<12;a=a+1) begin
             test_address=a<6 ? 32'h00100000+a*32'h240000 : 32'h01000000+(a-6)*32'h940000;
             reference_word=initial_word((32'h30000000+test_address)>>3);
@@ -142,7 +163,7 @@ module pc98_extmem_bridge_tb;
         repeat(12) @(negedge clk);
         if(ack || commands!=before_commands) $fatal(1,"system aperture was written as RAM");
         strobe=0;
-        $display("PASS: extended DDR RAM bridge cache=%0d: %0d commands, 16/64 MB boundaries, hole, byte-write coherence, stalls, late reset response",READ_CACHE,commands);
+        $display("PASS: extended DDR RAM bridge cache=%0d early_hit=%0d: %0d commands, hit timing/data, held ACK, 16/64 MB boundaries, hole, byte-write coherence, stalls, warm/late reset",READ_CACHE,EARLY_READ_HIT,commands);
         $finish;
     end
     initial begin #1000000; $fatal(1,"extended RAM watchdog"); end

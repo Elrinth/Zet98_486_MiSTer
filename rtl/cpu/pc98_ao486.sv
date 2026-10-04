@@ -8,6 +8,7 @@ module pc98_ao486 #(
     parameter ICACHE_ENABLE = 1'b1,
     parameter EXT_RAM_MB = 0,
     parameter EXT_RAM_READ_CACHE = 1'b1,
+    parameter EXT_RAM_EARLY_READ_HIT = 1'b1,
     parameter LOWMEM_CACHE = 1'b0,
     parameter LOWMEM_CACHE_KB = 8,
     parameter UPPER_RAM_ICACHE = 0,
@@ -201,7 +202,8 @@ module pc98_ao486 #(
         // cache in that configuration so aperture-crossing reads cannot see
         // stale data. Framebuffer-only builds retain B240's RAM read cache.
         pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB),
-            .READ_CACHE(EXT_RAM_READ_CACHE && !(NATIVE_DDR && NATIVE_DDR_RAM))) ram (
+            .READ_CACHE(EXT_RAM_READ_CACHE && !(NATIVE_DDR && NATIVE_DDR_RAM)),
+            .EARLY_READ_HIT(EXT_RAM_EARLY_READ_HIT)) ram (
             .clk(clk), .reset(reset), .address(physical_address),
             .select(bus_select), .writedata(bus_writedata), .write(bus_write),
             .strobe(physical_strobe && !legacy_mapped && !pegc_claimed),
