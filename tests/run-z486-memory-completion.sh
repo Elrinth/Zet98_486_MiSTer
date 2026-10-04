@@ -8,6 +8,13 @@ case "$comparison" in
     read) comparison_param=EARLY_READ_HIT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1);;
     *) echo 'Expected write or read comparison' >&2; exit 2;;
 esac
+cache_flags=()
+for cache in ICACHE DCACHE; do
+    option="Z486_${cache}_SET_BITS"
+    value=${!option:-7}
+    [[ $value == 7 || $value == 8 ]] || { echo "$option must be 7 or 8" >&2; exit 2; }
+    cache_flags+=("-DZET98_Z486_${cache}_SET_BITS=$value")
+done
 out=${MEMORY_COMPLETION_OUT:-${WRITE_COMPLETE_OUT:-${READ_HIT_OUT:-}}}
 if [[ -z $out ]]; then out=$(mktemp -d); trap 'rm -rf "$out"' EXIT; fi
 mkdir -p "$out"
@@ -23,7 +30,7 @@ nasm -f bin -Isoftware/ tests/hardware/native_init_probe.asm -o "$out/native_ini
 for early in 0 1; do
     verilator --binary --timing -j 4 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
         -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU \
-        -DZET98_Z486_PIPELINE_REGS=2 -DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY \
+        -DZET98_Z486_PIPELINE_REGS=2 -DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY "${cache_flags[@]}" \
         -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj-$early" \
         --top-module z486_xms_resident_tb -GRAM_MB=64 -GPEGC_ENABLE=1 \
         "-G${comparison_param}=$early" "${fixed_flags[@]}" -GDDR_WORDS=16384 -GTRACE_LIMIT=0 \

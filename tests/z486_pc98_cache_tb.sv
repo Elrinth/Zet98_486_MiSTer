@@ -2,6 +2,7 @@
 `timescale 1ns/1ps
 module z486_pc98_cache_tb;
     parameter ICACHE_SET_BITS=7;
+    parameter DCACHE_SET_BITS=7;
     reg clk=0; always #5 clk=~clk;
     reg reset_n=0, cache_invalidate=0, cache_upper_ram=0;
     reg dreq=0, ireq=0;
@@ -21,7 +22,7 @@ module z486_pc98_cache_tb;
     reg [31:0] generation=32'h10000000;
     wire ready = remaining==0 && gap==0;
 
-    memory #(.PC98_MODE(1),.PC98_EXT_RAM_MB(64),.ICACHE_SET_BITS(ICACHE_SET_BITS)) dut (
+    memory #(.PC98_MODE(1),.PC98_EXT_RAM_MB(64),.ICACHE_SET_BITS(ICACHE_SET_BITS),.DCACHE_SET_BITS(DCACHE_SET_BITS)) dut (
         .clk(clk), .reset_n(reset_n), .cache_invalidate(cache_invalidate), .cache_upper_ram(cache_upper_ram), .win0_unmapped(1'b0), .a20_enable(1'b1),
         .device_mmio_enable(1'b0), .device_mmio_base(32'b0),
         .dcache_req_valid(dreq), .dcache_req_phys_addr_raw(daddr),
@@ -101,9 +102,11 @@ module z486_pc98_cache_tb;
         code_read(32'h3ff0,generation);
         if(reads!=before_reads) $fatal(1,"top instruction set did not hit cache");
         code_read(32'h3800,generation);
+        data_read(32'h3ff0,generation); data_read(32'h3800,generation);
         invalidate(32'h20000000);
         data_read(32'h2000,generation); code_read(32'h3000,generation);
         code_read(32'h3ff0,generation); code_read(32'h3800,generation);
+        data_read(32'h3ff0,generation); data_read(32'h3800,generation);
         // Bank/VRAM reads must see new data without a cache flush.
         data_read(32'h80000,generation); data_read(32'he0000,generation);
         @(negedge clk); generation=32'h30000000;
