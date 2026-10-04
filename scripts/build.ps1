@@ -35,6 +35,9 @@ param(
     # late data requests). 7 = all (released builds); fewer = faster per clock.
     [ValidateRange(0, 7)]
     [int]$Z486PipelineRegs = 7,
+    # Optional larger instruction cache; the data cache stays at 8 KB.
+    [ValidateSet(8, 16)]
+    [int]$Z486ICacheKB = 8,
     [switch]$Z486DebugUart,
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
@@ -99,6 +102,7 @@ if ($PackedGraphics -and $Cpu -eq 'Zet') { throw 'Packed graphics requires the a
 if ($NativeDdr -and ($Cpu -eq 'Zet' -or $ExtendedRamMB -eq 0)) { throw 'Native DDR requires ao486/z486 with extended RAM.' }
 if ($NativeDdrFramebufferOnly -and (-not $NativeDdr -or -not $PackedGraphics)) { throw 'NativeDdrFramebufferOnly requires NativeDdr and PackedGraphics.' }
 if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register packing selection requires z486.' }
+if ($Z486ICacheKB -ne 8 -and $Cpu -ne 'z486') { throw 'Z486ICacheKB requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
@@ -164,6 +168,10 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_PIPELINE_REGS=$Z486PipelineRegs"
     }
     $Z486PipelineRegs | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-pipeline-regs.txt')
+    $Z486ICacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-icache-kb.txt')
+    if ($Z486ICacheKB -eq 16) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_ICACHE_SET_BITS=8"
+    }
     if ($NativeDdr) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR=1"
     }
