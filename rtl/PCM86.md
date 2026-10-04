@@ -29,6 +29,14 @@ the request set after a successful refill. The focused driver-sequence test
 reproduces that failure on the previous implementation and checks repeated
 refills plus preservation of low-FIFO requests.
 
+On 2026-10-04, the user confirmed that Policenauts' intro/title PCM music
+plays smoothly on the 90 MHz PR2 candidate with both NEC PC-9801VM BIOS and
+OpenBIOS. The OpenBIOS test used BIOS commit `2043a82`, which drains stale
+virtual DMA terminal-count status after arming the floppy channel, and core
+RBF SHA-256 `ef1953863d30c7a66d9f8ce51b42d773f4524ba8ba2ff6c39ea45807d76111ef`.
+This confirms that specific game/driver setup; the candidate still fails
+full-design timing and is not a timing-qualified release.
+
 This is an initial playback implementation. Analog volume uses a linear
 approximation; recording, external analog inputs and full mixer routing are
 not implemented. Overflow writes are discarded and underflow holds the last
