@@ -57,3 +57,22 @@ cache enlarged, with both the original and enlarged data cache, it passes both
 read-buffer modes, including 52 PUSH/CALL/ENTER fault cases, store/Jcc and
 CMPXCHG/XADD faults, reset during a DDR read, all CPU speed settings and
 memory-driver initialization at three placements.
+
+Eight 486-enabled differential fuzz seeds (1–8, 1,200 blocks each) also pass
+with both caches at 16 KB: all eight GPRs after each block and 384 KB of RAM
+match Unicorn. This exposed an existing simulation assertion that rejected
+a legal older-shift/younger-load writeback overlap. It also failed with the
+B242 cache sizes and memory-completion settings. The datapath's existing
+assignment priority produced the correct architectural result.
+
+The simulation check now permits that overlap, excludes suppressed tokens,
+and checks that an old stalled shift is suppressed after a younger load.
+`deferred_shift_load_probe.asm` reproduces the old assertion with a shift,
+frame-relative load and independent successor load. The corrected check
+passes; a negative control that lets the older shift overwrite the newer
+load fails the probe's independent value comparison. These assertion edits
+are inside `synthesis translate_off` and do not change FPGA logic.
+
+PCM86 format/FIFO/IRQ/refill/sample-rate tests and DMA terminal-count,
+byte-pointer and ownership checks pass on this tree. Hardware listening is
+separate from these simulation checks.

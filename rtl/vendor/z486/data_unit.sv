@@ -1052,8 +1052,17 @@ always_ff @(posedge clk) begin
 end
 
 // synthesis translate_off
-// Deferred-writer byte-lane collision assertion. Lane = {valid, normalized_reg[2:0],
-// byte_enable[3:0]}; the mem-before-load order resolves overlaps losslessly.
+// Deferred-writer checks. Lane = {valid, normalized_reg[2:0], byte_enable[3:0]}.
+// A successor load may overlap an older memory or shift token: the younger
+// load wins by assignment order. A stalled shift must then stay suppressed.
+logic du_shift_load_kill_due;
+always_ff @(posedge clk) begin
+    du_shift_load_kill_due <= reset_n && !recipe_commit_cancel &&
+        recipe_shift_write.valid && !recipe_shift_killed && load_wb_valid &&
+        (recipe_shift_widx == load_wb_widx) && !pipeline_advance;
+    if (reset_n && du_shift_load_kill_due && !recipe_shift_killed)
+        $fatal(1, "Deferred shift remained live after younger load writeback");
+end
 function automatic logic [3:0] du_lane_be(input logic [2:0] sel,
                                          input logic [1:0] size);
     du_lane_be = (size == 2'd0) ? (sel[2] ? 4'b0010 : 4'b0001)
@@ -1076,14 +1085,14 @@ endfunction
 always_ff @(posedge clk) begin
     logic [7:0] shift_lane, load_lane, mem_lane, intr_lane;
     if (reset_n && !recipe_commit_cancel) begin
-        shift_lane = recipe_shift_write.valid
+        shift_lane = recipe_shift_write.valid && !recipe_shift_killed
             ? {1'b1, recipe_shift_widx,
                du_lane_be(recipe_shift_write.dst, recipe_shift_write.size)}
             : 8'h00;
         load_lane = load_wb_valid
             ? {1'b1, load_wb_widx, du_lane_be(load_wb_dst, load_wb_size)}
             : 8'h00;
-        mem_lane = recipe_memory_write.valid
+        mem_lane = recipe_memory_write.valid && !recipe_memory_killed
             ? {1'b1, du_lane_reg(recipe_memory_write.dst,
                                  recipe_memory_write.size),
                du_lane_be(recipe_memory_write.dst, recipe_memory_write.size)}
@@ -1094,8 +1103,6 @@ always_ff @(posedge clk) begin
                du_lane_be(dst_reg_sel_r, op_size)}
             : 8'h00;
 
-        if (du_lane_overlap(shift_lane, load_lane))
-            $fatal(1, "DUP GPR WRITER shift/load reg %0d", load_lane[6:4]);
         if (du_lane_overlap(shift_lane, mem_lane))
             $fatal(1, "DUP GPR WRITER shift/mem reg %0d", mem_lane[6:4]);
         if (du_lane_overlap(intr_lane, load_lane))
