@@ -29,6 +29,8 @@ param(
     [switch]$PackedGraphics,
     # Native DWORD DDR RAM and linear PEGC path; opt-in until qualified.
     [switch]$NativeDdr,
+    # Keep ordinary RAM on B240's backend; widen only linear graphics stores/reads.
+    [switch]$NativeDdrFramebufferOnly,
     # z486 PC98 timing registers (bit 0 entry ROM, bit 1 effective address, bit 2
     # late data requests). 7 = all (released builds); fewer = faster per clock.
     [ValidateRange(0, 7)]
@@ -95,6 +97,7 @@ if ($ExtendedRamMB -ne 0 -and $Cpu -eq 'Zet') { throw 'Extended RAM requires ao4
 if ($RawIde -and $Cpu -eq 'Zet') { throw 'The native hard-disk boot ROM requires ao486 or z486 (386 instructions).' }
 if ($PackedGraphics -and $Cpu -eq 'Zet') { throw 'Packed graphics requires the ao486 or z486 physical-address/DDR router.' }
 if ($NativeDdr -and ($Cpu -eq 'Zet' -or $ExtendedRamMB -eq 0)) { throw 'Native DDR requires ao486/z486 with extended RAM.' }
+if ($NativeDdrFramebufferOnly -and (-not $NativeDdr -or -not $PackedGraphics)) { throw 'NativeDdrFramebufferOnly requires NativeDdr and PackedGraphics.' }
 if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register packing selection requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
@@ -163,6 +166,10 @@ try {
     $Z486PipelineRegs | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-pipeline-regs.txt')
     if ($NativeDdr) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR=1"
+    }
+    [bool]$NativeDdrFramebufferOnly | Set-Content -LiteralPath (Join-Path $buildRoot 'native-ddr-fb-only.txt')
+    if ($NativeDdrFramebufferOnly) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR_FB_ONLY=1"
     }
     if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
     if ($Z486DebugUart) {

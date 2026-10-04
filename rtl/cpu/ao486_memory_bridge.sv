@@ -25,7 +25,8 @@ module ao486_memory_bridge #(
     parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
     // PC-98: byte-precise reads in the graphics VRAM windows (EGC).
     parameter BYTE_READ_VRAM = 1'b1,
-    parameter WIDE_RAM_MB = 0
+    parameter WIDE_RAM_MB = 0,
+    parameter WIDE_RAM_ENABLE = 1'b1
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -78,17 +79,21 @@ module ao486_memory_bridge #(
         (avm_write || (NARROW_READS && avm_burstcount == 1 &&
                       (READ_MASK_ALWAYS_NONZERO || avm_byteenable[3:2] != 0)));
     wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0);
-    wire [32:0] request_first = {1'b0,avm_address,2'b00};
-    wire [32:0] request_end = request_first +
-        (avm_write ? 33'd4 : {27'b0,avm_burstcount,2'b00});
+    // A legal burst spans at most eight DWORDs. All aperture boundaries are
+    // 512 KB aligned, so only the final eight words of a block can cross one.
+    // Avoid a 33-bit byte-address adder and several wide end comparators on
+    // the request path. Use the starting block plus this four-bit sum instead.
+    wire [3:0] block_tail_end = {1'b0,avm_address[2:0]} +
+        (avm_write ? 4'd1 : avm_burstcount);
+    wire crosses_block = (&avm_address[16:3]) && block_tail_end > 4'd8;
+    wire [12:0] first_block = avm_address[29:17];
+    wire [11:0] first_mb = avm_address[29:18];
     // Only wholly mapped bursts bypass the legacy decoder. MMIO, banked
     // windows, ROM and aperture crossings retain the halfword path.
-    wire wide_ram = request_first >= 33'h00100000 &&
-        request_end <= WIDE_RAM_MB * 33'h00100000 &&
-        (request_end <= 33'h00f00000 || request_first >= 33'h01000000);
+    wire wide_ram = WIDE_RAM_ENABLE && first_mb >= 1 && first_mb < WIDE_RAM_MB && first_mb != 15 &&
+        !(crosses_block && (first_block == 29 || first_block == WIDE_RAM_MB*2-1));
     wire wide_fb = wide_linear_enable &&
-        ((request_first >= 33'h00f00000 && request_end <= 33'h00f80000) ||
-         (request_first >= 33'hfff00000 && request_end <= 33'hfff80000));
+        (first_block == 13'h01e || first_block == 13'h1ffe) && !crosses_block;
     wire use_wide = WIDE_RAM_MB != 0 && (wide_ram || wide_fb);
     assign wide_address = address;
     assign wide_writedata = write_data;

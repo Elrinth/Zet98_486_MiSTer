@@ -281,13 +281,18 @@ module z486_xms_resident_tb;
         endcase
     end
     string program_path,dump_path;
+    integer program_cs;
     integer dump_fd;
     integer fd,loaded,i;
     initial begin
         for(i=0;i<1048576;i=i+1) memory[i]=0;
         if(!$value$plusargs("program=%s",program_path)) $fatal(1,"missing CPU program");
         fd=$fopen(program_path,"rb"); if(!fd) $fatal(1,"cannot open CPU program");
-        loaded=$fread(memory,fd,DOS_PROBE ? 20'h10100 : 4096); $fclose(fd);
+        program_cs=DOS_PROBE ? 16'h1000 : 0;
+        void'($value$plusargs("program_cs=%h",program_cs));
+        if(program_cs<0 || program_cs>16'he000)
+            $fatal(1,"program segment outside conventional/upper RAM");
+        loaded=$fread(memory,fd,(program_cs<<4)+(DOS_PROBE ? 256 : 4096)); $fclose(fd);
         if(!loaded) $fatal(1,"empty CPU program");
         has_resident=$value$plusargs("resident=%s",resident_path);
         if(has_resident) begin
@@ -302,7 +307,7 @@ module z486_xms_resident_tb;
             verify_copy=1;
         end
         memory[20'hffff0]=8'hea; memory[20'hffff1]=0; memory[20'hffff2]=DOS_PROBE ? 1 : 8'h10;
-        memory[20'hffff3]=0; memory[20'hffff4]=DOS_PROBE ? 8'h10 : 0;
+        memory[20'hffff3]=program_cs[7:0]; memory[20'hffff4]=program_cs[15:8];
         repeat(5) @(negedge clk); reset=0;
     end
 `ifdef V86_IRQ_TRACE

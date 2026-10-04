@@ -8,10 +8,12 @@ mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/v
 for name in native_ddr native_exec pegc_cpu stack_allocation; do
     nasm -f bin "tests/hardware/${name}_probe.asm" -o "$out/$name.bin"
 done
+nasm -f bin -Isoftware/ tests/hardware/native_init_probe.asm -o "$out/native_init.bin"
 cp rtl/vendor/z486/*.hex "$out/"
-for native in 0 1; do
+for native in 0 1 2; do
     flags=()
-    if [[ $native == 1 ]]; then flags+=(-DZET98_NATIVE_DDR); fi
+    if [[ $native != 0 ]]; then flags+=(-DZET98_NATIVE_DDR); fi
+    if [[ $native == 2 ]]; then flags+=(-DZET98_NATIVE_DDR_FB_ONLY); fi
     verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
         -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU \
         -DZET98_Z486_PIPELINE_REGS=2 "${flags[@]}" \
@@ -31,9 +33,15 @@ for native in 0 1; do
         echo "NATIVE_DDR=$native $name"
         grep -E 'CPU REPORT|RATE |PASS:' "$out/$name-$native.log"
     done
-    if [[ $native == 1 ]]; then
-        (cd "$out"; ./obj-1/Vz486_xms_resident_tb "+program=$out/pegc_cpu.bin" +reset_after_read=1) \
-            > "$out/reset-1.log" 2>&1 || { tail -n 20 "$out/reset-1.log";exit 1; }
-        grep -E 'RESET|RATE |PASS:' "$out/reset-1.log"
+    for segment in 0000 6000 da00; do
+        (cd "$out"; "./obj-$native/Vz486_xms_resident_tb" "+program=$out/native_init.bin" "+program_cs=$segment") \
+            > "$out/native_init-$native-$segment.log" 2>&1 || { tail -n 20 "$out/native_init-$native-$segment.log";exit 1; }
+        echo "NATIVE_DDR=$native memory init CS=$segment"
+        grep -E 'RATE |PASS:' "$out/native_init-$native-$segment.log"
+    done
+    if [[ $native != 0 ]]; then
+        (cd "$out"; "./obj-$native/Vz486_xms_resident_tb" "+program=$out/pegc_cpu.bin" +reset_after_read=1) \
+            > "$out/reset-$native.log" 2>&1 || { tail -n 20 "$out/reset-$native.log";exit 1; }
+        grep -E 'RESET|RATE |PASS:' "$out/reset-$native.log"
     fi
 done

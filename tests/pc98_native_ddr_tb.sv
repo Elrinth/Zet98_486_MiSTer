@@ -17,8 +17,9 @@ module pc98_native_ddr_tb;
     wire ddr_busy=force_busy || cycles%7<2;
     reg delayed_valid=0;
     reg [63:0] delayed_data=0;
+    reg [7:0] return_mask=0;
     wire ddr_readdatavalid=LATENCY==0 ? command && ddr_read : delayed_valid;
-    wire [63:0] ddr_readdata=LATENCY==0 ? words[index] : delayed_data;
+    wire [63:0] ddr_readdata=LATENCY==0 ? masked_read(words[index],ddr_byteenable) : delayed_data;
     reg force_busy=0;
     pc98_native_ddr_bridge dut(.*);
     reg [63:0] words[0:255],expected[0:255];
@@ -29,6 +30,11 @@ module pc98_native_ddr_tb;
     reg [102:0] stalled_payload;
     function automatic [63:0] pattern(input integer a);
         pattern={32'h36a17402^(a*32'd1741),32'hb0e93587^(a*32'd977)};
+    endfunction
+    // Disabled read lanes are not valid data. Poison them so a two-DWORD
+    // response cannot silently reuse bytes that the DDR request omitted.
+    function automatic [63:0] masked_read(input [63:0] data,input [7:0] mask);
+        for(integer k=0;k<8;k++) masked_read[k*8+:8]=mask[k] ? data[k*8+:8] : 8'hxx;
     endfunction
     task check(input bit good,input string message);
         begin checks++;if(!good)$fatal(1,"native DDR: %s",message);end
@@ -45,10 +51,11 @@ module pc98_native_ddr_tb;
             left<=left-1;
             if(left==1) begin
                 delayed_valid<=1;
-                delayed_data<=words[return_index];
+                delayed_data<=masked_read(words[return_index],return_mask);
             end
         end
         if(command) begin
+            if(ddr_read) check(ddr_byteenable==8'hff,"read must enable the complete reused DDR word");
             check(!reset && !(ddr_read && ddr_write),"command during reset or R/W overlap");
             check(left==0 && !delayed_valid,"read response overtaken");
             check(ddr_address[28:25]==4'h3,"DDR escaped core-owned region");
@@ -57,7 +64,7 @@ module pc98_native_ddr_tb;
             if(ddr_write) begin
                 for(integer k=0;k<8;k++)
                     if(ddr_byteenable[k]) words[index][k*8+:8]<=ddr_writedata[k*8+:8];
-            end else begin return_index<=index;left<=LATENCY;end
+            end else begin return_index<=index;return_mask<=ddr_byteenable;left<=LATENCY;end
             commands<=commands+1;
         end
     end

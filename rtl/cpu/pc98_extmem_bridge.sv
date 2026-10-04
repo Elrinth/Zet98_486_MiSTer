@@ -111,7 +111,9 @@ endmodule
 // words; byte stores become one DDR command with the original four lanes.
 // No write posting or persistent framebuffer cache: completion still means
 // DDR accepted the store, and every framebuffer read observes backing RAM.
-module pc98_native_ddr_bridge (
+module pc98_native_ddr_bridge #(
+    parameter FRAMEBUFFER_ONLY = 1'b0
+) (
     input wire clk, reset,
     input wire [29:0] address,
     input wire [31:0] writedata,
@@ -134,12 +136,15 @@ module pc98_native_ddr_bridge (
     reg cancelled=0;
     wire [31:0] physical = {state==IDLE ? address : next_address,2'b00};
     wire high_fb_alias = physical[31:19] == (32'hfff00000 >> 19);
-    wire [31:0] backing = high_fb_alias ?
+    wire [31:0] backing = (FRAMEBUFFER_ONLY || high_fb_alias) ?
         (32'h30f00000 | {13'b0,physical[18:0]}) :
         (32'h30000000 | {4'b0,physical[27:0]});
     assign ddr_address=backing[31:3];
     assign ddr_writedata={2{writedata}};
-    assign ddr_byteenable=physical[2] ? {byteenable,4'b0} : {4'b0,byteenable};
+    // Reads consume both halves of the returned word. Request every byte,
+    // independently of the CPU's byte-store mask or original burst mask.
+    assign ddr_byteenable=ddr_read ? 8'hff :
+        physical[2] ? {byteenable,4'b0} : {4'b0,byteenable};
     assign ddr_read=!reset && ((state==IDLE && read) || state==ISSUE);
     assign ddr_write=!reset && state==IDLE && write;
     assign busy=state!=IDLE;

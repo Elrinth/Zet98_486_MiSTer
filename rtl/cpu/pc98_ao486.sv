@@ -18,6 +18,11 @@ module pc98_ao486 #(
 `else
     parameter NATIVE_DDR = 0,
 `endif
+`ifdef ZET98_NATIVE_DDR_FB_ONLY
+    parameter NATIVE_DDR_RAM = 0,
+`else
+    parameter NATIVE_DDR_RAM = 1,
+`endif
     // Posted-write memory command queue (ao486_memory_queue): 2**N entries.
     // Off: measured on hardware (B222, 8 entries) it gave no gain for stores
     // mixed with ALU work (7257 -> 7252 KB/s) and cost 13% on VRAM copies
@@ -176,7 +181,7 @@ module pc98_ao486 #(
     assign native_ddr_valid=ram_ddr_valid && ram_response_tag;
     assign legacy_ram_valid=ram_ddr_valid && !ram_response_tag;
     generate if(NATIVE_DDR && EXT_RAM_MB!=0) begin : native_ddr
-        pc98_native_ddr_bridge ram (
+        pc98_native_ddr_bridge #(.FRAMEBUFFER_ONLY(!NATIVE_DDR_RAM)) ram (
             .clk(clk),.reset(cpu_reset),.address(wide_address),.writedata(wide_writedata),
             .byteenable(wide_byteenable),.burstcount(wide_burstcount),
             .read(wide_read),.write(wide_write),.waitrequest(wide_waitrequest),
@@ -191,10 +196,11 @@ module pc98_ao486 #(
         assign wide_waitrequest=1;
     end endgenerate
     generate if (EXT_RAM_MB != 0) begin : extended_ram
-        // Native stores bypass this bridge. Disable its private read cache in
-        // that configuration so a later aperture-crossing fallback cannot
-        // return a line cached before a native store changed the same RAM.
-        pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB), .READ_CACHE(EXT_RAM_READ_CACHE && !NATIVE_DDR)) ram (
+        // Native RAM stores bypass this bridge. Disable its private read
+        // cache in that configuration so aperture-crossing reads cannot see
+        // stale data. Framebuffer-only builds retain B240's RAM read cache.
+        pc98_extmem_bridge #(.RAM_MB(EXT_RAM_MB),
+            .READ_CACHE(EXT_RAM_READ_CACHE && !(NATIVE_DDR && NATIVE_DDR_RAM))) ram (
             .clk(clk), .reset(reset), .address(physical_address),
             .select(bus_select), .writedata(bus_writedata), .write(bus_write),
             .strobe(physical_strobe && !legacy_mapped && !pegc_claimed),
@@ -328,7 +334,8 @@ module pc98_ao486 #(
 `endif
     // Proven against the vendored Avalon generator by run-memory-mask-contract.sh.
     ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS),
-                      .WIDE_RAM_MB(NATIVE_DDR ? EXT_RAM_MB : 0)) bridge (
+                      .WIDE_RAM_MB(NATIVE_DDR ? EXT_RAM_MB : 0),
+                      .WIDE_RAM_ENABLE(NATIVE_DDR_RAM)) bridge (
         .clk(clk), .reset(cpu_reset),
         .avm_address(avm_address), .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount), .avm_write(avm_write), .avm_read(avm_read),

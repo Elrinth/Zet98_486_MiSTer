@@ -16,6 +16,12 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B241 adds native DWORD transfers for the linear PEGC framebuffer. At the
+same 90 MHz, a matched Doom timedemo completed 11,520 gametics in 1,872
+reported realtics versus B240's 2,008: **7.3% more throughput**, with sound
+disabled for both measurements. OpenBIOS boot and hardware QUALIFY passed.
+Ordinary RAM retains the B240 path. See the [validation notes](rtl/cpu/NATIVE_DDR.md).
+
 B240 fixes Policenauts PCM gaps and removes two CPU pipeline delays. Earlier
 comparisons against B239 measured about 18% more Dhrystone throughput in
 simulation and a 9% gain in the Doom timedemo. Use
@@ -488,9 +494,12 @@ With Docker Desktop running, from PowerShell:
 ./scripts/build.ps1
 ```
 
-The B240 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
+The B241 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
 -SoundBoard PC9801_86 -OpnaBackend JT08 -RegisterPacking Normal -RawIde
--MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2 -Seed 12`.
+-MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2 -Seed 12
+-NativeDdr -NativeDdrFramebufferOnly`.
+Both native-DDR flags are required for the released graphics-only optimization;
+the full-native RAM mode remains experimental and fails hardware startup.
 Pipeline value 2 keeps the effective-address register, removes the registered
 decoder entry delay and enables early data requests. The larger October 2026
 upstream z486 rewrite is not included.

@@ -3,6 +3,7 @@
 // Drive the CPU bus of the real router directly. The CPU is a black box here;
 // run-z486-native-ddr.sh separately checks actual instructions and cache fills.
 module pc98_native_router_tb;
+    parameter RAM_ENABLE=1;
     reg clk=0,reset=1;
     always #5 clk=~clk;
     reg [29:0] request_address=0;
@@ -23,7 +24,7 @@ module pc98_native_router_tb;
     wire ddr_busy=cycles%7<2;
     reg ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
-    pc98_ao486 #(.EXT_RAM_MB(64),.NATIVE_DDR(1),.PEGC_ENABLE(1)) dut (
+    pc98_ao486 #(.EXT_RAM_MB(64),.NATIVE_DDR(1),.NATIVE_DDR_RAM(RAM_ENABLE),.PEGC_ENABLE(1)) dut (
         .clk(clk),.reset(reset),.cpu_speed_sel(2'b0),.cache_invalidate(1'b0),
         .cache_upper_ram_native(1'b0),.interrupt_do(1'b0),.interrupt_vector(8'b0),
         .bus_address(bus_address),.bus_select(bus_select),.bus_writedata(bus_writedata),
@@ -125,9 +126,10 @@ module pc98_native_router_tb;
         put(32'hfff00000,32'h11223344);
         get2(32'h000a8000,32'h11223344,0,1);
         cancel_read(32'h00100000,4); // native RAM read
+        cancel_read(32'hfff00000,4); // native framebuffer read in both modes
         cancel_read(32'h000a8000,1); // banked framebuffer read
         cancel_read(32'h00effffc,2); // fallback RAM read
-        $display("PASS native router checks=%0d commands=%0d: boundary coherence, aliases, CPU-only reset tags",checks,commands);
+        $display("PASS native router RAM_ENABLE=%0d checks=%0d commands=%0d: boundary coherence, aliases, CPU-only reset tags",RAM_ENABLE,checks,commands);
         $finish;
     end
     initial begin #1000000;$fatal(1,"native router watchdog");end

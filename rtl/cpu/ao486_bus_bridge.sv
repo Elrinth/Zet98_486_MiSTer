@@ -11,7 +11,8 @@ module ao486_bus_bridge #(
     // >0: posted-write command queue of 2**MEMORY_QUEUE_BITS entries in front
     // of the memory bridge (ao486_memory_queue); 0: direct, as before.
     parameter MEMORY_QUEUE_BITS = 0,
-    parameter WIDE_RAM_MB = 0
+    parameter WIDE_RAM_MB = 0,
+    parameter WIDE_RAM_ENABLE = 1'b1
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -112,7 +113,7 @@ module ao486_bus_bridge #(
         assign mem_busy = bridge_busy;
     end endgenerate
     ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO),
-                         .WIDE_RAM_MB(WIDE_RAM_MB)) memory_bridge (
+                         .WIDE_RAM_MB(WIDE_RAM_MB), .WIDE_RAM_ENABLE(WIDE_RAM_ENABLE)) memory_bridge (
         .clk(clk), .reset(reset), .avm_address(q_address),
         .avm_writedata(q_writedata), .avm_byteenable(q_byteenable),
         .avm_burstcount(q_burstcount),
