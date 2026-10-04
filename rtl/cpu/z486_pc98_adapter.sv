@@ -7,7 +7,7 @@ module z486_pc98_adapter #(
     parameter CLOCK_RATE_MHZ = 90
 ) (
     input wire clk, rst_n, a20_enable, cache_disable, cache_invalidate,
-    input wire fabric_idle,
+    input wire fabric_idle, write_complete,
     input wire [1:0] cpu_speed_sel,
     output wire [35:0] debug_state,
     output wire [17:0] debug_gate,       // trace builds: {IDT gate read, VM, gate address 15..0}
@@ -94,10 +94,12 @@ module z486_pc98_adapter #(
     assign io_write_data = write_data >> (first_lane * 8);
     // The PC-98 PIC presents its vector while interrupt_done is asserted.
     assign interrupt_done = cpu_reset_n && valid && inta && second_inta;
-    // Complete stores at the physical fabric before releasing their owner.
-    // This also orders bank-window aliases against internal RAM-cache hits.
+    // Complete only after the final physical write has reached its target.
+    // ACK release and bus-owner turnaround need not hold the CPU afterwards;
+    // the bridge still prevents a later external access from overtaking them.
+    // Internal cache hits remain ordered after bank-window alias stores.
     assign ready = cpu_reset_n && (inta ? 1'b1 : io ? io_done :
-                                  write ? write_accepted && fabric_idle : !avm_waitrequest);
+                                  write ? write_accepted && (fabric_idle || write_complete) : !avm_waitrequest);
     assign response = cpu_reset_n && ((valid && inta) || io_read_done || avm_readdatavalid);
     assign read_data = inta ? (second_inta ? {24'b0,interrupt_vector} : 32'b0) :
                        io ? (io_read_data << (first_lane * 8)) : avm_readdata;

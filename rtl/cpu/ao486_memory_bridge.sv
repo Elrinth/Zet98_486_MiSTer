@@ -39,6 +39,9 @@ module ao486_memory_bridge #(
     output wire        avm_waitrequest,
     output reg         avm_readdatavalid,
     output reg  [31:0] avm_readdata,
+    // One-cycle pulse after the final physical store beat is acknowledged.
+    // Bus ownership/ACK release can remain busy after this point.
+    output reg         avm_write_done,
     output wire        busy,
 
     output wire [31:1] bus_address,
@@ -129,8 +132,10 @@ module ao486_memory_bridge #(
             read_low <= 0;
             avm_readdata <= 0;
             avm_readdatavalid <= 0;
+            avm_write_done <= 0;
         end else begin
             avm_readdatavalid <= 0;
+            avm_write_done <= 0;
             case (state)
                 IDLE: if ((avm_read || avm_write) && !avm_waitrequest) begin
                     address <= avm_address;
@@ -146,6 +151,8 @@ module ao486_memory_bridge #(
                     state <= use_wide ? WIDE_ISSUE : TRANSFER;
                 end
                 TRANSFER: if (skip_half || bus_ack) begin
+                    if (write_request && last_half && remaining == 1)
+                        avm_write_done <= 1;
                     if (!write_request) begin
                         if (!high_half) read_low <= skip_half ? 16'hffff : bus_readdata;
                         if (last_half) begin
@@ -164,8 +171,10 @@ module ao486_memory_bridge #(
                 end
                 RELEASE: if (!bus_ack)
                     state <= remaining == 0 ? IDLE : TRANSFER;
-                WIDE_ISSUE: if (!wide_waitrequest)
+                WIDE_ISSUE: if (!wide_waitrequest) begin
+                    avm_write_done <= write_request;
                     state <= write_request ? IDLE : WIDE_DATA;
+                end
                 WIDE_DATA: if (wide_readdatavalid) begin
                     avm_readdata <= wide_readdata;
                     avm_readdatavalid <= 1;

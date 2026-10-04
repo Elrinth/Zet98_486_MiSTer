@@ -40,11 +40,35 @@ module pc98_native_router_tb;
     reg [28:0] keys[0:255];
     reg [63:0] words[0:255];
     integer used=0,cycles=0,left=0,read_index=0,commands=0,checks=0;
+    reg write_pending=0;
+    reg [31:0] pending_address,pending_data;
+    integer write_requests=0,write_completions=0;
     task check(input bit good,input string reason);
         begin checks++;if(!good)$fatal(1,"native router: %s",reason);end
     endtask
     always @(posedge clk) begin
         cycles<=cycles+1;ddr_readdatavalid<=0;
+        if(dut.avm_write && !dut.avm_waitrequest) begin
+            check(!write_pending,"new store before prior completion");
+            write_pending=1;write_requests++;
+            pending_address={request_address,2'b0};pending_data=request_data;
+        end
+        if(dut.memory_write_complete) begin : completion_check
+            reg [28:0] backing_word;
+            integer found;
+            check(write_pending,"unowned or repeated write completion");
+            if(pending_address>=32'h00100000) begin
+                backing_word=(pending_address[31:19]==(32'hfff00000>>19) ?
+                    (32'h30f00000 | {13'b0,pending_address[18:0]}) :
+                    (32'h30000000 | pending_address))>>3;
+                found=-1;
+                for(integer i=0;i<used;i++) if(keys[i]==backing_word) found=i;
+                check(found>=0,"store completed before a DDR write");
+                check(words[found][pending_address[2]*32+:32]===pending_data,
+                    "store completed before all bytes reached DDR");
+            end
+            write_pending=0;write_completions++;
+        end
         if(left!=0) begin
             left<=left-1;
             if(left==1) begin ddr_readdata<=words[read_index];ddr_readdatavalid<=1;end
@@ -129,6 +153,7 @@ module pc98_native_router_tb;
         cancel_read(32'hfff00000,4); // native framebuffer read in both modes
         cancel_read(32'h000a8000,1); // banked framebuffer read
         cancel_read(32'h00effffc,2); // fallback RAM read
+        check(write_requests==write_completions && !write_pending,"missing write completion");
         $display("PASS native router RAM_ENABLE=%0d checks=%0d commands=%0d: boundary coherence, aliases, CPU-only reset tags",RAM_ENABLE,checks,commands);
         $finish;
     end

@@ -11,7 +11,7 @@ module ao486_memory_bridge_tb #(
     reg [31:0] avm_writedata = 0;
     reg [3:0] avm_byteenable = 0, avm_burstcount = 1;
     reg avm_write = 0, avm_read = 0;
-    wire avm_waitrequest, avm_readdatavalid, busy;
+    wire avm_waitrequest, avm_readdatavalid, avm_write_done, busy;
     wire [31:0] avm_readdata;
     wire [31:1] bus_address;
     wire [1:0] bus_select;
@@ -41,6 +41,22 @@ module ao486_memory_bridge_tb #(
     reg [1:0] held_select;
     reg [15:0] held_data;
     reg held_write;
+    reg [31:0] completed_address[0:1023], completed_data[0:1023];
+    reg [3:0] completed_mask[0:1023];
+    integer write_head=0,write_tail=0;
+
+    // The completion indication lets z486 execute its next instruction while
+    // legacy ACK is still releasing. Every selected byte must already have
+    // reached the independent memory model; first-half completion is unsafe.
+    always @(negedge clk) if (!reset && avm_write_done) begin
+        if (write_head == write_tail) $fatal(1,"duplicate/unowned write completion");
+        for (integer lane=0;lane<4;lane++)
+            if (completed_mask[write_head][lane] &&
+                memory[index_of(completed_address[write_head]+lane)] !==
+                    completed_data[write_head][lane*8+:8])
+                $fatal(1,"write completed before all selected bytes reached memory");
+        write_head++;
+    end
 
     function automatic integer index_of(input reg [31:0] a);
         index_of = a[12:0] ^ a[25:13] ^ {7'b0, a[31:26]};
@@ -165,6 +181,12 @@ module ao486_memory_bridge_tb #(
                          input reg [3:0] be, input reg [31:0] data,
                          input integer beats);
         begin
+            if (wr) begin
+                completed_address[write_tail]=addr;
+                completed_data[write_tail]=data;
+                completed_mask[write_tail]=be;
+                write_tail++;
+            end
             enqueue(wr, addr, be, data, beats);
             @(negedge clk);
             avm_address = addr[31:2];
@@ -197,6 +219,7 @@ module ao486_memory_bridge_tb #(
             repeat (3) @(posedge clk);
             if (bus_head != bus_tail || read_head != read_tail)
                 $fatal(1, "missing transfers/responses");
+            if (write_head != write_tail) $fatal(1,"missing physical write completion");
         end
     endtask
 

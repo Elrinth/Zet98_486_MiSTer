@@ -21,7 +21,7 @@ module ao486_memory_integration_tb;
     wire [29:0] avm_address;
     wire [31:0] avm_writedata, avm_readdata;
     wire [3:0] avm_byteenable, avm_burstcount;
-    wire avm_write, avm_read, avm_waitrequest, avm_readdatavalid, busy;
+    wire avm_write, avm_read, avm_waitrequest, avm_readdatavalid, avm_write_done, busy;
     reg [23:0] dma_address = 0;
     reg dma_16bit = 0, dma_write = 0, dma_read = 0;
     reg [15:0] dma_writedata = 0;

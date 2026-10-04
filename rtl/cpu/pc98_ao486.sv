@@ -13,6 +13,7 @@ module pc98_ao486 #(
     parameter UPPER_RAM_ICACHE = 0,
     parameter CLOCK_RATE_MHZ = 90,
     parameter PEGC_ENABLE = 0,
+    parameter EARLY_WRITE_COMPLETE = 1'b1,
 `ifdef ZET98_NATIVE_DDR
     parameter NATIVE_DDR = 1,
 `else
@@ -70,7 +71,7 @@ module pc98_ao486 #(
     wire [31:0] avm_writedata, avm_readdata;
     wire [3:0] avm_byteenable, avm_burstcount;
     wire avm_read, avm_write, avm_waitrequest, avm_readdatavalid;
-    wire fabric_busy;
+    wire fabric_busy, memory_write_complete;
     wire [29:0] wide_address;
     wire [31:0] wide_writedata, wide_readdata;
     wire [3:0] wide_byteenable, wide_burstcount;
@@ -271,6 +272,9 @@ module pc98_ao486 #(
     z486_pc98_adapter #(.EXT_RAM_MB(EXT_RAM_MB), .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ)) cpu (
         .cpu_speed_sel(cpu_speed_sel),
         .fabric_idle(!fabric_busy),
+        // A queued bridge can complete an older command. Only the direct
+        // single-outstanding configuration can attribute this pulse to z486.
+        .write_complete(EARLY_WRITE_COMPLETE && MEMORY_QUEUE_BITS == 0 && memory_write_complete),
         .debug_state(debug_cpu_state), .debug_gate(debug_gate),
         .crash_tx(crash_tx),
 `else
@@ -340,6 +344,7 @@ module pc98_ao486 #(
         .avm_address(avm_address), .avm_writedata(avm_writedata), .avm_byteenable(avm_byteenable),
         .avm_burstcount(avm_burstcount), .avm_write(avm_write), .avm_read(avm_read),
         .avm_waitrequest(avm_waitrequest), .avm_readdatavalid(avm_readdatavalid), .avm_readdata(avm_readdata),
+        .avm_write_done(memory_write_complete),
         .io_read_do(io_read_do), .io_read_address(io_read_address), .io_read_length(io_read_length),
         .io_read_data(io_read_data), .io_read_done(io_read_done), .io_write_do(io_write_do),
         .io_write_address(io_write_address), .io_write_length(io_write_length),
