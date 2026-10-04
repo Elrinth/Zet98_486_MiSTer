@@ -2163,9 +2163,12 @@ wire        vipt_slow_submit = vipt_load_slow_req_r && !mem_servicing;
 // submission remains idle-gated above.  This keeps mem_servicing out of the
 // live-TLB/cache-address cone without changing request ordering.
 wire        vipt_slow_addr_owned = vipt_load_slow_req_r;
-wire        mem_req_to_paging = (mem_op_eligible &&
+// The paging unit returns to idle on its fault pulse. A chained successor
+// must not use that idle slot: its fault could replace the older store's
+// CR2/EIP/ESP before exception delivery has redirected the microcode.
+wire        mem_req_to_paging = !page_fault && ((mem_op_eligible &&
                                  (uc_data_busreq || x87_direct_mem_req) &&
-                                 !gp_fault_trigger) || vipt_slow_submit;
+                                 !gp_fault_trigger) || vipt_slow_submit);
 wire        iack_req_to_paging = mem_op_eligible && iack_busop && !gp_fault_trigger;
 wire        mem_write_now = (x87_direct_mem_req || vipt_slow_submit) ? 1'b0 :
                             (uc_is_write || (io_busop_wr && mem_is_io));
@@ -2511,6 +2514,7 @@ reg [31:0] TMPeIP;                  // Saved EIP for RPTI (repeat instruction)
 reg [31:0] wr_restart_eip;          // TMPeIP captured at every demand-write issue: a write
                                     // fault (perm/walk/crossing) may surface after the issuing
                                     // instruction chained away and TMPeIP moved on
+reg [31:0] wr_restart_esp;          // The same store owns the pre-instruction stack pointer.
 reg [31:0] TMPeSP;                  // Saved ESP for fault handling
 wire       flags_backup_active;     // Set at i_issue/FLGSBA, cleared on interrupt_entry - guards FLAGSB writes
 reg        misc1_flag;              // Set by SMISC1 {-33-}, tested by JMISC1 {-53-}
@@ -3258,11 +3262,19 @@ always_ff @(posedge clk) begin
                         // committed a stack push before faulting (e.g. ENTER's PUSH EBP).
 
     // Chained-store fault attribution: capture the restart IP at every demand WRITE issue
-    if (mem_req_to_paging && mem_write_now && mem_accepted)
+    if (mem_req_to_paging && mem_write_now && mem_accepted) begin
         wr_restart_eip <= TMPeIP;
-    if (page_fault && pg_fault_code[1])
+        // CALL can hand off its stack write on the same edge that captures
+        // TMPeSP. Use the current pre-instruction ESP on that first cycle.
+        wr_restart_esp <= i_first ? ESP : TMPeSP;
+    end
+    if (page_fault && pg_fault_code[1]) begin
         TMPeIP <= wr_restart_eip;
-    else if (data_page_fault && vipt_load_slow_wait_r && !pf_store_held)
+        // A younger instruction can replace TMPeSP after a PUSH has chained
+        // away. Restart the faulting store with its original ESP as well as
+        // its EIP; otherwise retrying a stack-page fault pushes twice.
+        TMPeSP <= wr_restart_esp;
+    end else if (data_page_fault && vipt_load_slow_wait_r && !pf_store_held)
         TMPeIP <= vipt_load_slow_r.restart_eip;
     else if (ifetch_page_fault) begin
         // A cross-page instruction can fault before i_issue captures its restart
