@@ -106,3 +106,77 @@ module pc98_extmem_bridge #(
         $fatal(1,"extended RAM map supports 16 or 64 MB");
     // synthesis translate_on
 endmodule
+
+// Native DWORD path. One 64-bit DDR read supplies up to two sequential CPU
+// words; byte stores become one DDR command with the original four lanes.
+// No write posting or persistent framebuffer cache: completion still means
+// DDR accepted the store, and every framebuffer read observes backing RAM.
+module pc98_native_ddr_bridge (
+    input wire clk, reset,
+    input wire [29:0] address,
+    input wire [31:0] writedata,
+    input wire [3:0] byteenable, burstcount,
+    input wire read, write,
+    output wire waitrequest, busy, readdatavalid,
+    output wire [31:0] readdata,
+    output wire [28:0] ddr_address,
+    output wire [63:0] ddr_writedata,
+    output wire [7:0] ddr_byteenable,
+    output wire ddr_read, ddr_write,
+    input wire ddr_busy, ddr_readdatavalid,
+    input wire [63:0] ddr_readdata
+);
+    localparam IDLE=0, DATA=1, WORD=2, ISSUE=3;
+    reg [1:0] state=IDLE;
+    reg [29:0] next_address;
+    reg [3:0] remaining;
+    reg [63:0] read_word;
+    reg cancelled=0;
+    wire [31:0] physical = {state==IDLE ? address : next_address,2'b00};
+    wire high_fb_alias = physical[31:19] == (32'hfff00000 >> 19);
+    wire [31:0] backing = high_fb_alias ?
+        (32'h30f00000 | {13'b0,physical[18:0]}) :
+        (32'h30000000 | {4'b0,physical[27:0]});
+    assign ddr_address=backing[31:3];
+    assign ddr_writedata={2{writedata}};
+    assign ddr_byteenable=physical[2] ? {byteenable,4'b0} : {4'b0,byteenable};
+    assign ddr_read=!reset && ((state==IDLE && read) || state==ISSUE);
+    assign ddr_write=!reset && state==IDLE && write;
+    assign busy=state!=IDLE;
+    assign waitrequest=reset || busy || ddr_busy;
+    assign readdatavalid=state==WORD && !reset && !cancelled;
+    assign readdata=next_address[0] ? read_word[63:32] : read_word[31:0];
+    always @(posedge clk) begin
+        if(reset) begin
+            cancelled<=1;
+            // Accepted reads retain ownership until the DDR response drains.
+            if(state!=DATA || ddr_readdatavalid) state<=IDLE;
+        end else case(state)
+            IDLE: if(read && !waitrequest) begin
+                next_address<=address; remaining<=burstcount; cancelled<=0;
+                if(ddr_readdatavalid) begin read_word<=ddr_readdata;state<=WORD;end
+                else state<=DATA;
+            end
+            ISSUE: if(!ddr_busy) begin
+                if(ddr_readdatavalid) begin read_word<=ddr_readdata;state<=WORD;end
+                else state<=DATA;
+            end
+            DATA: if(ddr_readdatavalid) begin
+                read_word<=ddr_readdata;
+                state<=cancelled ? IDLE : WORD;
+            end
+            WORD: begin
+                remaining<=remaining-1'b1;
+                next_address<=next_address+1'b1;
+                if(remaining==1) state<=IDLE;
+                else if(next_address[0]) state<=ISSUE;
+            end
+        endcase
+    end
+    // synthesis translate_off
+    always @(posedge clk) if(!waitrequest && (read || write)) begin
+        if(read && write) $fatal(1,"native DDR simultaneous read/write");
+        if(read && (burstcount==0 || burstcount>8)) $fatal(1,"native DDR invalid burst");
+    end
+    // synthesis translate_on
+endmodule

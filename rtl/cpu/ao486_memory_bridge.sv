@@ -24,7 +24,8 @@ module ao486_memory_bridge #(
     parameter SKIP_EMPTY_HALVES = 1'b1,
     parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
     // PC-98: byte-precise reads in the graphics VRAM windows (EGC).
-    parameter BYTE_READ_VRAM = 1'b1
+    parameter BYTE_READ_VRAM = 1'b1,
+    parameter WIDE_RAM_MB = 0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -45,10 +46,18 @@ module ao486_memory_bridge #(
     output wire        bus_write,
     output wire        bus_strobe,
     input  wire [15:0] bus_readdata,
-    input  wire        bus_ack
+    input  wire        bus_ack,
+    input  wire        wide_linear_enable,
+    output wire [29:0] wide_address,
+    output wire [31:0] wide_writedata,
+    output wire [3:0]  wide_byteenable, wide_burstcount,
+    output wire        wide_read, wide_write,
+    input  wire        wide_waitrequest, wide_readdatavalid,
+    input  wire [31:0] wide_readdata
 );
-    localparam IDLE = 2'd0, TRANSFER = 2'd1, RELEASE = 2'd2;
-    reg [1:0] state;
+    localparam IDLE = 3'd0, TRANSFER = 3'd1, RELEASE = 3'd2,
+               WIDE_ISSUE = 3'd3, WIDE_DATA = 3'd4;
+    reg [2:0] state;
     reg [29:0] address;
     reg [31:0] write_data;
     reg [3:0] byte_enable;
@@ -69,6 +78,24 @@ module ao486_memory_bridge #(
         (avm_write || (NARROW_READS && avm_burstcount == 1 &&
                       (READ_MASK_ALWAYS_NONZERO || avm_byteenable[3:2] != 0)));
     wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0);
+    wire [32:0] request_first = {1'b0,avm_address,2'b00};
+    wire [32:0] request_end = request_first +
+        (avm_write ? 33'd4 : {27'b0,avm_burstcount,2'b00});
+    // Only wholly mapped bursts bypass the legacy decoder. MMIO, banked
+    // windows, ROM and aperture crossings retain the halfword path.
+    wire wide_ram = request_first >= 33'h00100000 &&
+        request_end <= WIDE_RAM_MB * 33'h00100000 &&
+        (request_end <= 33'h00f00000 || request_first >= 33'h01000000);
+    wire wide_fb = wide_linear_enable &&
+        ((request_first >= 33'h00f00000 && request_end <= 33'h00f80000) ||
+         (request_first >= 33'hfff00000 && request_end <= 33'hfff80000));
+    wire use_wide = WIDE_RAM_MB != 0 && (wide_ram || wide_fb);
+    assign wide_address = address;
+    assign wide_writedata = write_data;
+    assign wide_byteenable = byte_enable;
+    assign wide_burstcount = remaining;
+    assign wide_read = state == WIDE_ISSUE && !write_request && !reset;
+    assign wide_write = state == WIDE_ISSUE && write_request && !reset;
 
     assign busy = state != IDLE;
     assign avm_waitrequest = reset || busy || bus_ack;
@@ -111,7 +138,7 @@ module ao486_memory_bridge #(
                     // is still required after every actual legacy transfer.
                     high_half <= first_high_half;
                     read_low <= 16'hffff;
-                    state <= TRANSFER;
+                    state <= use_wide ? WIDE_ISSUE : TRANSFER;
                 end
                 TRANSFER: if (skip_half || bus_ack) begin
                     if (!write_request) begin
@@ -132,6 +159,14 @@ module ao486_memory_bridge #(
                 end
                 RELEASE: if (!bus_ack)
                     state <= remaining == 0 ? IDLE : TRANSFER;
+                WIDE_ISSUE: if (!wide_waitrequest)
+                    state <= write_request ? IDLE : WIDE_DATA;
+                WIDE_DATA: if (wide_readdatavalid) begin
+                    avm_readdata <= wide_readdata;
+                    avm_readdatavalid <= 1;
+                    remaining <= remaining - 1'b1;
+                    if (remaining == 1) state <= IDLE;
+                end
                 default: state <= IDLE;
             endcase
         end

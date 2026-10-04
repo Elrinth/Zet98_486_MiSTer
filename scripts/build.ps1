@@ -27,6 +27,8 @@ param(
     [switch]$RawIde,
     [switch]$MidiUart,
     [switch]$PackedGraphics,
+    # Native DWORD DDR RAM and linear PEGC path; opt-in until qualified.
+    [switch]$NativeDdr,
     # z486 PC98 timing registers (bit 0 entry ROM, bit 1 effective address, bit 2
     # late data requests). 7 = all (released builds); fewer = faster per clock.
     [ValidateRange(0, 7)]
@@ -92,6 +94,7 @@ if ($Z486DebugUart -and ($Cpu -ne 'z486' -or $MidiUart)) { throw 'Z486 debug UAR
 if ($ExtendedRamMB -ne 0 -and $Cpu -eq 'Zet') { throw 'Extended RAM requires ao486 or z486.' }
 if ($RawIde -and $Cpu -eq 'Zet') { throw 'The native hard-disk boot ROM requires ao486 or z486 (386 instructions).' }
 if ($PackedGraphics -and $Cpu -eq 'Zet') { throw 'Packed graphics requires the ao486 or z486 physical-address/DDR router.' }
+if ($NativeDdr -and ($Cpu -eq 'Zet' -or $ExtendedRamMB -eq 0)) { throw 'Native DDR requires ao486/z486 with extended RAM.' }
 if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register packing selection requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
@@ -145,6 +148,7 @@ try {
     [bool]$CdTrace | Set-Content -LiteralPath (Join-Path $buildRoot 'cd-trace.txt')
     [bool]$MidiUart | Set-Content -LiteralPath (Join-Path $buildRoot 'midi-uart.txt')
     [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
+    [bool]$NativeDdr | Set-Content -LiteralPath (Join-Path $buildRoot 'native-ddr.txt')
     $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
     'OSD Full/33/8/3 MHz' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
     $Seed | Set-Content -LiteralPath (Join-Path $buildRoot 'fitter-seed.txt')
@@ -157,6 +161,9 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_PIPELINE_REGS=$Z486PipelineRegs"
     }
     $Z486PipelineRegs | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-pipeline-regs.txt')
+    if ($NativeDdr) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR=1"
+    }
     if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'

@@ -42,7 +42,11 @@ module ao486_memory_integration_tb;
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (.*);
+    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (
+        .wide_linear_enable(1'b0),.wide_backend_busy(1'b0),.wide_waitrequest(1'b1),
+        .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
+        .wide_address(),.wide_writedata(),.wide_byteenable(),.wide_burstcount(),
+        .wide_read(),.wide_write(),.*);
 
     reg [7:0] memory [0:65535];
     reg [7:0] expected [0:65535];

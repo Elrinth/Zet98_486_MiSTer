@@ -18,7 +18,7 @@ module pc98_pegc_bus_tb;
     reg [63:0] ddr_readdata=0;
     reg [7:0] video_index=0;
     wire [23:0] video_rgb;
-    pc98_pegc_bus dut(.*,.analog16(1'b1),.display_enable(1'b1),.gdc_5mhz(1'b1));
+    pc98_pegc_bus dut(.*,.linear_enable(),.analog16(1'b1),.display_enable(1'b1),.gdc_5mhz(1'b1));
     reg [7:0] memory[0:524287];
     integer checks=0,commands=0,palette_writes=0,ticks=0,pending=0,pending_address=0;
     reg hold_return=0;

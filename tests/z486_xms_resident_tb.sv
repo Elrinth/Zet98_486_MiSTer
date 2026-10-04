@@ -1,5 +1,6 @@
 `timescale 1ns/1ps
 module z486_xms_resident_tb;
+    parameter DDR_WORDS=8192;
     parameter RAM_MB=16;
     parameter DOS_PROBE=0;
     parameter READ_CACHE=1;
@@ -15,6 +16,20 @@ module z486_xms_resident_tb;
     // (SDRAM refresh/video contention on hardware) instead of 0..2.
     parameter RANDOM_WAIT=0;
     reg clk=0,reset=1;
+    integer reset_after_read=0,reset_hold=0;
+    bit reset_injected=0;
+    initial void'($value$plusargs("reset_after_read=%d",reset_after_read));
+    // Optional guest reset during a real DDR read. DDR storage and its delayed
+    // response deliberately continue while the CPU and frontend restart.
+    always @(negedge clk) begin
+        if(reset_after_read!=0 && !reset_injected && left!=0) begin
+            reset_injected=1;reset_hold=3;reset=1;
+            $display("RESET pending DDR read; response must drain before reboot");
+        end else if(reset_hold!=0) begin
+            reset_hold=reset_hold-1;
+            if(reset_hold==0) reset=0;
+        end
+    end
     always #5 clk=!clk;
     wire cache_invalidate=0;
     reg interrupt_do=0;
@@ -59,8 +74,8 @@ module z486_xms_resident_tb;
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
         .pegc_video_readdatavalid(),.pegc_video_readdata(),.*);
     reg [7:0] memory[0:1048575];
-    reg [28:0] keys[0:8191];
-    reg [63:0] words[0:8191];
+    reg [28:0] keys[0:DDR_WORDS-1];
+    reg [63:0] words[0:DDR_WORDS-1];
     integer used=0,ddr_commands=0,left=0,read_index=0,ticks=0,boots=0;
     integer n,k,found;
     reg [7:0] resident_original[0:4095];
@@ -109,7 +124,7 @@ module z486_xms_resident_tb;
             found=-1;
             for(n=0;n<used;n=n+1) if(keys[n]==ddr_address) found=n;
             if(found<0) begin
-                if(used==8192) $fatal(1,"DDR model table full");
+                if(used==DDR_WORDS) $fatal(1,"DDR model table full");
                 found=used; used=used+1; keys[found]=ddr_address;
                 words[found]=pattern_word(ddr_address);
             end
@@ -203,9 +218,9 @@ module z486_xms_resident_tb;
                     if(held_write && (held_address==20'h7fe4 || held_address==20'h7ff0)) dump_rmw_ring();
 `endif
                     if(held_write && held_address==20'h7fe4)
-                        $display("CPU REPORT EAX=%h EBX=%h ECX=%h EDX=%h ESI=%h EDI=%h EBP=%h ESP=%h EIP=%h",
+                        $display("CPU REPORT EAX=%h EBX=%h ECX=%h EDX=%h ESI=%h EDI=%h EBP=%h ESP=%h EIP=%h cycles=%0d DDR=%0d",
                           dut.cpu.core.EAX,dut.cpu.core.EBX,dut.cpu.core.ECX,dut.cpu.core.EDX,
-                          dut.cpu.core.ESI,dut.cpu.core.EDI,dut.cpu.core.EBP,dut.cpu.core.ESP,dut.cpu.eip);
+                          dut.cpu.core.ESI,dut.cpu.core.EDI,dut.cpu.core.EBP,dut.cpu.core.ESP,dut.cpu.eip,rate_cycles,ddr_commands);
                     if(PM_PAYLOAD_TEST && held_write && held_address==20'h7fe0)
                         $display("PM FAIL stage=%0d crc=%h address=%h length=%h fault=%h DDR=%0d",
                           dut.cpu.core.EBP,dut.cpu.core.EAX,dut.cpu.core.EBX,dut.cpu.core.ECX,dut.cpu.core.ESI,ddr_commands);

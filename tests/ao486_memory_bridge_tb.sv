@@ -19,7 +19,11 @@ module ao486_memory_bridge_tb #(
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES)) dut (.*);
+    ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES)) dut (
+        .wide_linear_enable(1'b0),.wide_waitrequest(1'b1),
+        .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
+        .wide_address(),.wide_writedata(),.wide_byteenable(),.wide_burstcount(),
+        .wide_read(),.wide_write(),.*);
     integer clock_cycles = 0;
     always @(posedge clk) clock_cycles <= clock_cycles+1;
 

@@ -10,7 +10,8 @@ module ao486_bus_bridge #(
     parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
     // >0: posted-write command queue of 2**MEMORY_QUEUE_BITS entries in front
     // of the memory bridge (ao486_memory_queue); 0: direct, as before.
-    parameter MEMORY_QUEUE_BITS = 0
+    parameter MEMORY_QUEUE_BITS = 0,
+    parameter WIDE_RAM_MB = 0
 ) (
     input  wire        clk,
     input  wire        reset,
@@ -42,7 +43,14 @@ module ao486_bus_bridge #(
     output wire        bus_strobe,
     output wire        bus_io,
     input  wire [15:0] bus_readdata,
-    input  wire        bus_ack
+    input  wire        bus_ack,
+    input  wire        wide_linear_enable, wide_backend_busy,
+    output wire [29:0] wide_address,
+    output wire [31:0] wide_writedata,
+    output wire [3:0]  wide_byteenable, wide_burstcount,
+    output wire        wide_read, wide_write,
+    input  wire        wide_waitrequest, wide_readdatavalid,
+    input  wire [31:0] wide_readdata
 );
     localparam NONE = 2'd0, MEMORY = 2'd1, IO = 2'd2;
     reg [1:0] owner;
@@ -58,7 +66,7 @@ module ao486_bus_bridge #(
     always @(posedge clk) begin
         if (reset) owner <= NONE;
         else case (owner)
-            NONE: if (!bus_ack) begin
+            NONE: if (!bus_ack && (WIDE_RAM_MB == 0 || !wide_backend_busy)) begin
                 if (mem_request) owner <= MEMORY;
                 else if (io_request) owner <= IO;
             end
@@ -68,7 +76,7 @@ module ao486_bus_bridge #(
         endcase
     end
 
-    assign busy = owner != NONE;
+    assign busy = owner != NONE || (WIDE_RAM_MB != 0 && wide_backend_busy);
     assign avm_waitrequest = owner != MEMORY || mem_wait;
     assign bus_io = owner == IO;
     assign bus_address = bus_io ? {16'b0, io_address} : mem_address;
@@ -103,7 +111,8 @@ module ao486_bus_bridge #(
         assign mem_wait = q_wait;
         assign mem_busy = bridge_busy;
     end endgenerate
-    ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO)) memory_bridge (
+    ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO),
+                         .WIDE_RAM_MB(WIDE_RAM_MB)) memory_bridge (
         .clk(clk), .reset(reset), .avm_address(q_address),
         .avm_writedata(q_writedata), .avm_byteenable(q_byteenable),
         .avm_burstcount(q_burstcount),
@@ -112,7 +121,12 @@ module ao486_bus_bridge #(
         .avm_readdata(avm_readdata), .busy(bridge_busy),
         .bus_address(mem_address), .bus_select(mem_select),
         .bus_writedata(mem_writedata), .bus_write(mem_write), .bus_strobe(mem_strobe),
-        .bus_readdata(bus_readdata), .bus_ack(bus_ack && owner == MEMORY)
+        .bus_readdata(bus_readdata), .bus_ack(bus_ack && owner == MEMORY),
+        .wide_linear_enable(wide_linear_enable), .wide_address(wide_address),
+        .wide_writedata(wide_writedata), .wide_byteenable(wide_byteenable),
+        .wide_burstcount(wide_burstcount), .wide_read(wide_read), .wide_write(wide_write),
+        .wide_waitrequest(wide_waitrequest), .wide_readdatavalid(wide_readdatavalid),
+        .wide_readdata(wide_readdata)
     );
     ao486_io_bridge io_bridge (
         .clk(clk), .reset(reset),
