@@ -39,7 +39,13 @@ for width in 2 4; do
         done
     done
 done
-echo "PASS: pipeline $pipeline, 24 user stack fault cases: word/DWORD PUSH, CALL, not-present/read-only pages, saved ESP and argument/return integrity"
+for present in 0 1; do
+    nasm -f bin -DENTER_FRAME -DPRESENT="$present" tests/hardware/push_page_fault_probe.asm \
+        -o "$out/enter-$present.bin"
+    (cd "$out"; ./obj-current/Vz486_xms_resident_tb "+program=$out/enter-$present.bin") \
+        > "$out/enter-$present.log" 2>&1 || { tail -n 20 "$out/enter-$present.log"; exit 1; }
+done
+echo "PASS: pipeline $pipeline, 26 user stack fault cases: word/DWORD PUSH, CALL, ENTER, not-present/read-only pages, saved ESP and argument/return integrity"
 
 # Omitting rollback must fail the original four-PUSH case. Omitting the
 # first-cycle bypass must fail CALL, which hands its write off on i_first.

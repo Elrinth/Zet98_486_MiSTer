@@ -21,6 +21,12 @@ STACK_PAGE equ 30000h
 %endif
 ; FAULT_PUSH=-1 faults the argument PUSH; 0 faults CALL; 1..4 faults
 ; the corresponding saved-register PUSH in the callee.
+%ifdef ENTER_FRAME
+USER_ESP equ 31014h
+FAULT_ADDR equ 30fe8h
+FAULT_SAVED_ESP equ 3100ch
+%else
+FAULT_SAVED_ESP equ 31000h
 %if FAULT_PUSH < 1
 USER_ESP equ 31004h + FAULT_PUSH*4
 FAULT_ADDR equ 30ffch
@@ -28,7 +34,10 @@ FAULT_ADDR equ 30ffch
 USER_ESP equ 31008h + (FAULT_PUSH-1)*PUSH_BYTES
 FAULT_ADDR equ 31000h-PUSH_BYTES
 %endif
-%if FAULT_PUSH = -1
+%endif
+%ifdef ENTER_FRAME
+FAULT_EIP equ four_pushes
+%elif FAULT_PUSH = -1
 FAULT_EIP equ push_arg
 %elif FAULT_PUSH = 0
 FAULT_EIP equ push_call
@@ -154,6 +163,14 @@ jne fail
 mov ax,600dh
 jmp report
 four_pushes:
+%ifdef ENTER_FRAME
+; ENTER's final CW permission check follows its successful EBP push. The
+; fault must retain the instruction's original ESP, not the partial frame.
+enter 20h,0
+mov eax,[ebp+8]
+leave
+ret
+%else
 %macro SAVE_REGISTER 3
 push_%1:
     %if PUSH_BYTES = 4
@@ -184,6 +201,7 @@ pop di
 pop bp
 %endif
 ret
+%endif
 pf_handler:
 pushad
 mov eax,cr2
@@ -196,7 +214,7 @@ cmp ebx,6|PRESENT
 jne fail
 cmp ecx,FAULT_EIP
 jne fail
-cmp esi,31000h
+cmp esi,FAULT_SAVED_ESP
 jne fail
 inc dword [faults]
 mov dword [PT+(STACK_PAGE>>12)*4],STACK_PAGE|7

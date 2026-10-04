@@ -30,7 +30,8 @@ fault address/error, the callee argument and return-stack integrity.
 and each of four word/DWORD callee register PUSH positions. Negative controls remove
 the stack rollback, CALL first-cycle selection, and fault-request gate.
 
-The 24 cases pass with both pipeline-register settings 2 and 7. All three
+The 26 cases, including ENTER's final permission check, pass with both
+pipeline-register settings 2 and 7. All three
 negative controls fail with setting 2. Existing store/Jcc page-fault,
 CMPXCHG/XADD fault, stack allocation, native memory and four V86/EMM386
 variants pass. The framebuffer workload remains 1,132,151 cycles with
@@ -46,7 +47,9 @@ nasm -f elf32 tests/hardware/linux_stack_page_fault.asm -o linux-stack-pf.o
 ld -m elf_i386 -o linux-stack-pf linux-stack-pf.o
 ```
 
-The probe passes on the host CPU and fails on B241 (three hardware runs).
+The probe passes on the host CPU and fails on B241 (three hardware runs)
+and B240 (two hardware runs). The relevant CPU RTL is identical in B240 and
+B241; this fault predates the framebuffer optimization.
 A separate 100-launch BusyBox hardware baseline on B241 recorded three
 SIGSEGV stops and 97 normal exits. Local evidence is in `build/linux-ip/`.
 
