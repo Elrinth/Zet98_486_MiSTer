@@ -3043,3 +3043,30 @@ candidate is rejected pending hazard diagnosis; production RTL is unchanged
 and no Doom FPS improvement or hardware qualification is claimed. The
 candidate sources, failing seed and benchmark logs are retained in ignored
 `build/b241/`.
+
+### 2026-10-04: Windows 95 fresh B240/OpenBIOS boot check
+
+The same released B240 RBF and OpenBIOS 2026-10-04.1 were tested using a
+disposable local copy of `friend4gb.ima`. The original image was not modified.
+Its pre-existing BOOTLOG.TXT was preserved as B241OLD.TXT; diagnostic startup
+settings enable logging and disable the splash so old logs are distinguishable
+from the current run.
+
+A fresh 12562-byte log, SHA-256
+`ed2791ed13a7692e1c4814ce2579bc1d9e4bcba084aad39917bca03934c996f8`,
+ends at `Initing esdi_506.pdr`. The console reports drive B not ready and
+KRNL386.EXE unavailable (`b241...0011`). Renaming only
+`WINDOWS/SYSTEM/IOSUBSYS/ESDI_506.PDR` to ESDI_506.OFF on the disposable copy
+allows the BIOS disk-access fallback to reach display initialization. The
+failed-boot recovery menu selects Safe Mode by default; these checks do not
+establish a normal-mode desktop.
+
+The fallback/recovery boot produces a new 13913-byte BOOTLOG.TXT, SHA-256
+`e00f57cad0f3333d8237f41bea9ef5ef3326dcf5f7cef1f4dc236f6b7f8f0934`:
+USER32.DLL loads, keyboard and mouse initialize, EGCN4.DRV loads, and
+`InitDone = DISPLAY` is followed by `Init = Display Resources` without its
+completion entry. No desktop was reached. This confirms the earlier display
+resource failure remains on the released core and latest OpenBIOS, after
+bypassing the separate protected-mode disk-driver failure. Windows 98 was
+not retested in this check. Private disk copies, configuration audits and
+logs remain in ignored `build/b241/`.
