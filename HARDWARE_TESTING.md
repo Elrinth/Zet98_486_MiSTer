@@ -3024,3 +3024,22 @@ contains `I_brandish_you_to_the_world_of`, and both machines display it.
 This translation text is not evidence of a core or OpenBIOS font fault.
 Private disk copies, ROMs, screenshots and preparation manifests remain
 under ignored `build/b241/`; none are included in the source repository.
+
+### 2026-10-04: rejected absolute-address pipeline experiment
+
+An isolated CPU copy skips the staged effective-address cycle only for
+ModR/M operands with no base or index register. The exact B240 pipeline
+setting 2 reproduces the earlier Dhrystone result: 376346 cycles for 125153
+instructions (200 iterations). The candidate passes Dhrystone in 374145
+cycles with the same instruction count, a 0.59% throughput increase.
+
+Differential fuzz seeds 1-3 (1200 blocks each) match Unicorn across all GPRs
+and 384 KB of RAM. Seed 4 instead hits the existing duplicate-writer
+assertion: `DUP GPR WRITER shift/load reg 1`. Removing even this limited
+address delay exposes a deferred-shift/load writeback collision. The identical
+seed 4 passes on unchanged B240 RTL at pipeline setting 2 and matches Unicorn
+across all GPRs and 384 KB of RAM. The
+candidate is rejected pending hazard diagnosis; production RTL is unchanged
+and no Doom FPS improvement or hardware qualification is claimed. The
+candidate sources, failing seed and benchmark logs are retained in ignored
+`build/b241/`.
