@@ -114,8 +114,10 @@ claim is made for PR0. Physical timing versus a remaining RTL dependency
 has not been isolated. Source is `9d74068`; evidence is in
 `build/icache32-fast90-s12/`, with RBF SHA-256
 `7f4fea2ea1575d1dfabaa7df73698fed912ef873d8f5ea46f00a1b4480b3029a`.
-A 90 MHz PR2 build of the final source is queued to qualify the retained
-pipeline configuration including both dependency guards.
+A subsequent 90 MHz PR2 build including both guards boots Linux, but its
+first traced launch loop is short; the later repeats pass. The unexplained
+result is recorded in `CACHE_CAPACITY.md`. The selected performance branch
+therefore retains the separately qualified CPU source.
 
 After these hardware failures, another 400 differential seeds (41-440)
 pass on the same final PR0 RTL: 1,200 blocks per seed, with every GPR

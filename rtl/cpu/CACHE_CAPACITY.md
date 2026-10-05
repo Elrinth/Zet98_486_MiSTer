@@ -4,8 +4,8 @@
 
 Use 90 MHz, 64 MB, PR2, 32 KB instruction / 8 KB data cache, automatic
 replacement-table placement, and native DDR for the framebuffer only.
-The active branch's synthesis inputs match the hardware-qualified
-`247a8c8` source. The completed bitstream is
+The active branch's synthesis inputs match source `247a8c8`, which was
+qualified on hardware. The completed bitstream is
 `build/icache32-auto/PC98_Z486_90_ICACHE32_AUTO.rbf`; SHA-256 is
 `eade03b7f7357ff41fa6554d3e52a6ae2b99c40e949f5a572a6f8addfeb2e154`.
 
@@ -19,8 +19,13 @@ The later PR0 corrections and their trial bitstreams remain on
 `memory-write-completion-pr0-experiments`. PR0 and 16/16 KB trials failed
 Linux boot; the later PR2 trial had an unexplained short first trace loop.
 Those results do not displace the selected, repeatedly checked candidate.
-The following sections retain the experiment history and exact evidence.
+After selecting this source (`f2252d3`), all 84 CPU memory/fault cases
+pass again in both buffered-read modes, including the retained dependency
+probes. All 84 cycle/instruction/active counts match the experimental PR2
+version. Forty differential 486 seeds of 1,200 blocks each match every
+GPR record and 384 KB RAM against Unicorn. Evidence: `build/qualified-pr2/`.
 
+The following sections retain the experiment history and exact evidence.
 
 `scripts/build.ps1 -Cpu z486 -Z486ICacheKB 16` selects 256 sets instead of
 128 in the existing four-way, 16-byte-line instruction cache. The default
@@ -307,9 +312,11 @@ is not closed. Pixel-clock, HPS peripheral and SDRAM FEC audits pass.
 This source includes both instruction-cache coherence fixes and the fixed
 byte-lane patch helper. It predates the two optional-PR0 dependency fixes.
 
-With OpenBIOS 2026-10-04.1, it passes three fresh Linux boots, nine total
-stack-fault probes and 300 traced BusyBox `ip` launches with normal exits
-and no SIGSEGVs. The second and third boots follow the repeated Doom runs. DOS QUALIFY also passes four division rounds, 4,008 string cases and
+With OpenBIOS 2026-10-04.1, it passes four checked Linux boots, twelve total
+stack-fault probes and 400 traced BusyBox `ip` launches with normal exits
+and no SIGSEGVs. The second and third boots follow the repeated Doom runs;
+the fourth is a control after the later trial's short trace loop. DOS
+QUALIFY also passes four division rounds, 4,008 string cases and
 531 KB conventional / 16,384 KB XMS memory with zero errors. Two transfer
 benchmarks retain the earlier 32/8 KB rates (less than 0.1% variation).
 Two matched Doom runs complete 11,520 game ticks in 1,766 and 1,765 real

@@ -624,6 +624,13 @@ in `FUZZ_OUT/profile.txt` and fails on a CPU simulation failure. A successful
 simulation still requires `z486_fuzz_compare.py` on every seed's binary,
 dump and manifest before claiming agreement with Unicorn.
 
+The selected performance configuration uses pipeline mask 2, instruction
+set bits 9, data set bits 7, and native framebuffer only. Pipeline mask 0
+remains unqualified and fails retained dependency probes on this branch;
+its experimental corrections and hardware failures are preserved in
+`rtl/cpu/ADDRESS_PIPELINE.md` and branch
+`memory-write-completion-pr0-experiments`.
+
 `run-z486-icache-coherence.sh` checks fill/invalidation and synchronous
 tag-read/invalidation collisions for 8/16/32 KB instruction caches, CPU/DMA
 snoops, independent/conflicting ways and both memory reply paths (48 cases).
