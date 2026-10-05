@@ -313,3 +313,25 @@ or usable RBF. Diagnostics are retained in `build/icache32-100/watchdog/`.
 The balanced 16/16 KB build has started, followed by a queued final-source
 90 MHz PR2 / 32/8 KB reference. The earlier qualified 90 MHz PR2 bitstream
 also boots the same Linux disk successfully after both failed PR0 boots.
+
+The final-source balanced 16/16 KB attempt (`f0cf8e8`, 90 MHz PR2,
+automatic replacement tables, seed 6) completes fitting at 41,468 ALMs,
+4,190 LABs, 547 M10Ks and 50 DSPs. Worst slack is -8.051 ns (10 negative
+checks), within the user's allowance, and the clock/FEC audits pass.
+However, two fresh hardware Linux boots panic at `c018e71d`, with CR2
+`ffc0f67c`. This configuration remains **unqualified** and has no Doom
+measurement. The 84-case suite and 40 differential seeds did not reproduce
+the failure. Evidence is under `build/cache16-balanced/`; RBF SHA-256 is
+`e952674facabf26e9d2c4b4a00bbb57590fa95311d438020a3cec1fd653cf557`.
+
+The final-source PR2 / 32/8 KB reference (`f0cf8e8`, seed 6) also fits:
+41,096 ALMs, 4,190 LABs, 551 M10Ks, 50 DSPs, and -7.307 ns worst slack
+(10 negative checks); clock/FEC audits pass. It boots Linux and passes
+the stack probes, but the first unchanged 4-by-25 `trace-ip` loop produces
+only 75 normal exec/exit pairs. The guest itself reports 150 lines, so this
+is not solely a host snapshot discrepancy. A labeled loop, an unchanged
+repeat, and a second fresh boot each produce 100 pairs. The first result
+remains unexplained; this bitstream is not promoted and has no Doom
+measurement. The earlier qualified `247a8c8` bitstream again completes
+100 pairs in a matched control. Evidence: `build/icache32-final90/`; RBF
+SHA-256 `123236bf276b989bb5d313e715206a0522e2c87668f1af0c0bdf973de4433702`.

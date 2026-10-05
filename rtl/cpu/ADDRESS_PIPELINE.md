@@ -118,3 +118,10 @@ the hardware failure. Evidence: `build/pipeline0/hardware-failure-fuzz/`.
 The failed fit also adds a -0.038 ns slow-minus-40C hold violation on the
 system-clock output, versus +0.228 ns in the working PR2 build. The ignored
 assignment lists match. Neither comparison establishes a root cause.
+
+Detailed post-fit reports locate the extra hold violation on the HPS-DDR
+to PEGC scanout line-buffer path, not an internal CPU register path. The
+worst setup path is bus-bridge `owner.IO` to prefetch `win_d1_r[9]`
+(-9.380 ns); the worst path wholly inside the CPU goes from the prefetch
+window to a decoder entry-ROM address (-8.949 ns). These reports narrow
+future timing work but do not explain the hardware boot failures.
