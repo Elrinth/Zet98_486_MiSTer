@@ -102,6 +102,7 @@ wire rd_valid2_r = rd_tag_entry2_r[TAG_VALID_BIT];
 wire rd_valid3_r = rd_tag_entry3_r[TAG_VALID_BIT];
 reg [127:0] rd_line0_r, rd_line1_r, rd_line2_r, rd_line3_r;
 reg [2:0] rd_plru_r;
+reg [3:0] rd_invalidated_r;
 
 reg        req_valid_r;
 reg [31:0] req_addr_r;
@@ -268,10 +269,10 @@ end
 endfunction
 
 wire [3:0] lookup_hit_vec = {
-    rd_valid3_r && (rd_tag3_r == req_tag_r),
-    rd_valid2_r && (rd_tag2_r == req_tag_r),
-    rd_valid1_r && (rd_tag1_r == req_tag_r),
-    rd_valid0_r && (rd_tag0_r == req_tag_r)
+    rd_valid3_r && !rd_invalidated_r[3] && (rd_tag3_r == req_tag_r),
+    rd_valid2_r && !rd_invalidated_r[2] && (rd_tag2_r == req_tag_r),
+    rd_valid1_r && !rd_invalidated_r[1] && (rd_tag1_r == req_tag_r),
+    rd_valid0_r && !rd_invalidated_r[0] && (rd_tag0_r == req_tag_r)
 };
 wire lookup_hit = |lookup_hit_vec;
 wire [1:0] lookup_way = way_encode(lookup_hit_vec);
@@ -447,6 +448,11 @@ always_ff @(posedge clk) begin
         rd_line2_r <= data_way2[cpu_set];
         rd_line3_r <= data_way3[cpu_set];
         rd_plru_r <= plru_set[cpu_set];
+        // A synchronous tag read may return its old valid bit on the same
+        // edge that a snoop clears it. Carry that write collision into LOOKUP;
+        // snoop_valid_r may already be clear or describe the next snoop then.
+        // Mask only the written ways, preserving hits in independent ways.
+        rd_invalidated_r <= (cpu_set == snoop_set_r) ? tag_snoop_matches : 4'b0;
     end
 
     // Keep each data RAM's synchronous read and write in the same process.

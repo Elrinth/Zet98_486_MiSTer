@@ -114,18 +114,26 @@ fetch without installing the conflicting fill's tag or data. Fills in a
 different way still install normally. Tag snoop matches are qualified by
 their valid pulse so old registered matches cannot repeatedly clear tags.
 
-`tests/run-z486-icache-coherence.sh` checks all 12 combinations of 8/16/32 KB,
-CPU/DMA snoops, and conflicting/independent way writes. It checks modified
-code values, successful fill responses, retained independent fills, and hits
-after refetch. All pass. The same test with B242's 8 KB cache returns the old
+An adjacent read/write collision also returned stale code: a CPU tag read
+sharing the edge that invalidates that entry captures its old valid bit.
+By the following LOOKUP cycle, the registered snoop may be gone. A four-bit
+mask now accompanies the synchronous tag read and excludes only the ways
+invalidated on that edge. An unaffected way in the same set can still hit.
+
+`tests/run-z486-icache-coherence.sh` checks all 24 combinations of 8/16/32 KB,
+CPU/DMA snoops, conflicting/independent ways and fill/read collisions. It
+checks modified code values, successful fill responses, retained independent
+fills/hits, and hits after refetch. All pass. The fill test with B242's
+8 KB cache returns the old
 instruction word instead of the new value. Evidence is in
 `build/icache-capacity/coherence*.log` and its `coherence/` directory.
 
-With the correction and both caches at 16 KB, the complete memory suite
+With the first arbitration correction and both caches at 16 KB, the complete memory suite
 passes both read-buffer modes, including all 52 stack-fault cases, reset,
 CPU speed settings and driver initialization. Eight differential fuzz
 seeds also match all GPR records and 384 KB of RAM after 1,200 blocks each.
-Those post-correction logs are in `build/icache-coherence/`.
+Those logs are in `build/icache-coherence/`; the complete rerun after adding
+the read-collision mask is recorded separately in that directory.
 
 This proves the coherence bug and its directed correction; it does not yet
 prove that the correction resolves the Linux boot panic. Hardware

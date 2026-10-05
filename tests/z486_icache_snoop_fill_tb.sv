@@ -14,7 +14,7 @@ module z486_icache_snoop_fill_tb;
     reg [31:0] patch_addr=0,patch_data=0;
     reg automatic_response=1,changed=0;
     integer pending=0,requests=0,before_reads=0;
-    integer dma=0,other_way=0;
+    integer dma=0,other_way=0,read_collision=0;
     reg [31:0] pending_addr=0;
     localparam [31:0] A=32'h01000000+(1<<(SET_BITS+3));
     wire [31:0] B=other_way ? A+(1<<(SET_BITS+4)) : A+16;
@@ -60,8 +60,26 @@ module z486_icache_snoop_fill_tb;
     initial begin
         void'($value$plusargs("dma=%d",dma));
         void'($value$plusargs("other_way=%d",other_way));
+        void'($value$plusargs("read_collision=%d",read_collision));
         repeat(3) @(negedge clk);reset=0;
         request(A);expect_line(OLD_A);
+        if(read_collision) begin
+            if(other_way) begin request(B);expect_line(DATA_B);end
+            repeat(3) @(negedge clk);
+            patch_valid=1;patch_addr=A;patch_data=32'h22222222;changed=1;
+            @(negedge clk);
+            patch_valid=0;
+            // This tag read shares the edge which invalidates its RAM entry.
+            // The synchronous RAM read returns the previous valid tag.
+            if(!cpu_ready) $fatal(1,"read collision setup not ready");
+            before_reads=requests;
+            cpu_addr=other_way ? B : A;cpu_valid=1;
+            @(negedge clk);cpu_valid=0;
+            expect_line(other_way ? DATA_B : NEW_A);
+            if(other_way && requests!=before_reads) $fatal(1,"snoop blocked an independent-way hit");
+            $display("PASS: tag read during snoop invalidation, SET_BITS=%0d DMA=%0d OTHER_WAY=%0d",SET_BITS,dma,other_way);
+            $finish;
+        end
         // Default: distinct sets, both choosing way zero. The other-way
         // control fills the same set's second way and may install both writes.
         repeat(3) @(negedge clk);

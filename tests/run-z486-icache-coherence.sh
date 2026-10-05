@@ -13,11 +13,12 @@ for bits in 7 8 9; do
         > "$out/compile-$bits.log" 2>&1 || { tail -n 40 "$out/compile-$bits.log"; exit 1; }
     for dma in 0 1; do
         for way in 0 1; do
-            "$out/obj-$bits/Vz486_icache_snoop_fill_tb" "+dma=$dma" "+other_way=$way" \
-                > "$out/run-$bits-$dma-$way.log" 2>&1 || {
-                    cat "$out/run-$bits-$dma-$way.log"; exit 1;
-                }
-            grep '^PASS:' "$out/run-$bits-$dma-$way.log"
+            for read_collision in 0 1; do
+                log="$out/run-$bits-$dma-$way-$read_collision.log"
+                "$out/obj-$bits/Vz486_icache_snoop_fill_tb" "+dma=$dma" "+other_way=$way" \
+                    "+read_collision=$read_collision" > "$log" 2>&1 || { cat "$log"; exit 1; }
+                grep '^PASS:' "$log"
+            done
         done
     done
 done
