@@ -93,6 +93,44 @@ RBF `PC98_Z486_90_ICACHE16.rbf`: 4,604,368 bytes, SHA-256
 `89214228e7e1f5ecab1bab2b36220473bb366e13eaac3531d9a00361fadcd2e8`.
 Build evidence: `build/quartus-20261005-005846-153c0d/`.
 
+This initial RBF passes two EXTBENCH runs and DOS QUALIFY, but Linux panics
+during boot. The panic repeats without keyboard input and also at the
+slower CPU setting. The same Linux disk boots on the read-buffer candidate
+with the original caches. Do not treat this RBF as hardware-qualified.
+The investigation and the coherence correction below require a new build.
+
+## Instruction-cache fill/invalidation collision
+
+A focused regression found an existing stale-code bug, also reproduced
+against B242's original 8 KB instruction cache. A line fill and a CPU-store
+or DMA snoop can need the same way's tag-RAM write port in the same cycle.
+The old arbitration let the fill win on the assumption that replacing its
+tag also invalidated the snooped line. That is false when their set indices
+differ. If another snoop arrives immediately, the earlier address is lost
+and the modified line can remain valid with old instruction bytes.
+
+The cache now gives that invalidation priority and answers the outstanding
+fetch without installing the conflicting fill's tag or data. Fills in a
+different way still install normally. Tag snoop matches are qualified by
+their valid pulse so old registered matches cannot repeatedly clear tags.
+
+`tests/run-z486-icache-coherence.sh` checks all 12 combinations of 8/16/32 KB,
+CPU/DMA snoops, and conflicting/independent way writes. It checks modified
+code values, successful fill responses, retained independent fills, and hits
+after refetch. All pass. The same test with B242's 8 KB cache returns the old
+instruction word instead of the new value. Evidence is in
+`build/icache-capacity/coherence*.log` and its `coherence/` directory.
+
+With the correction and both caches at 16 KB, the complete memory suite
+passes both read-buffer modes, including all 52 stack-fault cases, reset,
+CPU speed settings and driver initialization. Eight differential fuzz
+seeds also match all GPR records and 384 KB of RAM after 1,200 blocks each.
+Those post-correction logs are in `build/icache-coherence/`.
+
+This proves the coherence bug and its directed correction; it does not yet
+prove that the correction resolves the Linux boot panic. Hardware
+qualification is still required.
+
 ## Experimental 32 KB instruction cache
 
 `-Z486ICacheKB 32` selects 512 sets in the physically indexed instruction
