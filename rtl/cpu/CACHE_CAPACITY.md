@@ -17,6 +17,8 @@ that depth requires eight additional M10K blocks across the four ways,
 confirmed by the combined 16/16 KB build: 547 M10Ks, 41,455 ALMs and 50 DSPs,
 with -7.776 ns worst slack. That initial build predates the coherence fixes;
 the corrected version still needs hardware qualification.
+The initial combined-cache RBF panics during Linux boot too
+(`build/dcache-capacity/Cache16LinuxBoot.png`); do not promote it.
 
 `tests/run-z486-icache-capacity.sh` compares both sizes using the actual CPU
 and PC-98 bridges. Its generated 12 KB instruction working set is warmed,
@@ -44,7 +46,7 @@ Simulation results with early store completion and buffered RAM reads:
 
 This synthetic test deliberately exceeds the smaller cache. Its large
 speedup demonstrates the capacity mechanism, not an application speedup.
-A matched hardware Doom comparison is pending.
+Hardware results for the individual candidates follow below.
 
 The data-capacity comparison, with 16 repeated reads of the 12 KB array,
 reports 1,136,569 to 836,157 cycles (26.43% fewer) and 24,576 to zero DDR
@@ -122,13 +124,17 @@ By the following LOOKUP cycle, the registered snoop may be gone. A four-bit
 mask now accompanies the synchronous tag read and excludes only the ways
 invalidated on that edge. An unaffected way in the same set can still hit.
 
-`tests/run-z486-icache-coherence.sh` checks all 24 combinations of 8/16/32 KB,
-CPU/DMA snoops, conflicting/independent ways and fill/read collisions. It
+`tests/run-z486-icache-coherence.sh` checks all 48 combinations of 8/16/32 KB,
+CPU/DMA snoops, conflicting/independent ways, fill/read collisions, and
+whole-line/four-DWORD memory responses. It
 checks modified code values, successful fill responses, retained independent
 fills/hits, and hits after refetch. All pass. The fill test with B242's
 8 KB cache returns the old
 instruction word instead of the new value. Evidence is in
 `build/icache-capacity/coherence*.log` and its `coherence/` directory.
+Both DWORD-path collisions also reject B242 with stale instruction data;
+the extended positive/negative results are under `build/icache-coherence/`
+in `unit-both-paths.log` and `dword-negative.log`.
 
 With both corrections (`8a2bda7`) and both caches at 16 KB, the complete memory suite
 passes both read-buffer modes, including all 52 stack-fault cases, reset,
@@ -177,8 +183,13 @@ The 32/8 KB configuration also passes the complete memory-completion suite
 in both read-buffer modes (52 stack-fault cases, other memory faults,
 reset, CPU speeds and driver initialization), graphics, cache mapping and
 invalidation, and eight differential 486 fuzz seeds of 1,200 blocks each.
-The initial RBF also boots Linux and passes three stack-fault probes;
-the complete hardware comparison is in progress. This RBF predates both
+The initial RBF also passes DOS QUALIFY, three Linux stack-fault probes
+and 100 traced BusyBox `ip` launches with normal exits and no SIGSEGVs.
+Its first matched Doom run completes 11,520 game ticks in 1,767 real ticks,
+versus B242's 1,870/1,870 and the buffered-read core's 1,809/1,809. This is
+5.83% more throughput than B242 and 2.38% over the buffered-read core;
+the final counters were verified in `IC32Doom1-end.png`. This single-run
+result is preliminary. This RBF predates both
 coherence fixes, so final qualification requires the corrected build.
 Evidence is under
 `build/icache32/`, including the exact hardware patch over `e570d00` used

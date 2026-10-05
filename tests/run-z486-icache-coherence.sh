@@ -14,10 +14,12 @@ for bits in 7 8 9; do
     for dma in 0 1; do
         for way in 0 1; do
             for read_collision in 0 1; do
-                log="$out/run-$bits-$dma-$way-$read_collision.log"
-                "$out/obj-$bits/Vz486_icache_snoop_fill_tb" "+dma=$dma" "+other_way=$way" \
-                    "+read_collision=$read_collision" > "$log" 2>&1 || { cat "$log"; exit 1; }
-                grep '^PASS:' "$log"
+                for narrow in 0 1; do
+                    log="$out/run-$bits-$dma-$way-$read_collision-$narrow.log"
+                    "$out/obj-$bits/Vz486_icache_snoop_fill_tb" "+dma=$dma" "+other_way=$way" \
+                        "+read_collision=$read_collision" "+narrow=$narrow" > "$log" 2>&1 || { cat "$log"; exit 1; }
+                    grep '^PASS:' "$log"
+                done
             done
         done
     done
