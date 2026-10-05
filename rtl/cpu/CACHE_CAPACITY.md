@@ -148,6 +148,11 @@ This proves the coherence bug and its directed correction; it does not yet
 prove that the correction resolves the Linux boot panic. Hardware
 qualification is still required.
 
+The corrected 16/16 KB seed-12 build failed placement: it required 4,214
+LABs, exceeding the device's 4,191, despite reporting 41,790 ALMs. It
+produced no usable RBF. A seed-6 placement retry uses the same RTL; retain
+the coherence fixes when selecting any fitted candidate.
+
 ## Experimental 32 KB instruction cache
 
 `-Z486ICacheKB 32` selects 512 sets in the physically indexed instruction
@@ -178,3 +183,10 @@ coherence fixes, so final qualification requires the corrected build.
 Evidence is under
 `build/icache32/`, including the exact hardware patch over `e570d00` used
 by `build/quartus-20261005-015147-678804/`.
+
+The corrected 32/8 KB source also passes both read-buffer modes of the
+complete memory suite, including the SMC stream, and eight additional
+486 differential fuzz seeds. All GPR records and 384 KB RAM match Unicorn.
+Evidence: `build/icache32-coherent/full-sim.log` and
+`fuzz-486-verified.log`. The retained fuzz runner accepts cache/pipeline
+settings and saves them with its results in `profile.txt`.
