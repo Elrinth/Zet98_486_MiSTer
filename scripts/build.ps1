@@ -40,6 +40,8 @@ param(
     [int]$Z486ICacheKB = 8,
     [ValidateSet(8, 16)]
     [int]$Z486DCacheKB = 8,
+    # Optional trade: save two M10Ks by using logic memory for replacement tables.
+    [switch]$Z486PLRUMlab,
     [switch]$Z486DebugUart,
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
@@ -106,6 +108,7 @@ if ($NativeDdrFramebufferOnly -and (-not $NativeDdr -or -not $PackedGraphics)) {
 if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register packing selection requires z486.' }
 if ($Z486ICacheKB -ne 8 -and $Cpu -ne 'z486') { throw 'Z486ICacheKB requires z486.' }
 if ($Z486DCacheKB -ne 8 -and $Cpu -ne 'z486') { throw 'Z486DCacheKB requires z486.' }
+if ($Z486PLRUMlab -and $Cpu -ne 'z486') { throw 'Z486PLRUMlab requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
@@ -176,8 +179,10 @@ try {
         $instructionSetBits = if ($Z486ICacheKB -eq 32) { 9 } else { 8 }
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_ICACHE_SET_BITS=$instructionSetBits"
     }
-    if ($Z486ICacheKB -eq 32) {
-        # Reclaim the two small replacement-table M10Ks for instruction data.
+    [bool]$Z486PLRUMlab | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-plru-mlab.txt')
+    if ($Z486PLRUMlab) {
+        # Opt in only when block RAM is tighter than logic. The first 32/8 KB
+        # fit used 549 M10Ks with this trade; returning two should still fit.
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_PLRU_MLAB=1"
     }
     $Z486DCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-dcache-kb.txt')

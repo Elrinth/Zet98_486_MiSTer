@@ -56,7 +56,7 @@
 `define Z486_REPLICATE
 `endif
 
-// Optional replacement-table placement for the 32 KB instruction-cache build.
+// Optional replacement-table placement selected by -Z486PLRUMlab.
 // Preserve read-during-write semantics; do not request no_rw_check here.
 `ifdef Z486_ALTERA
 `ifdef ZET98_Z486_PLRU_MLAB

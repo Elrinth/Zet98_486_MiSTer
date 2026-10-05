@@ -167,13 +167,19 @@ when selecting a fitted candidate.
 cache. The data cache stays separately selectable at 8/16 KB; its preread
 uses untranslated page-offset bits and is therefore limited to 16 KB.
 
-The 32 KB option also places the two small replacement tables in MLABs,
-reclaiming their two M10K blocks for instruction data. The attribute keeps
-read-during-write semantics and does not specify `no_rw_check`. The FPGA
+The first 32 KB build placed the two small replacement tables in MLABs,
+reclaiming two M10K blocks for instruction data. The attribute keeps
+read-during-write semantics and does not specify `no_rw_check`. That FPGA
 32 KB instruction/8 KB data build fits in 549 M10Ks, 41,353 ALMs and 50 DSPs.
 Each 512-entry data way uses seven M10Ks, leaving four device RAM blocks
 unused. Worst slack is -7.573 ns, within the user's 12 ns allowance but
 still negative. Pixel-clock, HPS peripheral and SDRAM FEC audits pass.
+
+Because that measured fit has four spare M10Ks, new builds leave replacement
+table placement automatic by default. Returning their two blocks is expected
+to use 551 M10Ks while relieving logic/LAB pressure; the new full fit must
+confirm this. `-Z486PLRUMlab` explicitly restores the earlier tradeoff, and
+the build records the choice in `z486-plru-mlab.txt`.
 
 `tests/run-z486-cache-capacity.sh instruction32` compares 16/32 KB with a
 24 KB instruction routine and SMC in the new upper index range. Its measured
