@@ -6,11 +6,35 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=${FUZZ_OUT:-/project/fuzz-out}
 mkdir -p "$out"
+out=$(cd "$out"; pwd)
+profile_flags=()
+for cache in ICACHE DCACHE; do
+    option="Z486_${cache}_SET_BITS"
+    value=${!option:-7}
+    [[ $value == 7 || $value == 8 || ( $cache == ICACHE && $value == 9 ) ]] || {
+        echo "$option: supported set bits are 7/8 (also 9 for ICACHE)" >&2; exit 2;
+    }
+    profile_flags+=("-DZET98_Z486_${cache}_SET_BITS=$value")
+done
+pipeline=${Z486_PIPELINE_REGS:-7}
+[[ $pipeline =~ ^[0-7]$ ]] || { echo 'Z486_PIPELINE_REGS must be 0..7' >&2; exit 2; }
+profile_flags+=("-DZET98_Z486_PIPELINE_REGS=$pipeline")
+native_fb=${Z486_NATIVE_DDR_FB_ONLY:-0}
+[[ $native_fb == 0 || $native_fb == 1 ]] || {
+    echo 'Z486_NATIVE_DDR_FB_ONLY must be 0 or 1' >&2; exit 2;
+}
+if [[ $native_fb == 1 ]]; then
+    profile_flags+=(-DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY)
+fi
+printf '%s\n' "${profile_flags[@]}" "Z486_FUZZ_486=${Z486_FUZZ_486:-0}" \
+    "SEEDS=${SEEDS:-1 2 3 4}" "BLOCKS=${BLOCKS:-1200}" \
+    "BLOCK_LEN=${BLOCK_LEN:-12}" > "$out/profile.txt"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
   -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG \
+  "${profile_flags[@]}" \
   -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$work/obj" \
   --top-module z486_xms_resident_tb -GRAM_MB=64 -GDOS_PROBE=1 \
   -GTRACE_LIMIT=0 -GWATCHDOG_NS=400000000 "${sources[@]}" \
@@ -24,6 +48,6 @@ for seed in ${SEEDS:-1 2 3 4}; do
     if (cd "$work"; ./obj/Vz486_xms_resident_tb "+program=$out/fuzz-$seed.bin" "+dump=$out/fuzz-$seed.z486") > "$out/fuzz-$seed.log" 2>&1; then
         echo "RAN seed $seed"
     else
-        echo "CPU FAILED seed $seed"; tail -n 5 "$out/fuzz-$seed.log"
+        echo "CPU FAILED seed $seed"; tail -n 5 "$out/fuzz-$seed.log"; exit 1
     fi
 done

@@ -615,6 +615,15 @@ data-unit/VIPT fixes, seeds 1-30 (360,000 instructions) match Unicorn.
 testbench in a running container; `+trace_lo=`/`+trace_hi=` with `RMW_TRACE`
 print a data-path ring buffer for that EIP window. Unicorn runs on the host.
 
+For cache experiments, `Z486_ICACHE_SET_BITS=7/8/9` selects 8/16/32 KB
+instruction caches and `Z486_DCACHE_SET_BITS=7/8` selects 8/16 KB data caches.
+`Z486_PIPELINE_REGS` selects the hardware pipeline mask (default 7), and
+`Z486_NATIVE_DDR_FB_ONLY=1` selects the native framebuffer path.
+`Z486_FUZZ_486=1` adds XADD/CMPXCHG cases. The runner records these settings
+in `FUZZ_OUT/profile.txt` and fails on a CPU simulation failure. A successful
+simulation still requires `z486_fuzz_compare.py` on every seed's binary,
+dump and manifest before claiming agreement with Unicorn.
+
 `run-z486-regression-batch.sh` runs the retained z486 suites and reports
 every result instead of stopping at the first failure.
 `run-z486-flat-regression.sh` belongs to the unfinished flat-admission
