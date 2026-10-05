@@ -18,7 +18,7 @@ for narrow in 0 1; do
     echo "PASS: narrow=$narrow DWORD reads reduce $before to $after clocks"
 done
 # A wrong DWORD lane can leave the legacy halfword result correct.
-sed 's/assign dword_data = address\[2\] ?/assign dword_data = !address[2] ?/' \
+sed 's/assign dword_high = address\[2\] ?/assign dword_high = !address[2] ?/' \
     rtl/cpu/pc98_extmem_bridge.sv > "$out/wrong-dword.sv"
 iverilog -g2012 -s pc98_extmem_bridge_tb -o "$out/wrong-dword" \
     "$out/wrong-dword.sv" tests/pc98_extmem_bridge_tb.sv

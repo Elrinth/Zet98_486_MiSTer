@@ -129,8 +129,8 @@ module pc98_ao486 #(
     wire legacy_mapped = !pegc_claimed && (bus_io || physical_address[31:20] == 0 || reset_alias);
     wire extended_mapped, extended_ack;
     wire [15:0] extended_readdata;
-    wire extended_dword_valid;
-    wire [31:0] extended_dword_data;
+    wire extended_dword_capable;
+    wire [15:0] extended_read_high;
     wire mapped = legacy_mapped || extended_mapped || pegc_claimed;
     assign bus_address = physical_address[19:1];
     wire legacy_request = physical_strobe && legacy_mapped;
@@ -213,7 +213,7 @@ module pc98_ao486 #(
             .select(bus_select), .writedata(bus_writedata), .write(bus_write),
             .strobe(physical_strobe && !legacy_mapped && !pegc_claimed),
             .mapped(extended_mapped), .ack(extended_ack), .readdata(extended_readdata),
-            .dword_valid(extended_dword_valid), .dword_data(extended_dword_data),
+            .dword_capable(extended_dword_capable), .dword_high(extended_read_high),
             .ddr_address(legacy_ram_address), .ddr_writedata(legacy_ram_writedata),
             .ddr_byteenable(legacy_ram_byteenable), .ddr_burstcount(),
             .ddr_read(legacy_ram_read), .ddr_write(legacy_ram_write), .ddr_busy(legacy_ram_busy),
@@ -223,8 +223,8 @@ module pc98_ao486 #(
         assign extended_mapped=0;
         assign extended_ack=0;
         assign extended_readdata=16'hffff;
-        assign extended_dword_valid=0;
-        assign extended_dword_data=0;
+        assign extended_dword_capable=0;
+        assign extended_read_high=0;
         assign {legacy_ram_address,legacy_ram_writedata,legacy_ram_byteenable,legacy_ram_read,legacy_ram_write}=0;
     end endgenerate
 
@@ -366,7 +366,7 @@ module pc98_ao486 #(
         .bus_write(bus_write), .bus_strobe(physical_strobe), .bus_io(bus_io),
         .bus_readdata(pegc_claimed ? pegc_readdata : legacy_mapped ? legacy_readdata : extended_mapped ? extended_readdata : 16'hffff),
         .bus_ack((legacy_mapped && legacy_ack) || pegc_ack || extended_ack || unmapped_access),
-        .bus_dword_valid(extended_dword_valid), .bus_dword_data(extended_dword_data),
+        .bus_dword_capable(extended_dword_capable), .bus_read_high(extended_read_high),
         .wide_linear_enable(pegc_linear_enable),.wide_backend_busy(wide_backend_busy),
         .wide_address(wide_address),.wide_writedata(wide_writedata),
         .wide_byteenable(wide_byteenable),.wide_burstcount(wide_burstcount),

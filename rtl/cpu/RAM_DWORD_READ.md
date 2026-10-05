@@ -6,6 +6,11 @@ separately, including an ACK-release interval between them. An aligned RAM
 read can now return both halves on its first acknowledgement, using that
 existing buffer. There is no new cache storage or DDR command.
 
+The sideband carries only the upper 16 bits; the existing read bus supplies
+the lower half. Address capability is separate from acknowledgement, and
+the memory bridge consumes both halves only on ACK. This avoids a duplicate
+low-halfword mux and keeps ACK out of the width-selection logic.
+
 `EXT_RAM_DWORD_READ=0` on `pc98_ao486` selects the B243 path for comparison.
 The memory bridge accepts the wider result only for a read starting at the
 low halfword with both halfwords requested. Narrow reads keep the existing
@@ -40,3 +45,13 @@ and the 384 KB conventional-RAM dump matches Unicorn. Evidence:
 Hardware fit, timing and application qualification are pending. B243 remains
 the released baseline. Local simulation evidence: `build/ram-dword/` and
 `build/simulation-20261005-150210-fc9efb/`.
+
+The first implementation (`a643666`) passes simulation and differential
+testing but does not fit: 41,670 ALMs and 4,200 LABs versus 4,191 available,
+at 90 MHz with B243's seed-6 profile. No RBF was produced. Its report is
+`build/ram-dword/failed-fit.rpt`, build `quartus-20261005-151142-6ab9c1`.
+The smaller sideband implementation passes the unit tests and all 84 CPU
+cases again, with identical cycle/instruction/active counts in all 84 runs.
+Its 40 randomized differential seeds also match Unicorn again.
+Evidence for this revision is in `build/ram-dword-compact/` and
+`build/simulation-20261005-153208-4cd138/`.

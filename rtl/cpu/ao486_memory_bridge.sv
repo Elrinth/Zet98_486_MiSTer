@@ -52,9 +52,10 @@ module ao486_memory_bridge #(
     output wire        bus_strobe,
     input  wire [15:0] bus_readdata,
     input  wire        bus_ack,
-    // Optional complete DWORD from an acknowledged, side-effect-free RAM read.
-    input  wire        bus_dword_valid,
-    input  wire [31:0] bus_dword_data,
+    // Address supports a complete RAM DWORD on bus_ack. The normal read bus
+    // supplies the low half; this sideband supplies only its upper half.
+    input  wire        bus_dword_capable,
+    input  wire [15:0] bus_read_high,
     input  wire        wide_linear_enable,
     output wire [29:0] wide_address,
     output wire [31:0] wide_writedata,
@@ -85,7 +86,7 @@ module ao486_memory_bridge #(
     wire first_high_half = SKIP_EMPTY_HALVES && avm_byteenable[1:0] == 0 &&
         (avm_write || (NARROW_READS && avm_burstcount == 1 &&
                       (READ_MASK_ALWAYS_NONZERO || avm_byteenable[3:2] != 0)));
-    wire dword_read = RAM_DWORD_READ && bus_dword_valid && !write_request &&
+    wire dword_read = RAM_DWORD_READ && bus_dword_capable && !write_request &&
                       !high_half && !skip_half && byte_enable[3:2] != 0;
     wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0) || dword_read;
     // A legal burst spans at most eight DWORDs. All aperture boundaries are
@@ -162,9 +163,10 @@ module ao486_memory_bridge #(
                     if (!write_request) begin
                         if (!high_half) read_low <= skip_half ? 16'hffff : bus_readdata;
                         if (last_half) begin
-                            avm_readdata <= dword_read ? bus_dword_data : high_half ?
-                                {skip_half ? 16'hffff : bus_readdata, read_low} :
-                                {16'hffff, skip_half ? 16'hffff : bus_readdata};
+                            avm_readdata[15:0] <= high_half ? read_low :
+                                skip_half ? 16'hffff : bus_readdata;
+                            avm_readdata[31:16] <= dword_read ? bus_read_high :
+                                high_half && !skip_half ? bus_readdata : 16'hffff;
                             avm_readdatavalid <= 1;
                         end
                     end

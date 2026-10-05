@@ -20,8 +20,8 @@ module ao486_memory_bridge_tb #(
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    wire bus_dword_valid = bus_ack && !bus_write && !bus_address[1] && in_ram({bus_address,1'b0});
-    reg [31:0] bus_dword_data = 0;
+    wire bus_dword_capable = in_ram({bus_address,1'b0});
+    reg [15:0] bus_read_high = 0;
     ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES),.RAM_DWORD_READ(RAM_DWORD_READ)) dut (
         .wide_linear_enable(1'b0),.wide_waitrequest(1'b1),
         .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
@@ -111,8 +111,7 @@ module ao486_memory_bridge_tb #(
                             if (held_select[1]) memory[index_of(held_address + 1)] = held_data[15:8];
                         end
                         bus_readdata = {memory[index_of(held_address + 1)], memory[index_of(held_address)]};
-                        bus_dword_data = {memory[index_of(held_address + 3)], memory[index_of(held_address + 2)],
-                                          memory[index_of(held_address + 1)], memory[index_of(held_address)]};
+                        bus_read_high = {memory[index_of(held_address + 3)], memory[index_of(held_address + 2)]};
                         bus_ack = 1;
                         bus_head = bus_head + 1;
                         model_state = 2;

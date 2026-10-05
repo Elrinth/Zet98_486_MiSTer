@@ -10,8 +10,8 @@ module pc98_extmem_bridge_tb;
     reg write=0, strobe=0;
     wire mapped, mapped16, ack;
     wire [15:0] readdata;
-    wire dword_valid;
-    wire [31:0] dword_data;
+    wire dword_capable;
+    wire [15:0] dword_high;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;
     wire [7:0] ddr_byteenable, ddr_burstcount;
@@ -79,31 +79,31 @@ module pc98_extmem_bridge_tb;
     endtask
     task finish_request;
         reg [15:0] accepted_data;
-        reg [31:0] accepted_dword;
+        reg [15:0] accepted_dword;
         integer word_index;
         begin
             @(negedge clk);
             while(!ack) @(negedge clk);
             accepted_data=readdata;
-            accepted_dword=dword_data;
-            if (dword_valid !== (READ_CACHE && !write && !address[1]))
+            accepted_dword=dword_high;
+            if (dword_capable !== (READ_CACHE && mapped))
                 $fatal(1,"incorrect DWORD qualification");
-            if (dword_valid) begin
+            if (dword_capable && !write && !address[1]) begin
                 word_index=-1;
                 for(integer i=0;i<used;i++)
                     if(keys[i]==((32'h30000000+{address,1'b0})>>3)) word_index=i;
-                if(word_index<0 || dword_data!==words[word_index][address[2]*32+:32])
+                if(word_index<0 || dword_high!==words[word_index][address[2]*32+16+:16])
                     $fatal(1,"incorrect buffered DWORD data");
             end
             repeat(3) begin
                 @(negedge clk);
                 if(!ack) $fatal(1,"ACK was not held until request release");
                 if(!write && readdata!==accepted_data) $fatal(1,"read data changed while ACK held");
-                if(dword_valid && dword_data!==accepted_dword) $fatal(1,"DWORD data changed while ACK held");
+                if(dword_capable && !write && dword_high!==accepted_dword) $fatal(1,"DWORD data changed while ACK held");
             end
             strobe=0;
             @(negedge clk);
-            if(ack || dword_valid) $fatal(1,"ACK did not release");
+            if(ack) $fatal(1,"ACK did not release");
         end
     endtask
     task check_map(input reg [31:0] a, input bit yes16, yes64);
@@ -111,6 +111,7 @@ module pc98_extmem_bridge_tb;
             @(negedge clk); address=a[31:1];
             #1;
             if(mapped16!==yes16 || mapped!==yes64) $fatal(1,"bad extended RAM map at %h",a);
+            if(dword_capable !== (READ_CACHE && yes64)) $fatal(1,"bad DWORD capability at %h",a);
         end
     endtask
     integer a,be,lane,before_commands;
@@ -142,7 +143,7 @@ module pc98_extmem_bridge_tb;
         // resident word before a new request can use it.
         start(0,32'h02100100,3,0);
         reset=1; #1;
-        if(ack || dword_valid || ddr_read || ddr_write) $fatal(1,"reset did not suppress a warm read");
+        if(ack || ddr_read || ddr_write) $fatal(1,"reset did not suppress a warm read");
         strobe=0;
         repeat(2) @(negedge clk);
         reset=0;

@@ -47,7 +47,7 @@ module ao486_memory_integration_tb;
     ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1),
         .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS)) bridge (
         .wide_linear_enable(1'b0),.wide_backend_busy(1'b0),.wide_waitrequest(1'b1),
-        .bus_dword_valid(1'b0),.bus_dword_data(32'b0),
+        .bus_dword_capable(1'b0),.bus_read_high(16'b0),
         .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
         .wide_address(),.wide_writedata(),.wide_byteenable(),.wide_burstcount(),
         .wide_read(),.wide_write(),.*);
