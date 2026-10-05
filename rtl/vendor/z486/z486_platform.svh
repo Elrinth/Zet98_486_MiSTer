@@ -68,6 +68,18 @@
 `define Z486_PLRU_RAM
 `endif
 
+// Data-tag placement is independent of the data arrays. Preserve old-data
+// read-during-write behavior; do not add no_rw_check to this MLAB attribute.
+`ifdef Z486_ALTERA
+`ifdef ZET98_Z486_DTAG_MLAB
+`define Z486_DCACHE_TAG_RAM (* ramstyle = "MLAB" *)
+`else
+`define Z486_DCACHE_TAG_RAM `Z486_BLOCK_RAM
+`endif
+`else
+`define Z486_DCACHE_TAG_RAM `Z486_BLOCK_RAM
+`endif
+
 // L1 cache tag width in physical address bits (27 = 128 MiB); addresses that
 // differ only above it share a line and must never be cached.
 `ifndef Z486_L1_PHYS_ADDR_BITS

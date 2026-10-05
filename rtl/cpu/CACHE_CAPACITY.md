@@ -213,8 +213,9 @@ settings and saves them with its results in `profile.txt`.
 The corrected 32/8 KB seed-12 attempt passed placement but did not finish
 routing: the existing watchdog stopped it after 25 minutes without output
 (exit 125). Diagnostics are saved in `build/icache32-coherent/watchdog/`;
-there is no qualified RBF from that attempt. A seed-6 retry and a corrected
-8/8 KB fallback are building with a bounded 45-minute silence allowance.
+there is no qualified RBF from that attempt. A seed-6 retry uses a bounded
+45-minute silence allowance. The corrected 8/8 KB fallback was deliberately
+stopped to free a build slot for the smaller instruction-cache implementation.
 
 ## Reducing instruction patch logic
 
@@ -240,3 +241,28 @@ and 16/16 KB after the change. The 32/8 KB results have identical
 cycle/instruction/active-cycle records in all
 80 CPU cases compared with the previous implementation. Results are in
 `build/icache-area/`.
+
+## Combined 32 KB instruction / 16 KB data experiment
+
+`-Z486DTagMlab` optionally moves the four data-cache tag memories into MLABs.
+The data arrays remain in M10Ks. Together with `-Z486PLRUMlab`, the expected
+block-RAM count for 32/16 KB is 553: the measured 32/8 KB count of 549, plus
+eight data RAM blocks, minus four tag RAM blocks. This is a resource estimate;
+a full fitted build must confirm both block RAM and available logic/LAB space.
+Neither option changes the default cache capacities.
+
+Isolated Quartus 17 synthesis confirms four 256-by-16 tag memories move from
+M10K to LUTRAM. The component cost rises from 1,751 to 1,955 logic ALUTs,
+adds 512 memory ALUTs, and increases dedicated registers from 570 to 634.
+No `no_rw_check` attribute is used. The inferred MLAB implementation captures
+its asynchronous read in output registers; inspect fitted timing and validate
+hardware before promoting it. The [Cyclone V memory handbook](https://cdrdv2-public.intel.com/666995/cv_5v2-683375-666995.pdf)
+describes old-data behavior with registered MLAB outputs.
+
+The 32/16 KB behavioral CPU passes the full memory-completion suite in both
+read-buffer modes, including 52 stack-fault cases and the self-modifying-code
+stream. Eight 486-enabled seeds of 1,200 blocks each match Unicorn for all
+GPR records and 384 KB RAM. These tests validate the larger cache configuration;
+RTL simulation does not validate physical MLAB inference or timing. Evidence:
+`build/icache-area/full32d16.log`, `fuzz32d16-verified.log`, and
+`dtag-{m10k,mlab}-map.rpt`.

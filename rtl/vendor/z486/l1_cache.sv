@@ -119,10 +119,10 @@ wire cpu_protect_write = PROTECT_UMA_ROM && cpu_write && (cpu_addr[24:18] == 7'b
 // Keep validity in the otherwise under-filled tag RAM word. This removes four
 // asynchronously indexed 256-bit register arrays from the preread address
 // path without changing the synchronous lookup boundary.
-`Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way0 [0:NUM_SETS-1];
-`Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way1 [0:NUM_SETS-1];
-`Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way2 [0:NUM_SETS-1];
-`Z486_BLOCK_RAM reg [TAG_RAM_BITS-1:0] tag_way3 [0:NUM_SETS-1];
+`Z486_DCACHE_TAG_RAM reg [TAG_RAM_BITS-1:0] tag_way0 [0:NUM_SETS-1];
+`Z486_DCACHE_TAG_RAM reg [TAG_RAM_BITS-1:0] tag_way1 [0:NUM_SETS-1];
+`Z486_DCACHE_TAG_RAM reg [TAG_RAM_BITS-1:0] tag_way2 [0:NUM_SETS-1];
+`Z486_DCACHE_TAG_RAM reg [TAG_RAM_BITS-1:0] tag_way3 [0:NUM_SETS-1];
 `Z486_PLRU_RAM reg [2:0] plru_set [0:NUM_SETS-1];
 
 `Z486_BLOCK_RAM reg [31:0] data_way0 [0:(NUM_SETS << WORD_OFFSET_BITS)-1];

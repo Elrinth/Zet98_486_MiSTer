@@ -42,6 +42,8 @@ param(
     [int]$Z486DCacheKB = 8,
     # Optional trade: save two M10Ks by using logic memory for replacement tables.
     [switch]$Z486PLRUMlab,
+    # Larger combined caches can reclaim four M10Ks by moving data tags to MLABs.
+    [switch]$Z486DTagMlab,
     [switch]$Z486DebugUart,
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
@@ -109,6 +111,7 @@ if ($RegisterPacking -ne 'SparseAuto' -and $Cpu -ne 'z486') { throw 'Register pa
 if ($Z486ICacheKB -ne 8 -and $Cpu -ne 'z486') { throw 'Z486ICacheKB requires z486.' }
 if ($Z486DCacheKB -ne 8 -and $Cpu -ne 'z486') { throw 'Z486DCacheKB requires z486.' }
 if ($Z486PLRUMlab -and $Cpu -ne 'z486') { throw 'Z486PLRUMlab requires z486.' }
+if ($Z486DTagMlab -and $Cpu -ne 'z486') { throw 'Z486DTagMlab requires z486.' }
 if ($LowMemoryCache -and $Cpu -ne 'ao486') { throw 'Low-memory read cache requires ao486.' }
 if ($UpperRamICache -and $Cpu -eq 'Zet') { throw 'Upper conventional RAM instruction cache requires ao486 or z486.' }
 if ($LowMemoryCacheKB -ne 8 -and -not $LowMemoryCache) { throw 'Cache size requires -LowMemoryCache.' }
@@ -188,6 +191,10 @@ try {
     $Z486DCacheKB | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-dcache-kb.txt')
     if ($Z486DCacheKB -eq 16) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_DCACHE_SET_BITS=8"
+    }
+    [bool]$Z486DTagMlab | Set-Content -LiteralPath (Join-Path $buildRoot 'z486-dtag-mlab.txt')
+    if ($Z486DTagMlab) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_Z486_DTAG_MLAB=1"
     }
     if ($NativeDdr) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR=1"
