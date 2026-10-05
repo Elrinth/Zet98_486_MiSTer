@@ -1247,7 +1247,7 @@ always_ff @(posedge clk) begin
         if (q_flush || any_fault)
             d2_ea_split_done_r <= 1'b0;
         else if (d2_ea_split_wait)
-            d2_ea_split_done_r <= 1'b1;
+            d2_ea_split_done_r <= !d2_ea_split_alu_commit;
         else if (d2_start || i_issue)
             d2_ea_split_done_r <= 1'b0;
 
@@ -1845,6 +1845,12 @@ wire [7:0] d2_split_commit_mask =
 wire d2_ea_split_refresh = d2_ea_split_done_r &&
     (((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
       d2_split_commit_mask) != 8'h00);
+// Unlike a plain load, a VIPT ALU does not forward its WB result to the EA
+// reader. A partial sum captured on its commit edge still contains old GPR
+// data. Keep that sum unready until the next edge can capture the new value.
+wire d2_ea_split_alu_commit =
+    |((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
+      vipt_load_wb_alu_dst_mask);
 assign d2_ea_split_wait = d2_ea_needs_split &&
                           (!d2_ea_split_done_r || d2_ea_split_refresh);
 // Clear-all events: segment state may change under any committed seg

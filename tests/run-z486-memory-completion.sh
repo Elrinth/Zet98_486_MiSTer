@@ -27,7 +27,7 @@ printf '%s\n' "${cache_flags[@]}" "Z486_PIPELINE_REGS=$pipeline" \
     "comparison=$comparison" > "$out/profile.txt"
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 cp rtl/vendor/z486/*.hex "$out/"
-for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load; do
+for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load vipt_alu_complex_ea; do
     source="tests/hardware/${name}_probe.asm"
     if [[ $name == pf_store_jcc ]]; then source=tests/hardware/pf_store_jcc.asm; fi
     nasm -f bin "$source" -o "$out/$name.bin"
@@ -48,7 +48,7 @@ for early in 0 1; do
         rtl/graphics/pc98_pegc_palette.sv rtl/graphics/pc98_pegc_memory.sv \
         rtl/graphics/pc98_pegc_ddr_arbiter.sv tests/z486_xms_resident_tb.sv \
         > "$out/compile-$early.log" 2>&1 || { tail -n 60 "$out/compile-$early.log"; exit 1; }
-    for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load; do
+    for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load vipt_alu_complex_ea; do
         (cd "$out"; "./obj-$early/Vz486_xms_resident_tb" "+program=$out/$name.bin") \
             > "$out/$name-$early.log" 2>&1 || { tail -n 25 "$out/$name-$early.log"; exit 1; }
         echo "$comparison_param=$early $name"

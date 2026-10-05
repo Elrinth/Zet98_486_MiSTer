@@ -44,3 +44,26 @@ eight 486 differential fuzz seeds. All 80 existing CPU cases retain exactly
 their previous cycle, instruction and active-cycle counts. The new probe
 executes 3,871 instructions in either profile, taking 26,183 cycles with
 profile 2 and 25,117 with corrected profile 0.
+
+## Refreshing a complex address after an ALU commit
+
+Expanding the profile-0 comparison to seeds 1-40 exposed another dependency
+in seed 36, block 1020. After `add edx,[memory]`, an independent load and
+`lea esi,[eax+edx*2+230]`, a saved partial address still used EDX before the
+ADD. With EAX `5156e75ah`, old EDX `3a0af086h` produces the observed wrong
+address `c56cc94ch`; committed EDX `e3f5d957h` produces the required
+`19429aeeh`. Profile 2 passes that seed.
+
+The split-address readiness bit now stays clear when a matching VIPT ALU
+commits. That producer does not forward its WB result into the address
+reader, so the partial sum must be captured again on the following edge.
+This adds no register or ALU-result bypass. Ordinary forwarded-load and
+deferred-shift address preparation keeps its existing behavior.
+
+`vipt_alu_complex_ea_probe.asm` independently checks the value across cold
+and warm repeated instruction alignments. It fails before the correction
+in profile 0 and passes afterward. Both corrected pipeline configurations
+pass all 40 differential seeds (1,200 blocks each), matching all GPR records
+and 384 KB RAM per seed. Profile 0 also passes the full two-mode memory
+suite and both retained dependency probes. Final results are under
+`build/pipeline0/final-pr{0,2}-*`.
