@@ -25,3 +25,17 @@ it does not replace FPGA and hardware qualification.
 
 Local component reports and before/after sources are retained under
 `build/store-forward-area/`. Whole-core qualification is still pending.
+
+## Whole-core result
+
+The 90 MHz PR2/32 KB instruction/8 KB data-cache candidate at source f7388d0
+failed placement with seed 6: 41,730 ALMs, 551 M10Ks and 50 DSPs required
+4,200 LABs, exceeding the device's 4,191. No RBF or hardware result was
+produced. Its 84 CPU cases and 40 differential seeds passed; all 84 cycle,
+instruction and active-cycle counts match the preceding early-grant version.
+
+The isolated synthesis saving did not translate to a usable whole-core fit.
+This implementation is preserved only on `memory-shared-forward-experiment`;
+it was removed from the active `memory-early-grant` candidate. Evidence is in
+`build/early-grant-shared/failed-fit.rpt`, `cycle-equivalence.json`, `full.log`
+and `fuzz-verified.log`.
