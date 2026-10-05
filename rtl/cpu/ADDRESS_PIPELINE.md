@@ -92,3 +92,16 @@ translation of the real PC-98 cache policy. Native writes, bank-AB alias
 writes, DMA, bank-89 remap/restore and ROM bypass pass. All three controls
 that disconnect alias/DMA/remap invalidation are rejected. Evidence:
 `build/pipeline0/upper-summary.log` and `upper-pr{0,2}.log`.
+
+The seed-12 PR0 fit completes at 41,501 ALMs, all 4,191 LABs, 551 M10Ks
+and 50 DSPs. Worst slack is -9.380 ns (11 negative checks), within the
+user's allowance; pixel-clock, HPS peripheral and SDRAM FEC audits pass.
+However, this bitstream is **not qualified**: two fresh Linux boots panic
+at different kernel locations (`c02be82c` and `c01239d7`), and DOS remains
+at the Z98MEM initialization banner for over 60 seconds. No Doom speed
+claim is made for PR0. Physical timing versus a remaining RTL dependency
+has not been isolated. Source is `9d74068`; evidence is in
+`build/icache32-fast90-s12/`, with RBF SHA-256
+`7f4fea2ea1575d1dfabaa7df73698fed912ef873d8f5ea46f00a1b4480b3029a`.
+A 90 MHz PR2 build of the final source is queued to qualify the retained
+pipeline configuration including both dependency guards.

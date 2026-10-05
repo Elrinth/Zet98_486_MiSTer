@@ -305,3 +305,11 @@ tables. Its PR2 simulation passes all 84 CPU cases and 40 differential
 486 seeds, matching every GPR record and 384 KB RAM. The 90 MHz seed-6
 FPGA build is queued; it remains unqualified until fitting and hardware
 checks complete. Evidence: `build/cache16-balanced/`.
+
+The final-source 100 MHz PR2 / 32/8 KB attempt (`9d74068`, seed 6)
+passes placement but does not complete routing. The existing watchdog
+stops it after 45 silent minutes (exit 125); this yields no timing result
+or usable RBF. Diagnostics are retained in `build/icache32-100/watchdog/`.
+The balanced 16/16 KB build has started, followed by a queued final-source
+90 MHz PR2 / 32/8 KB reference. The earlier qualified 90 MHz PR2 bitstream
+also boots the same Linux disk successfully after both failed PR0 boots.
