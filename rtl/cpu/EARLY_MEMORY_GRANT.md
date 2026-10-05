@@ -8,7 +8,7 @@ legacy or native transfers still start from the bridge's registered state.
 An active I/O owner, a lingering legacy ACK, reset, or an outstanding native
 DDR response still blocks admission. Memory retains its existing priority
 when both memory and I/O request an idle bus. This changes no memory mapping,
-cache policy, CPU instruction, peripheral protocol, or write-completion rule.
+cache policy, CPU instruction, peripheral timing, or write-completion rule.
 Set `EARLY_MEMORY_GRANT=0` on `pc98_ao486` or `ao486_bus_bridge` to compare
 against the previous behavior.
 

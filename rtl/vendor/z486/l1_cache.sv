@@ -443,81 +443,84 @@ wire [STOREQ_CNT_BITS-1:0] storeq_count_wr_next =
      storeq_merge_lookup ? (storeq_dequeuing ? storeq_count - 1'b1 : storeq_count)
                          : (storeq_dequeuing ? storeq_count : storeq_count + 1'b1);
 
-// Select the youngest queued bytes once per address, then overlay the same
-// result on each destination. Keeping the destination word out of the queue
-// walk shares the priority/mask logic across lookup, bypass and wide fills.
-logic [31:0] req_forward_value, fill_forward_value;
-logic [3:0] req_forward_mask, fill_forward_mask;
 always_comb begin
-    req_forward_value = 0; fill_forward_value = 0;
-    req_forward_mask = 0; fill_forward_mask = 0;
+    lookup_forward_data = lookup_way_data;
+    fill_word_data = mem_dout;
+    bypass_forward_data = mem_dout;
+    wide_install_word = wide_fill_line[{fill_count, 5'b0} +: 32];
+    wide_resp_word = mem_line_dout[{fill_target_word, 5'b0} +: 32];
+
     unique case (storeq_tail)
         2'd0: begin
             if (storeq_count > 0) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_req[0]) req_forward_mask = req_forward_mask | storeq_be[0];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_fill[0]) fill_forward_mask = fill_forward_mask | storeq_be[0];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
             if (storeq_count > 1) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_req[1]) req_forward_mask = req_forward_mask | storeq_be[1];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_fill[1]) fill_forward_mask = fill_forward_mask | storeq_be[1];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
             if (storeq_count > 2) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_req[2]) req_forward_mask = req_forward_mask | storeq_be[2];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_fill[2]) fill_forward_mask = fill_forward_mask | storeq_be[2];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
         end
         2'd1: begin
             if (storeq_count > 0) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_req[1]) req_forward_mask = req_forward_mask | storeq_be[1];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_fill[1]) fill_forward_mask = fill_forward_mask | storeq_be[1];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
             if (storeq_count > 1) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_req[2]) req_forward_mask = req_forward_mask | storeq_be[2];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_fill[2]) fill_forward_mask = fill_forward_mask | storeq_be[2];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
             if (storeq_count > 2) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_req[0]) req_forward_mask = req_forward_mask | storeq_be[0];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_fill[0]) fill_forward_mask = fill_forward_mask | storeq_be[0];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
         end
         default: begin
             if (storeq_count > 0) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_req[2]) req_forward_mask = req_forward_mask | storeq_be[2];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
-                if (storeq_hit_fill[2]) fill_forward_mask = fill_forward_mask | storeq_be[2];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[2], storeq_data[2], storeq_be[2]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[2], storeq_data[2], storeq_be[2]);
             end
             if (storeq_count > 1) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_req[0]) req_forward_mask = req_forward_mask | storeq_be[0];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
-                if (storeq_hit_fill[0]) fill_forward_mask = fill_forward_mask | storeq_be[0];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[0], storeq_data[0], storeq_be[0]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[0], storeq_data[0], storeq_be[0]);
             end
             if (storeq_count > 2) begin
-                req_forward_value = forward_storeq_word(req_forward_value, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_req[1]) req_forward_mask = req_forward_mask | storeq_be[1];
-                fill_forward_value = forward_storeq_word(fill_forward_value, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
-                if (storeq_hit_fill[1]) fill_forward_mask = fill_forward_mask | storeq_be[1];
+                lookup_forward_data = forward_storeq_word(lookup_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                bypass_forward_data = forward_storeq_word(bypass_forward_data, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                wide_resp_word = forward_storeq_word(wide_resp_word, storeq_hit_req[1], storeq_data[1], storeq_be[1]);
+                fill_word_data = forward_storeq_word(fill_word_data, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
+                wide_install_word = forward_storeq_word(wide_install_word, storeq_hit_fill[1], storeq_data[1], storeq_be[1]);
             end
         end
     endcase
-    lookup_forward_data = merge32(lookup_way_data, req_forward_value, req_forward_mask);
-    bypass_forward_data = merge32(mem_dout, req_forward_value, req_forward_mask);
-    wide_resp_word = merge32(mem_line_dout[{fill_target_word, 5'b0} +: 32], req_forward_value, req_forward_mask);
-    fill_word_data = merge32(mem_dout, fill_forward_value, fill_forward_mask);
-    wide_install_word = merge32(wide_fill_line[{fill_count, 5'b0} +: 32], fill_forward_value, fill_forward_mask);
 end
 
 // synthesis translate_off
