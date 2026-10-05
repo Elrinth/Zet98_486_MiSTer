@@ -4,10 +4,11 @@ ulimit -c 0
 cd "$(dirname "$0")/.."
 comparison=${1:-write}
 case "$comparison" in
-    write) comparison_param=EARLY_WRITE_COMPLETE; fixed_flags=(-GEARLY_READ_HIT=0);;
-    read) comparison_param=EARLY_READ_HIT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1);;
-    grant) comparison_param=EARLY_MEMORY_GRANT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1);;
-    *) echo 'Expected write, read or grant comparison' >&2; exit 2;;
+    write) comparison_param=EARLY_WRITE_COMPLETE; fixed_flags=(-GEARLY_READ_HIT=0 -GREGISTERED_MEMORY_READY=0);;
+    read) comparison_param=EARLY_READ_HIT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GREGISTERED_MEMORY_READY=0);;
+    grant) comparison_param=EARLY_MEMORY_GRANT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1 -GREGISTERED_MEMORY_READY=0);;
+    ready) comparison_param=REGISTERED_MEMORY_READY; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1 -GEARLY_MEMORY_GRANT=1);;
+    *) echo 'Expected write, read, grant or ready comparison' >&2; exit 2;;
 esac
 cache_flags=()
 for cache in ICACHE DCACHE; do

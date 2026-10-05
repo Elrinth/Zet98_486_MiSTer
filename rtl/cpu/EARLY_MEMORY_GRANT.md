@@ -16,6 +16,28 @@ cache policy, CPU instruction or write-completion rule.
 Set `EARLY_MEMORY_GRANT=0` on `pc98_ao486` or `ao486_bus_bridge` to compare
 against the previous behavior.
 
+## Registered CPU acknowledgement experiment
+
+`REGISTERED_MEMORY_READY=1` acknowledges a bridge-accepted read to z486 on the
+following clock and suppresses the held Avalon request in between. The z486
+external arbiter holds its request and owner until ready, and the memory
+bridge's earliest registered read response follows that CPU acceptance edge.
+The transfer itself starts immediately, allowing acceptance to overlap the
+first backend transfer cycle.
+
+Writes in this mode use the registered final-write pulse exclusively. The
+combinational fabric-idle fallback is removed from CPU ready. This mode is
+enabled only with early write completion and no command queue; the queued
+configuration retains its previous acknowledgement behavior. A simulation
+assertion rejects a final-write pulse without a waiting CPU write.
+
+`tests/run-z486-memory-completion.sh ready` compares this acknowledgement path
+with the parked-owner implementation. The existing write/read/grant comparisons
+keep registered acknowledgement disabled to preserve their original meaning.
+All 84 comparison runs pass, with identical cycle, instruction and active-cycle
+counts in every one of the 42 paired workloads. Hardware qualification of this
+further revision is pending.
+
 `tests/run-early-memory-grant.sh` checks the real ao486 Avalon generator with
 both direct and eight-entry queued memory commands, concurrent I/O, split
 unaligned stores, code fetches and DMA. It also checks native/fallback DDR

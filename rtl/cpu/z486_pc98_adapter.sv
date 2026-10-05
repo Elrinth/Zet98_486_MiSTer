@@ -4,7 +4,9 @@
 // I/O is acknowledged only on completion, retaining byte-lane side effects.
 module z486_pc98_adapter #(
     parameter EXT_RAM_MB = 0,
-    parameter CLOCK_RATE_MHZ = 90
+    parameter CLOCK_RATE_MHZ = 90,
+    // Requires a final-write pulse for each command (no posted-write queue).
+    parameter REGISTERED_MEMORY_READY = 1'b0
 ) (
     input wire clk, rst_n, a20_enable, cache_disable, cache_invalidate,
     input wire fabric_idle, write_complete,
@@ -57,6 +59,7 @@ module z486_pc98_adapter #(
     wire real_mode = !protected_mode;
     reg second_inta;
     reg write_accepted;
+    reg read_accepted;
     reg [3:0] triple_reset;
     wire reset_request_n = rst_n && triple_reset == 0;
     // Assert immediately, but release the core only on local clock edges.
@@ -83,7 +86,8 @@ module z486_pc98_adapter #(
     assign avm_writedata = write_data;
     assign avm_byteenable = byte_enable;
     assign avm_burstcount = burst[3:0];
-    assign avm_read = cpu_reset_n && valid && !io && !inta && !write;
+    assign avm_read = cpu_reset_n && valid && !io && !inta && !write &&
+                      (!REGISTERED_MEMORY_READY || !read_accepted);
     assign avm_write = cpu_reset_n && valid && !io && !inta && write && !write_accepted;
     assign io_read_do = cpu_reset_n && valid && io && !inta && !write;
     assign io_write_do = cpu_reset_n && valid && io && !inta && write;
@@ -98,8 +102,15 @@ module z486_pc98_adapter #(
     // ACK release and bus-owner turnaround need not hold the CPU afterwards;
     // the bridge still prevents a later external access from overtaking them.
     // Internal cache hits remain ordered after bank-window alias stores.
+    // The bridge starts a read immediately; acknowledge that acceptance to
+    // the CPU on the next cycle. Suppress the held request in between so it
+    // cannot be accepted twice. Responses already return through registers.
+    // In this mode a write uses only the registered final-transfer pulse:
+    // fabric-idle/address decoding no longer feeds the CPU's ready path.
     assign ready = cpu_reset_n && (inta ? 1'b1 : io ? io_done :
-                                  write ? write_accepted && (fabric_idle || write_complete) : !avm_waitrequest);
+                                  write ? write_accepted &&
+                                    (REGISTERED_MEMORY_READY ? write_complete : fabric_idle || write_complete) :
+                                  REGISTERED_MEMORY_READY ? read_accepted : !avm_waitrequest);
     assign response = cpu_reset_n && ((valid && inta) || io_read_done || avm_readdatavalid);
     assign read_data = inta ? (second_inta ? {24'b0,interrupt_vector} : 32'b0) :
                        io ? (io_read_data << (first_lane * 8)) : avm_readdata;
@@ -116,7 +127,16 @@ module z486_pc98_adapter #(
         if (!cpu_reset_n) write_accepted <= 0;
         else if (avm_write && !avm_waitrequest) write_accepted <= 1;
         else if (valid && !io && !inta && write && ready) write_accepted <= 0;
+        if (!cpu_reset_n) read_accepted <= 0;
+        else if (REGISTERED_MEMORY_READY && avm_read && !avm_waitrequest) read_accepted <= 1;
+        else if (valid && !io && !inta && !write && ready) read_accepted <= 0;
     end
+
+    // synthesis translate_off
+    always @(posedge clk) if (cpu_reset_n && REGISTERED_MEMORY_READY && write_complete &&
+                             !(write_accepted && valid && !io && !inta && write))
+        $fatal(1, "final write pulse has no waiting CPU command");
+    // synthesis translate_on
 
 `ifdef ZET98_Z486_PIPELINE_REGS
     localparam [2:0] PIPELINE_REGS = `ZET98_Z486_PIPELINE_REGS;

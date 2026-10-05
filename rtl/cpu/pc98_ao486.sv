@@ -16,6 +16,7 @@ module pc98_ao486 #(
     parameter PEGC_ENABLE = 0,
     parameter EARLY_WRITE_COMPLETE = 1'b1,
     parameter EARLY_MEMORY_GRANT = 1'b1,
+    parameter REGISTERED_MEMORY_READY = 1'b1,
 `ifdef ZET98_NATIVE_DDR
     parameter NATIVE_DDR = 1,
 `else
@@ -272,7 +273,8 @@ module pc98_ao486 #(
     wire [35:0] debug_cpu_state;
     wire [17:0] debug_gate;
     wire crash_tx;
-    z486_pc98_adapter #(.EXT_RAM_MB(EXT_RAM_MB), .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ)) cpu (
+    z486_pc98_adapter #(.EXT_RAM_MB(EXT_RAM_MB), .CLOCK_RATE_MHZ(CLOCK_RATE_MHZ),
+        .REGISTERED_MEMORY_READY(REGISTERED_MEMORY_READY && EARLY_WRITE_COMPLETE && MEMORY_QUEUE_BITS == 0)) cpu (
         .cpu_speed_sel(cpu_speed_sel),
         .fabric_idle(!fabric_busy),
         // A queued bridge can complete an older command. Only the direct

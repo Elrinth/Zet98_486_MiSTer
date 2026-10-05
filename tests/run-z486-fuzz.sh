@@ -21,13 +21,18 @@ pipeline=${Z486_PIPELINE_REGS:-7}
 profile_flags+=("-DZET98_Z486_PIPELINE_REGS=$pipeline")
 memory_grant=${Z486_MEMORY_GRANT:-1}
 random_wait=${Z486_RANDOM_WAIT:-0}
+registered_ready=${Z486_REGISTERED_MEMORY_READY:-1}
+[[ $registered_ready == 0 || $registered_ready == 1 ]] || {
+    echo 'Z486_REGISTERED_MEMORY_READY must be 0 or 1' >&2; exit 2;
+}
 [[ $memory_grant == 0 || $memory_grant == 1 ]] || {
     echo 'Z486_MEMORY_GRANT must be 0 or 1' >&2; exit 2;
 }
 [[ $random_wait =~ ^[0-9]+$ && $random_wait -le 100 ]] || {
     echo 'Z486_RANDOM_WAIT must be 0..100 clocks' >&2; exit 2;
 }
-profile_flags+=("-GEARLY_MEMORY_GRANT=$memory_grant" "-GRANDOM_WAIT=$random_wait")
+profile_flags+=("-GEARLY_MEMORY_GRANT=$memory_grant" "-GRANDOM_WAIT=$random_wait"
+               "-GREGISTERED_MEMORY_READY=$registered_ready")
 native_fb=${Z486_NATIVE_DDR_FB_ONLY:-0}
 [[ $native_fb == 0 || $native_fb == 1 ]] || {
     echo 'Z486_NATIVE_DDR_FB_ONLY must be 0 or 1' >&2; exit 2;
