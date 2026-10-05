@@ -16,6 +16,13 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B243 improves general memory throughput and increases the release's instruction
+cache to 32 KB. At the same 90 MHz, two Doom timedemos completed in 1,736/1,737
+reported realtics versus B242's 1,870/1,870: **7.7% more throughput**, with sound
+disabled. Two Linux boots, 200 traced BusyBox `ip` launches and hardware QUALIFY
+pass. Continue using OpenBIOS 2026-10-04.1; no BIOS update is needed. See the
+[performance and validation notes](rtl/cpu/EARLY_MEMORY_GRANT.md).
+
 B242 fixes a CPU stack-page fault restart bug that could crash Linux BusyBox
 when starting `ip`. With OpenBIOS 2026-10-04.1, the corrected core completed
 200 `ip` launches without a segfault and passed hardware QUALIFY. No BIOS

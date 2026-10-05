@@ -61,6 +61,9 @@ bus delays and half use random waits of up to 30 clocks per legacy access.
 
 ## Selected 90 MHz hardware result
 
+Released as **B243**, asset `PC98_Z486_90_B243_20261005.rbf`. The release is
+the exact tested bitstream below; subsequent release commits change documentation only.
+
 Source `6b8f32fb93be8c5c7a84ce4b04819109dc03ff1b` was built with 64 MB RAM,
 PR2, 32 KB instruction / 8 KB data cache, native DDR framebuffer only, normal
 register packing and seed 6. Raw IDE, MIDI, packed graphics and upper-RAM
