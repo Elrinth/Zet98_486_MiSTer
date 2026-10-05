@@ -275,3 +275,21 @@ fit. The actual whole-core map uses 61,893 combinational ALUTs, versus 61,978
 for the original 32/8 KB candidate before the coherence corrections. A
 seed-6 attempt with automatic replacement-table placement is in progress;
 `build/icache32-slim/failed-fit.rpt` retains the failed placement evidence.
+
+## Corrected cache hardware, automatic replacement tables
+
+The seed-6 corrected 32/8 KB PR2 build from `247a8c8` completes placement
+and routing at 41,290 ALMs, 551 M10Ks and 50 DSPs. Worst slack is -7.507 ns
+(10 negative checks), within the user's 12 ns magnitude allowance; timing
+is not closed. Pixel-clock, HPS peripheral and SDRAM FEC audits pass.
+This source includes both instruction-cache coherence fixes and the fixed
+byte-lane patch helper. It predates the two optional-PR0 dependency fixes.
+
+With OpenBIOS 2026-10-04.1, it boots Linux and passes three stack-fault
+probes plus 100 traced BusyBox `ip` launches with normal exits and no
+SIGSEGVs. DOS QUALIFY also passes four division rounds, 4,008 string cases and
+531 KB conventional / 16,384 KB XMS memory with zero errors. Two transfer
+benchmarks retain the earlier 32/8 KB rates (less than 0.1% variation).
+Repeated Doom qualification is still in progress.
+Evidence is under `build/icache32-auto/`; RBF SHA-256 is
+`eade03b7f7357ff41fa6554d3e52a6ae2b99c40e949f5a572a6f8addfeb2e154`.

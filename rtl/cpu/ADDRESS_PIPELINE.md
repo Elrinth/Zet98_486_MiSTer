@@ -72,3 +72,16 @@ Both full two-mode memory suites pass after the split-address correction
 (84 CPU cases per profile, including both new regressions). All 80 original
 profile-2 cases still retain exactly their previous cycle/instruction/active
 counts. All 40 differential seeds pass in each profile.
+
+The final PR0 source also passes all twelve non-mutating retained suites:
+GPR forwarding, RMW reload, smoke/cache/extended-memory/UART, protected-mode
+payload, PIT GDT and LDT, LSS stack, stack allocation, unreal CS, prefetch,
+RAM initialization and IDE BIOS read/write. This run explicitly uses PR0,
+32 KB instruction / 8 KB data cache and native-framebuffer-only defines.
+Evidence: `build/pipeline0/retained-pr0-summary.log` and `retained-pr0/`.
+
+The first final-source PR0 fit (seed 6, 90 MHz) exceeds capacity at 4,205
+LABs versus 4,191 available. Its failed report is retained at
+`build/icache32-fast90/failed-fit.rpt`; it produced no usable RBF. A seed-12
+retry uses the same functional source. Simulation performance is not yet
+an FPGA performance result.
