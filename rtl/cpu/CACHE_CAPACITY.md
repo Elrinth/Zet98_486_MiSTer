@@ -62,7 +62,7 @@ read-buffer modes, including 52 PUSH/CALL/ENTER fault cases, store/Jcc and
 CMPXCHG/XADD faults, reset during a DDR read, all CPU speed settings and
 memory-driver initialization at three placements.
 
-Eight 486-enabled differential fuzz seeds (1â€“8, 1,200 blocks each) also pass
+Eight 486-enabled differential fuzz seeds (1Ã¢â‚¬â€œ8, 1,200 blocks each) also pass
 with both caches at 16 KB: all eight GPRs after each block and 384 KB of RAM
 match Unicorn. This exposed an existing simulation assertion that rejected
 a legal older-shift/younger-load writeback overlap. It also failed with the
@@ -266,3 +266,12 @@ GPR records and 384 KB RAM. These tests validate the larger cache configuration;
 RTL simulation does not validate physical MLAB inference or timing. Evidence:
 `build/icache-area/full32d16.log`, `fuzz32d16-verified.log`, and
 `dtag-{m10k,mlab}-map.rpt`.
+
+The first complete fit of the fixed-lane implementation, 32/8 KB with PLRU
+in MLABs and seed 12 (`69a88a3`), failed placement at 4,209 LABs versus 4,191.
+It reports 41,842 ALMs and 549 M10Ks, including 20 memory LABs for the two
+replacement tables. The isolated synthesis saving did not guarantee a full
+fit. The actual whole-core map uses 61,893 combinational ALUTs, versus 61,978
+for the original 32/8 KB candidate before the coherence corrections. A
+seed-6 attempt with automatic replacement-table placement is in progress;
+`build/icache32-slim/failed-fit.rpt` retains the failed placement evidence.

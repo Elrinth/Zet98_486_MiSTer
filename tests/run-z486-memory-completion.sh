@@ -17,13 +17,17 @@ for cache in ICACHE DCACHE; do
     }
     cache_flags+=("-DZET98_Z486_${cache}_SET_BITS=$value")
 done
+pipeline=${Z486_PIPELINE_REGS:-2}
+[[ $pipeline =~ ^[0-7]$ ]] || { echo 'Z486_PIPELINE_REGS must be 0..7' >&2; exit 2; }
 out=${MEMORY_COMPLETION_OUT:-${WRITE_COMPLETE_OUT:-${READ_HIT_OUT:-}}}
 if [[ -z $out ]]; then out=$(mktemp -d); trap 'rm -rf "$out"' EXIT; fi
 mkdir -p "$out"
 out=$(cd "$out"; pwd)
+printf '%s\n' "${cache_flags[@]}" "Z486_PIPELINE_REGS=$pipeline" \
+    "comparison=$comparison" > "$out/profile.txt"
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 cp rtl/vendor/z486/*.hex "$out/"
-for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream; do
+for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load; do
     source="tests/hardware/${name}_probe.asm"
     if [[ $name == pf_store_jcc ]]; then source=tests/hardware/pf_store_jcc.asm; fi
     nasm -f bin "$source" -o "$out/$name.bin"
@@ -32,7 +36,7 @@ nasm -f bin -Isoftware/ tests/hardware/native_init_probe.asm -o "$out/native_ini
 for early in 0 1; do
     verilator --binary --timing -j 4 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
         -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU \
-        -DZET98_Z486_PIPELINE_REGS=2 -DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY "${cache_flags[@]}" \
+        "-DZET98_Z486_PIPELINE_REGS=$pipeline" -DZET98_NATIVE_DDR -DZET98_NATIVE_DDR_FB_ONLY "${cache_flags[@]}" \
         -Irtl/vendor/z486 -Irtl/vendor/z486/x87 --Mdir "$out/obj-$early" \
         --top-module z486_xms_resident_tb -GRAM_MB=64 -GPEGC_ENABLE=1 \
         "-G${comparison_param}=$early" "${fixed_flags[@]}" -GDDR_WORDS=16384 -GTRACE_LIMIT=0 \
@@ -44,7 +48,7 @@ for early in 0 1; do
         rtl/graphics/pc98_pegc_palette.sv rtl/graphics/pc98_pegc_memory.sv \
         rtl/graphics/pc98_pegc_ddr_arbiter.sv tests/z486_xms_resident_tb.sv \
         > "$out/compile-$early.log" 2>&1 || { tail -n 60 "$out/compile-$early.log"; exit 1; }
-    for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream; do
+    for name in native_ddr native_exec pegc_cpu stack_allocation pf_store_jcc cmpxchg_xadd_fault smc_stream vipt_alu_partial_load; do
         (cd "$out"; "./obj-$early/Vz486_xms_resident_tb" "+program=$out/$name.bin") \
             > "$out/$name-$early.log" 2>&1 || { tail -n 25 "$out/$name-$early.log"; exit 1; }
         echo "$comparison_param=$early $name"
