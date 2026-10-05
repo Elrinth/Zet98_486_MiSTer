@@ -1,5 +1,8 @@
 # Return a complete DWORD from buffered extended RAM
 
+Released as **B244**, asset `PC98_Z486_90_B244_20261005.rbf`. The release
+uses the exact tested bitstream below; subsequent commits change documentation only.
+
 The extended-RAM bridge already fetches and retains 64 bits from DDR. The
 legacy CPU memory bridge normally requests both 16-bit halves of a DWORD
 separately, including an ACK-release interval between them. An aligned RAM
@@ -77,7 +80,7 @@ intervals are approximate because the monitor polls every three seconds;
 the game's final counters provide the relative comparison. These PC-98
 counter values are not interpreted as absolute FPS. No new hardware
 audio-listening result is claimed for this revision.
-B243 remains the released baseline.
+B243 is the comparison baseline.
 Local simulation evidence: `build/ram-dword/` and
 `build/simulation-20261005-150210-fc9efb/`.
 

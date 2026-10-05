@@ -16,6 +16,14 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B244 returns complete 32-bit reads from the existing extended-RAM buffer.
+At the same 90 MHz, hardware measurements show **12% faster extended-RAM
+reads and 6.6% faster copies** than B243. Doom completes both timedemos in
+1,725 reported realtics versus the same-session B243 control's 1,736
+(**0.64% more throughput**, sound disabled). Linux fault-restart checks and
+DOS QUALIFY pass. OpenBIOS 2026-10-04.1 remains current. See the
+[buffered DWORD read results](rtl/cpu/RAM_DWORD_READ.md).
+
 B243 improves general memory throughput and increases the release's instruction
 cache to 32 KB. At the same 90 MHz, two Doom timedemos completed in 1,736/1,737
 reported realtics versus B242's 1,870/1,870: **7.7% more throughput**, with sound
