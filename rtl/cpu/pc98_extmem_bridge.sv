@@ -17,6 +17,8 @@ module pc98_extmem_bridge #(
     output wire mapped,
     output wire ack,
     output wire [15:0] readdata,
+    output wire dword_valid,
+    output wire [31:0] dword_data,
     output wire [28:0] ddr_address,
     output wire [63:0] ddr_writedata,
     output wire [7:0] ddr_byteenable, ddr_burstcount,
@@ -46,6 +48,12 @@ module pc98_extmem_bridge #(
     wire early_read_hit = EARLY_READ_HIT && state==IDLE && mapped && read_hit;
     assign ack = !reset && strobe && ((state==ACK && !cancelled) || early_read_hit);
     assign readdata = early_read_hit ? line_data[{address[2:1],4'b0} +:16] : held_readdata;
+    // A buffered read already owns all 64 bits. Offer the aligned DWORD on
+    // the same ACK so the upstream bridge can omit its second halfword read.
+    // Misses fill line_data before ACK; hits keep it stable until release.
+    // Only ordinary RAM reaches this bridge. Writes retain their byte lanes.
+    assign dword_valid = READ_CACHE && ack && !write && !address[1];
+    assign dword_data = address[2] ? line_data[63:32] : line_data[31:0];
     // All DDR accesses are confined to the 256 MB region used by MiSTer ao486.
     // This module's mapped range uses only its first 16/64 MB.
     assign ddr_address = {4'h3,held_address[27:3]};

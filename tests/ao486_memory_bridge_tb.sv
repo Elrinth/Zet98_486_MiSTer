@@ -2,7 +2,8 @@
 `timescale 1ns/1ps
 module ao486_memory_bridge_tb #(
     parameter NARROW_READS = 1'b1,
-    parameter SKIP_EMPTY_HALVES = 1'b1
+    parameter SKIP_EMPTY_HALVES = 1'b1,
+    parameter RAM_DWORD_READ = 1'b0
 );
     reg clk = 0;
     always #5 clk = !clk;
@@ -19,7 +20,9 @@ module ao486_memory_bridge_tb #(
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES)) dut (
+    wire bus_dword_valid = bus_ack && !bus_write && !bus_address[1] && in_ram({bus_address,1'b0});
+    reg [31:0] bus_dword_data = 0;
+    ao486_memory_bridge #(.NARROW_READS(NARROW_READS),.SKIP_EMPTY_HALVES(SKIP_EMPTY_HALVES),.RAM_DWORD_READ(RAM_DWORD_READ)) dut (
         .wide_linear_enable(1'b0),.wide_waitrequest(1'b1),
         .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
         .wide_address(),.wide_writedata(),.wide_byteenable(),.wide_burstcount(),
@@ -108,6 +111,8 @@ module ao486_memory_bridge_tb #(
                             if (held_select[1]) memory[index_of(held_address + 1)] = held_data[15:8];
                         end
                         bus_readdata = {memory[index_of(held_address + 1)], memory[index_of(held_address)]};
+                        bus_dword_data = {memory[index_of(held_address + 3)], memory[index_of(held_address + 2)],
+                                          memory[index_of(held_address + 1)], memory[index_of(held_address)]};
                         bus_ack = 1;
                         bus_head = bus_head + 1;
                         model_state = 2;
@@ -133,6 +138,10 @@ module ao486_memory_bridge_tb #(
         in_vram = (addr >= 32'ha8000 && addr <= 32'hbffff) ||
                   (addr >= 32'he0000 && addr <= 32'he7fff);
     endfunction
+    function automatic bit in_ram(input reg [31:0] addr);
+        in_ram = addr >= 32'h00100000 && addr < 32'h04000000 &&
+                 !(addr >= 32'h00f00000 && addr < 32'h01000000);
+    endfunction
     task automatic enqueue(input bit wr, input reg [31:0] addr,
                            input reg [3:0] be, input reg [31:0] data,
                            input integer beats);
@@ -151,7 +160,8 @@ module ao486_memory_bridge_tb #(
                            ((be >> (halfword * 2)) & 3) == 0) ? 0 :
                           (wr || (NARROW_READS && beats == 1 && be != 0 && in_vram(a))) ?
                               ((be >> (halfword * 2)) & 3) : 3;
-                    if (sel != 0) begin
+                    if (sel != 0 && !(RAM_DWORD_READ && !wr && in_ram(a) && halfword==1 &&
+                        (!NARROW_READS || beats!=1 || be==0 || (be[1:0]!=0 && be[3:2]!=0)))) begin
                         expected_address[bus_tail] = a + halfword * 2;
                         expected_select[bus_tail] = sel;
                         expected_write[bus_tail] = wr;
@@ -235,7 +245,7 @@ module ao486_memory_bridge_tb #(
         for (delay_mode = 0; delay_mode < 3; delay_mode = delay_mode + 1) begin
             stall_cycles = delay_mode * 3;
             ack_hold_cycles = delay_mode * 2;
-            for (address_case = 0; address_case < 7; address_case = address_case + 1) begin
+            for (address_case = 0; address_case < 11; address_case = address_case + 1) begin
                 case (address_case)
                     0: base = 32'h0000_0000;
                     1: base = 32'h000f_fffc;
@@ -244,6 +254,10 @@ module ao486_memory_bridge_tb #(
                     4: base = 32'hffff_fff0;
                     5: base = 32'h000a_8000;      // graphics VRAM: byte-precise reads
                     6: base = 32'h000e_7ffc;
+                    7: base = 32'h00ef_fffc;      // RAM -> graphics aperture
+                    8: base = 32'h00ff_fffc;      // aperture -> high RAM
+                    9: base = 32'h03ff_fffc;      // last RAM DWORD -> unmapped
+                    10: base = 32'h0100_0004;     // high DWORD in DDR word
                 endcase
                 for (be = 0; be < 16; be = be + 1) begin
                     issue(1, base, be, 32'h3c96a55a ^ (be * 32'h07030109), 1);
@@ -259,7 +273,7 @@ module ao486_memory_bridge_tb #(
 
         // Reset during a stalled burst must cancel its pending response.
         stall_cycles = 100;
-        issue(0, 32'hfffffff0, 15, 0, 8);
+        issue(0, 32'h01000000, 15, 0, 8);
         repeat (5) @(posedge clk);
         @(negedge clk); reset = 1;
         #1;

@@ -25,6 +25,7 @@ module ao486_memory_bridge #(
     parameter READ_MASK_ALWAYS_NONZERO = 1'b0,
     // PC-98: byte-precise reads in the graphics VRAM windows (EGC).
     parameter BYTE_READ_VRAM = 1'b1,
+    parameter RAM_DWORD_READ = 1'b0,
     parameter WIDE_RAM_MB = 0,
     parameter WIDE_RAM_ENABLE = 1'b1
 ) (
@@ -51,6 +52,9 @@ module ao486_memory_bridge #(
     output wire        bus_strobe,
     input  wire [15:0] bus_readdata,
     input  wire        bus_ack,
+    // Optional complete DWORD from an acknowledged, side-effect-free RAM read.
+    input  wire        bus_dword_valid,
+    input  wire [31:0] bus_dword_data,
     input  wire        wide_linear_enable,
     output wire [29:0] wide_address,
     output wire [31:0] wide_writedata,
@@ -81,7 +85,9 @@ module ao486_memory_bridge #(
     wire first_high_half = SKIP_EMPTY_HALVES && avm_byteenable[1:0] == 0 &&
         (avm_write || (NARROW_READS && avm_burstcount == 1 &&
                       (READ_MASK_ALWAYS_NONZERO || avm_byteenable[3:2] != 0)));
-    wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0);
+    wire dword_read = RAM_DWORD_READ && bus_dword_valid && !write_request &&
+                      !high_half && !skip_half && byte_enable[3:2] != 0;
+    wire last_half = high_half || (SKIP_EMPTY_HALVES && byte_enable[3:2] == 0) || dword_read;
     // A legal burst spans at most eight DWORDs. All aperture boundaries are
     // 512 KB aligned, so only the final eight words of a block can cross one.
     // Avoid a 33-bit byte-address adder and several wide end comparators on
@@ -156,7 +162,7 @@ module ao486_memory_bridge #(
                     if (!write_request) begin
                         if (!high_half) read_low <= skip_half ? 16'hffff : bus_readdata;
                         if (last_half) begin
-                            avm_readdata <= high_half ?
+                            avm_readdata <= dword_read ? bus_dword_data : high_half ?
                                 {skip_half ? 16'hffff : bus_readdata, read_low} :
                                 {16'hffff, skip_half ? 16'hffff : bus_readdata};
                             avm_readdatavalid <= 1;

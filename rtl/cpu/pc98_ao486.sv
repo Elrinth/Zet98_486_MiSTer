@@ -9,6 +9,7 @@ module pc98_ao486 #(
     parameter EXT_RAM_MB = 0,
     parameter EXT_RAM_READ_CACHE = 1'b1,
     parameter EXT_RAM_EARLY_READ_HIT = 1'b1,
+    parameter EXT_RAM_DWORD_READ = 1'b1,
     parameter LOWMEM_CACHE = 1'b0,
     parameter LOWMEM_CACHE_KB = 8,
     parameter UPPER_RAM_ICACHE = 0,
@@ -128,6 +129,8 @@ module pc98_ao486 #(
     wire legacy_mapped = !pegc_claimed && (bus_io || physical_address[31:20] == 0 || reset_alias);
     wire extended_mapped, extended_ack;
     wire [15:0] extended_readdata;
+    wire extended_dword_valid;
+    wire [31:0] extended_dword_data;
     wire mapped = legacy_mapped || extended_mapped || pegc_claimed;
     assign bus_address = physical_address[19:1];
     wire legacy_request = physical_strobe && legacy_mapped;
@@ -210,6 +213,7 @@ module pc98_ao486 #(
             .select(bus_select), .writedata(bus_writedata), .write(bus_write),
             .strobe(physical_strobe && !legacy_mapped && !pegc_claimed),
             .mapped(extended_mapped), .ack(extended_ack), .readdata(extended_readdata),
+            .dword_valid(extended_dword_valid), .dword_data(extended_dword_data),
             .ddr_address(legacy_ram_address), .ddr_writedata(legacy_ram_writedata),
             .ddr_byteenable(legacy_ram_byteenable), .ddr_burstcount(),
             .ddr_read(legacy_ram_read), .ddr_write(legacy_ram_write), .ddr_busy(legacy_ram_busy),
@@ -219,6 +223,8 @@ module pc98_ao486 #(
         assign extended_mapped=0;
         assign extended_ack=0;
         assign extended_readdata=16'hffff;
+        assign extended_dword_valid=0;
+        assign extended_dword_data=0;
         assign {legacy_ram_address,legacy_ram_writedata,legacy_ram_byteenable,legacy_ram_read,legacy_ram_write}=0;
     end endgenerate
 
@@ -344,6 +350,7 @@ module pc98_ao486 #(
     // Proven against the vendored Avalon generator by run-memory-mask-contract.sh.
     ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS),
                       .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT),
+                      .RAM_DWORD_READ(EXT_RAM_DWORD_READ),
                       .WIDE_RAM_MB(NATIVE_DDR ? EXT_RAM_MB : 0),
                       .WIDE_RAM_ENABLE(NATIVE_DDR_RAM)) bridge (
         .clk(clk), .reset(cpu_reset),
@@ -359,6 +366,7 @@ module pc98_ao486 #(
         .bus_write(bus_write), .bus_strobe(physical_strobe), .bus_io(bus_io),
         .bus_readdata(pegc_claimed ? pegc_readdata : legacy_mapped ? legacy_readdata : extended_mapped ? extended_readdata : 16'hffff),
         .bus_ack((legacy_mapped && legacy_ack) || pegc_ack || extended_ack || unmapped_access),
+        .bus_dword_valid(extended_dword_valid), .bus_dword_data(extended_dword_data),
         .wide_linear_enable(pegc_linear_enable),.wide_backend_busy(wide_backend_busy),
         .wide_address(wide_address),.wide_writedata(wide_writedata),
         .wide_byteenable(wide_byteenable),.wide_burstcount(wide_burstcount),

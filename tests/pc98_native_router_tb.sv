@@ -5,6 +5,7 @@
 module pc98_native_router_tb;
     parameter RAM_ENABLE=1;
     parameter EARLY_MEMORY_GRANT=1;
+    parameter EXT_RAM_DWORD_READ=1;
     reg clk=0,reset=1;
     always #5 clk=~clk;
     reg [29:0] request_address=0;
@@ -26,7 +27,7 @@ module pc98_native_router_tb;
     reg ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
     pc98_ao486 #(.EXT_RAM_MB(64),.NATIVE_DDR(1),.NATIVE_DDR_RAM(RAM_ENABLE),.PEGC_ENABLE(1),
-        .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT)) dut (
+        .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT),.EXT_RAM_DWORD_READ(EXT_RAM_DWORD_READ)) dut (
         .clk(clk),.reset(reset),.cpu_speed_sel(2'b0),.cache_invalidate(1'b0),
         .cache_upper_ram_native(1'b0),.interrupt_do(1'b0),.interrupt_vector(8'b0),
         .bus_address(bus_address),.bus_select(bus_select),.bus_writedata(bus_writedata),
@@ -155,6 +156,16 @@ module pc98_native_router_tb;
         get2(32'hfff00000,32'h50607080,0,1);
         put(32'hfff00000,32'h11223344);
         get2(32'h000a8000,32'h11223344,0,1);
+        // A ready I/O command must wait until the shortened RAM read drains.
+        // Force a miss at an ordinary RAM word, independent of the native mode.
+        put(32'h01004004,32'h87654321);
+        fork
+            get2(32'h01004004,32'h87654321,0,1);
+            begin
+                while(left==0) @(negedge clk);
+                port_write(16'h0080,8'h5a);
+            end
+        join
         cancel_read(32'h00100000,4); // native RAM read
         cancel_read(32'hfff00000,4); // native framebuffer read in both modes
         cancel_read(32'h000a8000,1); // banked framebuffer read

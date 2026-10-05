@@ -8,8 +8,10 @@ case "$comparison" in
     read) comparison_param=EARLY_READ_HIT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GREGISTERED_MEMORY_READY=0);;
     grant) comparison_param=EARLY_MEMORY_GRANT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1 -GREGISTERED_MEMORY_READY=0);;
     ready) comparison_param=REGISTERED_MEMORY_READY; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1 -GEARLY_MEMORY_GRANT=1);;
-    *) echo 'Expected write, read, grant or ready comparison' >&2; exit 2;;
+    dword) comparison_param=EXT_RAM_DWORD_READ; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1 -GEARLY_MEMORY_GRANT=1 -GREGISTERED_MEMORY_READY=1);;
+    *) echo 'Expected write, read, grant, ready or dword comparison' >&2; exit 2;;
 esac
+if [[ $comparison != dword ]]; then fixed_flags+=(-GEXT_RAM_DWORD_READ=0); fi
 cache_flags=()
 for cache in ICACHE DCACHE; do
     option="Z486_${cache}_SET_BITS"

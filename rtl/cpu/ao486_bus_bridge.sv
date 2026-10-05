@@ -12,6 +12,7 @@ module ao486_bus_bridge #(
     // of the memory bridge (ao486_memory_queue); 0: direct, as before.
     parameter MEMORY_QUEUE_BITS = 0,
     parameter EARLY_MEMORY_GRANT = 1'b1,
+    parameter RAM_DWORD_READ = 1'b0,
     parameter WIDE_RAM_MB = 0,
     parameter WIDE_RAM_ENABLE = 1'b1
 ) (
@@ -47,6 +48,8 @@ module ao486_bus_bridge #(
     output wire        bus_io,
     input  wire [15:0] bus_readdata,
     input  wire        bus_ack,
+    input  wire        bus_dword_valid,
+    input  wire [31:0] bus_dword_data,
     input  wire        wide_linear_enable, wide_backend_busy,
     output wire [29:0] wide_address,
     output wire [31:0] wide_writedata,
@@ -126,6 +129,7 @@ module ao486_bus_bridge #(
         assign mem_busy = bridge_busy;
     end endgenerate
     ao486_memory_bridge #(.READ_MASK_ALWAYS_NONZERO(READ_MASK_ALWAYS_NONZERO),
+                         .RAM_DWORD_READ(RAM_DWORD_READ),
                          .WIDE_RAM_MB(WIDE_RAM_MB), .WIDE_RAM_ENABLE(WIDE_RAM_ENABLE)) memory_bridge (
         .clk(clk), .reset(reset), .avm_address(q_address),
         .avm_writedata(q_writedata), .avm_byteenable(q_byteenable),
@@ -137,6 +141,7 @@ module ao486_bus_bridge #(
         .bus_address(mem_address), .bus_select(mem_select),
         .bus_writedata(mem_writedata), .bus_write(mem_write), .bus_strobe(mem_strobe),
         .bus_readdata(bus_readdata), .bus_ack(bus_ack && owner == MEMORY),
+        .bus_dword_valid(bus_dword_valid && owner == MEMORY), .bus_dword_data(bus_dword_data),
         .wide_linear_enable(wide_linear_enable), .wide_address(wide_address),
         .wide_writedata(wide_writedata), .wide_byteenable(wide_byteenable),
         .wide_burstcount(wide_burstcount), .wide_read(wide_read), .wide_write(wide_write),

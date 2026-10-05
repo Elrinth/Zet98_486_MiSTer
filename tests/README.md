@@ -723,6 +723,16 @@ The revised floppy overlay also verifies all boot-font caption pixels, the
 16-pixel upward offset and background passthrough. Negative controls restore
 the old position, black background or reversed font bits and must fail.
 
+### Buffered extended-RAM DWORD reads
+
+`run-ram-dword-read.sh` checks the optional complete-DWORD response through
+the RAM buffer and memory bridge, including narrow masks, burst boundaries,
+byte-write coherence, concurrent I/O and reset draining. Deliberately swapped
+DWORD halves, broken buffer tags and missing write coherence must fail.
+`run-z486-ram-dword.sh` compares all 84 actual-CPU cases with the optimization
+off/on at the B243 cache and pipeline profile. Design and measured cycle
+changes are in `rtl/cpu/RAM_DWORD_READ.md`.
+
 ### Keyboard request during interrupt service
 
 `run-kbconv-pic-eoi.sh` connects production KBCONV and z8259 using the byte adapter and mapping models from the keyboard transport test. Across five EOI delays and one/four-cycle acknowledgement, it checks queued make/break, extended arrows, modifiers and typematic, IRR clearing at acknowledge and stable vectors. The baseline loses the next keyboard edge at EOI; the corrected PIC preserves it. Production wire receiver coverage remains in `run-kbconv-backpressure.sh`. This integration regression does not by itself establish the cause of a particular game failure.
