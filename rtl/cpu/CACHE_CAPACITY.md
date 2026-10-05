@@ -156,8 +156,9 @@ qualification is still required.
 
 The corrected 16/16 KB seed-12 build failed placement: it required 4,214
 LABs, exceeding the device's 4,191, despite reporting 41,790 ALMs. It
-produced no usable RBF. A seed-6 placement retry uses the same RTL; retain
-the coherence fixes when selecting any fitted candidate.
+produced no usable RBF. A seed-6 retry still required 4,193 LABs; the final
+seed-3 placement attempt uses the same RTL. Retain the coherence fixes when
+selecting any fitted candidate.
 
 ## Experimental 32 KB instruction cache
 
@@ -185,11 +186,11 @@ reset, CPU speeds and driver initialization), graphics, cache mapping and
 invalidation, and eight differential 486 fuzz seeds of 1,200 blocks each.
 The initial RBF also passes DOS QUALIFY, three Linux stack-fault probes
 and 100 traced BusyBox `ip` launches with normal exits and no SIGSEGVs.
-Its first matched Doom run completes 11,520 game ticks in 1,767 real ticks,
+Two matched Doom runs each complete 11,520 game ticks in 1,767 real ticks,
 versus B242's 1,870/1,870 and the buffered-read core's 1,809/1,809. This is
 5.83% more throughput than B242 and 2.38% over the buffered-read core;
-the final counters were verified in `IC32Doom1-end.png`. This single-run
-result is preliminary. This RBF predates both
+the final counters were verified in `IC32Doom1-end.png` and
+`IC32Doom2-end.png`. This RBF predates both
 coherence fixes, so final qualification requires the corrected build.
 Evidence is under
 `build/icache32/`, including the exact hardware patch over `e570d00` used
