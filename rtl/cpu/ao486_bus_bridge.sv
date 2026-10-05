@@ -65,28 +65,32 @@ module ao486_bus_bridge #(
     wire mem_write, io_write, mem_strobe, io_strobe;
     wire mem_request = avm_read || avm_write;
     wire io_request = io_read_do || io_write_do;
-    // Accept a memory command on the edge that grants an idle bus. The
-    // memory bridge registers it before driving any legacy/native transfer.
-    // Existing owners and outstanding ACK/read responses still block entry.
-    wire idle_can_grant = owner == NONE && !bus_ack &&
-                         (WIDE_RAM_MB == 0 || !wide_backend_busy);
-    wire memory_granted = owner == MEMORY ||
-                          (EARLY_MEMORY_GRANT && idle_can_grant && mem_request);
+    // Park an otherwise idle bus at MEMORY. Ready depends only on the
+    // registered owner and bridge capacity, not on the arriving CPU valid.
+    // Actual transfers still require a command accepted by the memory bridge.
+    wire memory_granted = owner == MEMORY;
 
     always @(posedge clk) begin
         if (reset) owner <= NONE;
         else case (owner)
             NONE: if (!bus_ack && (WIDE_RAM_MB == 0 || !wide_backend_busy)) begin
-                if (mem_request) owner <= MEMORY;
+                if (mem_request || (EARLY_MEMORY_GRANT && !io_request)) owner <= MEMORY;
                 else if (io_request) owner <= IO;
             end
-            MEMORY: if (!mem_busy && !mem_request && !bus_ack) owner <= NONE;
+            MEMORY: if (!mem_busy && !mem_request && !bus_ack) begin
+                if (!EARLY_MEMORY_GRANT) owner <= NONE;
+                else if (io_request) owner <= IO;
+            end
             IO: if (!io_busy && !io_request && !bus_ack) owner <= NONE;
             default: owner <= NONE;
         endcase
     end
 
-    assign busy = owner != NONE || (WIDE_RAM_MB != 0 && wide_backend_busy);
+    // A parked memory grant alone is not pending work. Queued writes, ACK
+    // release and native response draining must still prevent idle completion.
+    assign busy = (owner != NONE &&
+                   (owner != MEMORY || !EARLY_MEMORY_GRANT || mem_busy || mem_request || bus_ack)) ||
+                  (WIDE_RAM_MB != 0 && wide_backend_busy);
     assign avm_waitrequest = !memory_granted || mem_wait;
     assign bus_io = owner == IO;
     assign bus_address = bus_io ? {16'b0, io_address} : mem_address;

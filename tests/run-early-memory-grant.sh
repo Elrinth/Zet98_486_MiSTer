@@ -21,7 +21,8 @@ for queue in 0 3; do
     echo "PASS early grant queue=$queue: $before -> $after clocks"
 done
 # Reject an idle-grant shortcut that steals an active I/O owner's bus.
-sed 's/owner == NONE \&\& !bus_ack/!bus_ack/' rtl/cpu/ao486_bus_bridge.sv > "$out/bad-owner.sv"
+sed 's/wire memory_granted = owner == MEMORY;/wire memory_granted = owner == MEMORY || owner == IO;/' \
+    rtl/cpu/ao486_bus_bridge.sv > "$out/bad-owner.sv"
 iverilog -g2012 -I rtl/vendor/ao486 -s ao486_memory_integration_tb \
     -o "$out/bad-owner" rtl/vendor/ao486/memory/avalon_mem.v \
     rtl/cpu/ao486_memory_bridge.sv rtl/cpu/ao486_io_bridge.sv \
