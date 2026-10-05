@@ -67,3 +67,8 @@ pass all 40 differential seeds (1,200 blocks each), matching all GPR records
 and 384 KB RAM per seed. Profile 0 also passes the full two-mode memory
 suite and both retained dependency probes. Final results are under
 `build/pipeline0/final-pr{0,2}-*`.
+
+Both full two-mode memory suites pass after the split-address correction
+(84 CPU cases per profile, including both new regressions). All 80 original
+profile-2 cases still retain exactly their previous cycle/instruction/active
+counts. All 40 differential seeds pass in each profile.
