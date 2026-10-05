@@ -16,7 +16,7 @@ cache policy, CPU instruction or write-completion rule.
 Set `EARLY_MEMORY_GRANT=0` on `pc98_ao486` or `ao486_bus_bridge` to compare
 against the previous behavior.
 
-## Registered CPU acknowledgement experiment
+## Registered CPU acknowledgement
 
 `REGISTERED_MEMORY_READY=1` acknowledges a bridge-accepted read to z486 on the
 following clock and suppresses the held Avalon request in between. The z486
@@ -35,8 +35,8 @@ assertion rejects a final-write pulse without a waiting CPU write.
 with the parked-owner implementation. The existing write/read/grant comparisons
 keep registered acknowledgement disabled to preserve their original meaning.
 All 84 comparison runs pass, with identical cycle, instruction and active-cycle
-counts in every one of the 42 paired workloads. Hardware qualification of this
-further revision is pending.
+counts in every one of the 42 paired workloads. Source `6b8f32f` also passes
+the hardware checks below; the earlier unregistered versions did not.
 
 `tests/run-early-memory-grant.sh` checks the real ao486 Avalon generator with
 both direct and eight-entry queued memory commands, concurrent I/O, split
@@ -59,8 +59,61 @@ testing also passes 80 seeds of 1,200 generated blocks each, comparing all
 general registers and 384 KB of memory against Unicorn. Half use the normal
 bus delays and half use random waits of up to 30 clocks per legacy access.
 
-These are simulation measurements. FPGA fit, timing and hardware qualification
-must complete before claiming a Doom improvement or promoting this candidate.
+## Selected 90 MHz hardware result
+
+Source `6b8f32fb93be8c5c7a84ce4b04819109dc03ff1b` was built with 64 MB RAM,
+PR2, 32 KB instruction / 8 KB data cache, native DDR framebuffer only, normal
+register packing and seed 6. Raw IDE, MIDI, packed graphics and upper-RAM
+instruction caching are enabled; PLRU and data-tag MLAB attributes are off.
+The sound configuration is PC9801-86 with JT08. The build is
+`zet98-quartus-20261005-100157-40f53e`.
+
+The bitstream is `build/memory-ready/PC98_Z486_90_MEMORY_READY.rbf`,
+4,587,740 bytes, SHA-256
+`a17652a6db1888d0c1d45a911dec4ab246f1a0d0b679d56f7a8c3a9b5fd5b991`.
+It uses 40,969 ALMs, 4,189 of 4,191 LABs, 551 M10Ks, 50 DSPs and 42,766
+registers. Worst setup slack is -7.147 ns, with ten negative timing checks.
+This is within the user's <12 ns magnitude allowance; timing is not closed.
+The build and pixel-clock/HPS/SDRAM audits pass.
+
+Hardware runs use OpenBIOS 2026-10-04.1, the unchanged full-speed configuration
+and a fresh menu-first boot for each Linux or Doom run:
+
+- Two Linux boots pass six stack/page-fault probes and 200 traced BusyBox
+  `ip` launches. Both logs contain exactly 100 normal trace/exit pairs and
+  no SIGSEGV. Evidence: `ReadyLinuxCheck1.png`, `ReadyLinuxCheck2.png`,
+  `ReadyLinux1.log` and `ReadyLinux2.log` under `build/memory-ready/`.
+- DOS QUALIFY passes four division rounds, 4,008 string cases, 531 KB
+  conventional RAM and 16,384 KB XMS with zero failures.
+- Two EXTBENCH runs measure extended writes at 26,818/26,818 KB/s, reads at
+  18,765/18,774 KB/s and copies at 13,098/13,095 KB/s. The previous selected
+  core measured 24,922, 18,447 and 12,476 KB/s respectively: writes improve
+  7.6% and copies about 5.0%. Conventional-memory rates remain essentially
+  unchanged. Screenshots: `ReadyExtbench1.png` and `ReadyExtbench2.png`.
+- Doom `-timedemo demo1 -nosound -nomusic -nosfx` completes 11,520 game ticks
+  in **1,736 and 1,737 real ticks**, versus **1,765** for the same-session
+  control using the previously qualified 32/8 KB core. This is about **1.6%
+  more throughput**, without changing clock, cache capacities or the disk.
+  Both final counters and returns to DOS were checked visually in
+  `Ready90Doom1-end.png` and `Ready90Doom2-end.png`. Monitored game intervals
+  were 726.39/726.77 seconds versus 738.77 seconds for the control. The
+  monitor polls every three seconds, so elapsed measurements are approximate.
+  These PC-98 counters are used for relative comparisons, not absolute FPS.
+
+The previous B242 reference measured 1,870/1,870 real ticks with the same
+timedemo. The combined performance branch is about 7.7% faster than that
+reference. No new hardware audio-listening claim is made for this revision.
+The registered acknowledgement resolves the observed boot failures, but the
+underlying cause of the earlier failures has not been established.
+
+## Rejected 100 MHz fits
+
+The same source and profile at 100 MHz did not produce a bitstream. Seed 6
+(`zet98-quartus-20261005-104355-3d6a3c`) required 4,198 LABs and 41,692 ALMs.
+One placement retry, seed 2 (`zet98-quartus-20261005-110347-1ddcf3`), required
+4,192 LABs and 41,640 ALMs. Both exceed the device's 4,191 LABs and exit with
+fitter error 170012. Reports are retained in `build/memory-ready100/` and
+`build/memory-ready100-s2/`. No 100 MHz hardware or performance result is claimed.
 
 ## Rejected combinational grant experiment
 

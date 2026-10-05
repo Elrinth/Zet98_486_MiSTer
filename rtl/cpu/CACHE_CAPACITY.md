@@ -2,9 +2,17 @@
 
 ## Selected hardware candidate
 
+The current candidate adds parked memory ownership and registered CPU
+acknowledgement to this cache configuration. Source `6b8f32f` passes two
+Linux boots, DOS QUALIFY and two Doom runs at 1,736/1,737 real ticks, with
+worst slack -7.147 ns. See [EARLY_MEMORY_GRANT.md](EARLY_MEMORY_GRANT.md)
+for its bitstream identity, full validation and rejected 100 MHz fits.
+
+## Earlier cache-only candidate
+
 Use 90 MHz, 64 MB, PR2, 32 KB instruction / 8 KB data cache, automatic
 replacement-table placement, and native DDR for the framebuffer only.
-The active branch's synthesis inputs match source `247a8c8`, which was
+The earlier selection at `21dfcab` has synthesis inputs matching `247a8c8`, which was
 qualified on hardware. The completed bitstream is
 `build/icache32-auto/PC98_Z486_90_ICACHE32_AUTO.rbf`; SHA-256 is
 `eade03b7f7357ff41fa6554d3e52a6ae2b99c40e949f5a572a6f8addfeb2e154`.
