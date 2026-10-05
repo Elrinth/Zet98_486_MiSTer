@@ -285,11 +285,23 @@ is not closed. Pixel-clock, HPS peripheral and SDRAM FEC audits pass.
 This source includes both instruction-cache coherence fixes and the fixed
 byte-lane patch helper. It predates the two optional-PR0 dependency fixes.
 
-With OpenBIOS 2026-10-04.1, it boots Linux and passes three stack-fault
-probes plus 100 traced BusyBox `ip` launches with normal exits and no
-SIGSEGVs. DOS QUALIFY also passes four division rounds, 4,008 string cases and
+With OpenBIOS 2026-10-04.1, it passes three fresh Linux boots, nine total
+stack-fault probes and 300 traced BusyBox `ip` launches with normal exits
+and no SIGSEGVs. The second and third boots follow the repeated Doom runs. DOS QUALIFY also passes four division rounds, 4,008 string cases and
 531 KB conventional / 16,384 KB XMS memory with zero errors. Two transfer
 benchmarks retain the earlier 32/8 KB rates (less than 0.1% variation).
-Repeated Doom qualification is still in progress.
+Two matched Doom runs complete 11,520 game ticks in 1,766 and 1,765 real
+ticks. Their mean is 5.92% more throughput than B242 (1,870/1,870), and
+2.46% more than the earlier buffered-read 8/8 KB build (1,809/1,809).
+The final counters and return to DOS were verified visually. The change
+from the initial 32/8 KB build's 1,767/1,767 is less than 0.1%.
 Evidence is under `build/icache32-auto/`; RBF SHA-256 is
 `eade03b7f7357ff41fa6554d3e52a6ae2b99c40e949f5a572a6f8addfeb2e154`.
+
+A new 16/16 KB comparison uses the reduced byte-patch logic, automatic
+replacement-table placement and the final CPU dependency guards. Unlike
+the earlier failed fits, it does not spend memory LABs on the replacement
+tables. Its PR2 simulation passes all 84 CPU cases and 40 differential
+486 seeds, matching every GPR record and 384 KB RAM. The 90 MHz seed-6
+FPGA build is queued; it remains unqualified until fitting and hardware
+checks complete. Evidence: `build/cache16-balanced/`.

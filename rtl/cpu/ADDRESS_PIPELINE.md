@@ -85,3 +85,10 @@ LABs versus 4,191 available. Its failed report is retained at
 `build/icache32-fast90/failed-fit.rpt`; it produced no usable RBF. A seed-12
 retry uses the same functional source. Simulation performance is not yet
 an FPGA performance result.
+
+With the same 32/8 KB and native-framebuffer-only configuration, both PR0
+and PR2 also pass the full-CPU upper-RAM cache test using a fresh GHDL
+translation of the real PC-98 cache policy. Native writes, bank-AB alias
+writes, DMA, bank-89 remap/restore and ROM bypass pass. All three controls
+that disconnect alias/DMA/remap invalidation are rejected. Evidence:
+`build/pipeline0/upper-summary.log` and `upper-pr{0,2}.log`.
