@@ -32,6 +32,11 @@ Simulation results are:
 - Full fill/copy/readback workload: 1,053,345 to 1,019,724 clocks (3.19% fewer).
 - Both execute 128,045 instructions and issue 72,000 DDR commands.
 
+All 42 paired workloads execute identical instruction counts. Differential
+testing also passes 80 seeds of 1,200 generated blocks each, comparing all
+general registers and 384 KB of memory against Unicorn. Half use the normal
+bus delays and half use random waits of up to 30 clocks per legacy access.
+
 These are simulation measurements. FPGA fit, timing and hardware qualification
 must complete before claiming a Doom improvement or promoting this candidate.
 
@@ -46,6 +51,18 @@ qualified original core booted the same image and passed three stack probes
 and 100 traced `ip` launches immediately afterward. The combinational version
 is not qualified.
 
+An additional 100 differential seeds with randomized memory waits also pass
+for that rejected version. Throttling instruction execution to the 33 MHz
+target while keeping the FPGA clock at 90 MHz still produces a Linux panic
+(`c02b0c62`). The original full-speed configuration was restored afterward.
+The preserved second-panic RAM dump and successful control have identical
+1,882,440-byte kernel `.text` sections; the failure is not explained by a
+difference in those stored code bytes.
+
 The parked-owner implementation removes that new combinational request-to-ready
-path. Whether this resolves the hardware failure remains to be tested; the
-failure's root cause has not been established.
+path, but it did not resolve the hardware failure. Source `c7bf907` fitted at
+90 MHz in 41,436 ALMs and all 4,191 LABs, with 551 M10Ks, 50 DSPs and worst
+setup slack of -8.063 ns. Both fresh Linux boots panicked at `c3f793e7`, with
+CR2 `8bef27d0`. No Doom result was taken from this unqualified image. The
+previously qualified core was restored. The failure's root cause remains
+unestablished.
