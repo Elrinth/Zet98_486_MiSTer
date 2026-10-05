@@ -57,12 +57,12 @@ QUALIFY passes four division rounds, 4,008 string cases and conventional/
 16 MB XMS memory checks with zero failures. Linux passes three deterministic
 stack page-fault probes and 100 traced BusyBox `ip` launches: 100 normal
 exits, no SIGSEGV. The kernel's missing socket functionality is unchanged.
-The first matched Doom run reports 11,520 game ticks in 1,809 real ticks,
+Two matched Doom runs each report 11,520 game ticks in 1,809 real ticks,
 versus 1,870/1,870 for B242 and 1,814/1,816 for store completion alone.
 That is 3.37% more throughput than B242, and 0.33% above the mean of the
 store-only runs. The final counters were checked visually in
-`build/read-hit/RHDoom1-end.png`. This is one run of the read-buffer core;
-the small incremental Doom gain should not be confused with its larger
+`build/read-hit/RHDoom1-end.png` and `RHDoom2-end.png`.
+The small incremental Doom gain should not be confused with its larger
 memory-copy improvement.
 
 The candidate fits at 41,392 ALMs, 539 M10Ks and 50 DSPs. Worst slack is

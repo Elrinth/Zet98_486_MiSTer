@@ -18,7 +18,7 @@ mkdir -p "$out"
 out=$(cd "$out"; pwd)
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 cp rtl/vendor/z486/*.hex "$out/"
-for name in "$probe" native_exec native_ddr pegc_cpu stack_allocation deferred_shift_load; do
+for name in "$probe" native_exec native_ddr pegc_cpu stack_allocation deferred_shift_load smc_stream; do
     nasm -f bin "${asm_flags[@]}" "tests/hardware/${name}_probe.asm" -o "$out/$name.bin"
 done
 for bits in "${sizes[@]}"; do
@@ -37,7 +37,7 @@ for bits in "${sizes[@]}"; do
         rtl/graphics/pc98_pegc_palette.sv rtl/graphics/pc98_pegc_memory.sv \
         rtl/graphics/pc98_pegc_ddr_arbiter.sv tests/z486_xms_resident_tb.sv \
         > "$out/compile-$bits.log" 2>&1 || { tail -n 60 "$out/compile-$bits.log"; exit 1; }
-    for name in "$probe" native_exec native_ddr pegc_cpu stack_allocation deferred_shift_load; do
+    for name in "$probe" native_exec native_ddr pegc_cpu stack_allocation deferred_shift_load smc_stream; do
         (cd "$out"; "./obj-$bits/Vz486_xms_resident_tb" "+program=$out/$name.bin") \
             > "$out/$name-$bits.log" 2>&1 || { tail -n 30 "$out/$name-$bits.log"; exit 1; }
         echo "${varied}_SET_BITS=$bits $name"

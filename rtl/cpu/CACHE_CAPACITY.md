@@ -13,8 +13,10 @@ The existing physical-address tag and index calculations already support
 this size; all index bits remain below the 4 KB page boundary.
 
 The data cache uses 32-bit-wide ways at a depth of 512 DWORDs. Doubling
-that depth is expected to require eight additional M10K blocks across the
-four ways. The combined-cache build must confirm that resource estimate.
+that depth requires eight additional M10K blocks across the four ways,
+confirmed by the combined 16/16 KB build: 547 M10Ks, 41,455 ALMs and 50 DSPs,
+with -7.776 ns worst slack. That initial build predates the coherence fixes;
+the corrected version still needs hardware qualification.
 
 `tests/run-z486-icache-capacity.sh` compares both sizes using the actual CPU
 and PC-98 bridges. Its generated 12 KB instruction working set is warmed,
@@ -128,12 +130,19 @@ fills/hits, and hits after refetch. All pass. The fill test with B242's
 instruction word instead of the new value. Evidence is in
 `build/icache-capacity/coherence*.log` and its `coherence/` directory.
 
-With the first arbitration correction and both caches at 16 KB, the complete memory suite
+With both corrections (`8a2bda7`) and both caches at 16 KB, the complete memory suite
 passes both read-buffer modes, including all 52 stack-fault cases, reset,
 CPU speed settings and driver initialization. Eight differential fuzz
 seeds also match all GPR records and 384 KB of RAM after 1,200 blocks each.
-Those logs are in `build/icache-coherence/`; the complete rerun after adding
-the read-collision mask is recorded separately in that directory.
+The final-source results are `build/icache-coherence/final-full-sim.log`
+and `final-fuzz-verified.log`.
+
+`smc_stream_probe.asm` adds 4,096 patched executions across 64 cached
+routines at varied byte alignments. It checks DWORD and byte modifications,
+including immediates crossing DWORD/cache-line boundaries, through direct
+calls at varied distances from the store. Both the execution result and
+backing memory must match. It passes on the corrected 16/16 KB CPU model
+and is included in the memory-completion and capacity runners.
 
 This proves the coherence bug and its directed correction; it does not yet
 prove that the correction resolves the Linux boot panic. Hardware
@@ -148,8 +157,10 @@ uses untranslated page-offset bits and is therefore limited to 16 KB.
 The 32 KB option also places the two small replacement tables in MLABs,
 reclaiming their two M10K blocks for instruction data. The attribute keeps
 read-during-write semantics and does not specify `no_rw_check`. The FPGA
-resource estimate for 32 KB instruction/8 KB data is 553 M10Ks; the physical
-build must confirm fit and timing before hardware use.
+32 KB instruction/8 KB data build fits in 549 M10Ks, 41,353 ALMs and 50 DSPs.
+Each 512-entry data way uses seven M10Ks, leaving four device RAM blocks
+unused. Worst slack is -7.573 ns, within the user's 12 ns allowance but
+still negative. Pixel-clock, HPS peripheral and SDRAM FEC audits pass.
 
 `tests/run-z486-cache-capacity.sh instruction32` compares 16/32 KB with a
 24 KB instruction routine and SMC in the new upper index range. Its measured
@@ -161,6 +172,9 @@ The 32/8 KB configuration also passes the complete memory-completion suite
 in both read-buffer modes (52 stack-fault cases, other memory faults,
 reset, CPU speeds and driver initialization), graphics, cache mapping and
 invalidation, and eight differential 486 fuzz seeds of 1,200 blocks each.
-FPGA and hardware qualification remain pending. Evidence is under
+The initial RBF also boots Linux and passes three stack-fault probes;
+the complete hardware comparison is in progress. This RBF predates both
+coherence fixes, so final qualification requires the corrected build.
+Evidence is under
 `build/icache32/`, including the exact hardware patch over `e570d00` used
 by `build/quartus-20261005-015147-678804/`.
