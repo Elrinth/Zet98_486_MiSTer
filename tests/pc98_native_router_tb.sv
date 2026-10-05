@@ -4,6 +4,7 @@
 // run-z486-native-ddr.sh separately checks actual instructions and cache fills.
 module pc98_native_router_tb;
     parameter RAM_ENABLE=1;
+    parameter EARLY_MEMORY_GRANT=1;
     reg clk=0,reset=1;
     always #5 clk=~clk;
     reg [29:0] request_address=0;
@@ -24,7 +25,8 @@ module pc98_native_router_tb;
     wire ddr_busy=cycles%7<2;
     reg ddr_readdatavalid=0;
     reg [63:0] ddr_readdata=0;
-    pc98_ao486 #(.EXT_RAM_MB(64),.NATIVE_DDR(1),.NATIVE_DDR_RAM(RAM_ENABLE),.PEGC_ENABLE(1)) dut (
+    pc98_ao486 #(.EXT_RAM_MB(64),.NATIVE_DDR(1),.NATIVE_DDR_RAM(RAM_ENABLE),.PEGC_ENABLE(1),
+        .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT)) dut (
         .clk(clk),.reset(reset),.cpu_speed_sel(2'b0),.cache_invalidate(1'b0),
         .cache_upper_ram_native(1'b0),.interrupt_do(1'b0),.interrupt_vector(8'b0),
         .bus_address(bus_address),.bus_select(bus_select),.bus_writedata(bus_writedata),
@@ -48,6 +50,10 @@ module pc98_native_router_tb;
     endtask
     always @(posedge clk) begin
         cycles<=cycles+1;ddr_readdatavalid<=0;
+        if ((dut.avm_read || dut.avm_write) && !dut.avm_waitrequest &&
+            (dut.bridge.bus_io || dut.cpu_reset ||
+             (dut.bridge.owner==0 && dut.wide_backend_busy)))
+            $fatal(1,"memory command accepted before prior owner drained");
         if(dut.avm_write && !dut.avm_waitrequest) begin
             check(!write_pending,"new store before prior completion");
             write_pending=1;write_requests++;

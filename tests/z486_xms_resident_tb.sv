@@ -9,6 +9,7 @@ module z486_xms_resident_tb;
     parameter PEGC_ENABLE=0;
     parameter EARLY_WRITE_COMPLETE=1;
     parameter EARLY_READ_HIT=1;
+    parameter EARLY_MEMORY_GRANT=1;
     parameter TRACE_LIMIT=2000;
     parameter PIT_PM_TEST=0;
     parameter PM_PAYLOAD_TEST=0;
@@ -69,7 +70,7 @@ module z486_xms_resident_tb;
         if(dut.cpu.core.i_issue) rate_issued<=rate_issued+1;
         if(dut.cpu.core.throttle_active_cycle) rate_active<=rate_active+1;
     end
-    pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE),.LOWMEM_CACHE(LOWMEM_CACHE),.PEGC_ENABLE(PEGC_ENABLE),.EARLY_WRITE_COMPLETE(EARLY_WRITE_COMPLETE),.EXT_RAM_EARLY_READ_HIT(EARLY_READ_HIT)) dut(
+    pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE),.LOWMEM_CACHE(LOWMEM_CACHE),.PEGC_ENABLE(PEGC_ENABLE),.EARLY_WRITE_COMPLETE(EARLY_WRITE_COMPLETE),.EXT_RAM_EARLY_READ_HIT(EARLY_READ_HIT),.EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT)) dut(
         .cpu_speed_sel(tb_cpu_speed),.pegc_analog16(1'b1),.pegc_display_enable(1'b1),.pegc_gdc_5mhz(1'b1),
         .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_pixel_clk(clk),
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),

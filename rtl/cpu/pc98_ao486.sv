@@ -15,6 +15,7 @@ module pc98_ao486 #(
     parameter CLOCK_RATE_MHZ = 90,
     parameter PEGC_ENABLE = 0,
     parameter EARLY_WRITE_COMPLETE = 1'b1,
+    parameter EARLY_MEMORY_GRANT = 1'b1,
 `ifdef ZET98_NATIVE_DDR
     parameter NATIVE_DDR = 1,
 `else
@@ -340,6 +341,7 @@ module pc98_ao486 #(
 `endif
     // Proven against the vendored Avalon generator by run-memory-mask-contract.sh.
     ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS),
+                      .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT),
                       .WIDE_RAM_MB(NATIVE_DDR ? EXT_RAM_MB : 0),
                       .WIDE_RAM_ENABLE(NATIVE_DDR_RAM)) bridge (
         .clk(clk), .reset(cpu_reset),

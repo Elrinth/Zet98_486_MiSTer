@@ -2,6 +2,8 @@
 `timescale 1ns/1ps
 // Exercise the unmodified ao486 Avalon generator, not a hand-coded approximation.
 module ao486_memory_integration_tb;
+    parameter EARLY_MEMORY_GRANT=1;
+    parameter MEMORY_QUEUE_BITS=0;
     reg clk = 0;
     always #5 clk = !clk;
     reg reset = 1;
@@ -42,7 +44,8 @@ module ao486_memory_integration_tb;
     wire bus_write, bus_strobe;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
-    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1)) bridge (
+    ao486_bus_bridge #(.READ_MASK_ALWAYS_NONZERO(1'b1),
+        .EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT), .MEMORY_QUEUE_BITS(MEMORY_QUEUE_BITS)) bridge (
         .wide_linear_enable(1'b0),.wide_backend_busy(1'b0),.wide_waitrequest(1'b1),
         .wide_readdatavalid(1'b0),.wide_readdata(32'b0),
         .wide_address(),.wide_writedata(),.wide_byteenable(),.wide_burstcount(),
@@ -52,6 +55,12 @@ module ao486_memory_integration_tb;
     reg [7:0] expected [0:65535];
     reg [7:0] ports [0:65535];
     integer phase = 0, wait_count = 0, transfers = 0, commands = 0;
+    integer cycles = 0;
+    always @(posedge clk) if (!reset) begin
+        cycles <= cycles + 1;
+        if ((avm_read || avm_write) && !avm_waitrequest && bridge.bus_io)
+            $fatal(1, "memory command accepted while I/O owns the bus");
+    end
     reg [15:0] held_addr;
     reg [15:0] held_data;
     reg [1:0] held_select;
@@ -259,6 +268,7 @@ module ao486_memory_integration_tb;
         for (i = 0; i < 65536; i = i + 1)
             if (memory[i] !== expected[i]) $fatal(1, "CPU write side effect mismatch at %h", i);
         $display("PASS: ao486 avalon_mem integration: %0d commands, unaligned access, code fetch, DMA, concurrent I/O", commands);
+        $display("integration_cycles=%0d", cycles);
         $finish;
     end
     initial begin #2000000; $fatal(1, "CPU memory integration watchdog timeout"); end

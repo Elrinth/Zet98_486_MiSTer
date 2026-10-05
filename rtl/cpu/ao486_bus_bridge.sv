@@ -11,6 +11,7 @@ module ao486_bus_bridge #(
     // >0: posted-write command queue of 2**MEMORY_QUEUE_BITS entries in front
     // of the memory bridge (ao486_memory_queue); 0: direct, as before.
     parameter MEMORY_QUEUE_BITS = 0,
+    parameter EARLY_MEMORY_GRANT = 1'b1,
     parameter WIDE_RAM_MB = 0,
     parameter WIDE_RAM_ENABLE = 1'b1
 ) (
@@ -64,6 +65,13 @@ module ao486_bus_bridge #(
     wire mem_write, io_write, mem_strobe, io_strobe;
     wire mem_request = avm_read || avm_write;
     wire io_request = io_read_do || io_write_do;
+    // Accept a memory command on the edge that grants an idle bus. The
+    // memory bridge registers it before driving any legacy/native transfer.
+    // Existing owners and outstanding ACK/read responses still block entry.
+    wire idle_can_grant = owner == NONE && !bus_ack &&
+                         (WIDE_RAM_MB == 0 || !wide_backend_busy);
+    wire memory_granted = owner == MEMORY ||
+                          (EARLY_MEMORY_GRANT && idle_can_grant && mem_request);
 
     always @(posedge clk) begin
         if (reset) owner <= NONE;
@@ -79,7 +87,7 @@ module ao486_bus_bridge #(
     end
 
     assign busy = owner != NONE || (WIDE_RAM_MB != 0 && wide_backend_busy);
-    assign avm_waitrequest = owner != MEMORY || mem_wait;
+    assign avm_waitrequest = !memory_granted || mem_wait;
     assign bus_io = owner == IO;
     assign bus_address = bus_io ? {16'b0, io_address} : mem_address;
     assign bus_select = bus_io ? io_select : owner == MEMORY ? mem_select : 2'b00;
@@ -96,7 +104,7 @@ module ao486_bus_bridge #(
             .clk(clk), .reset(reset),
             .up_address(avm_address), .up_writedata(avm_writedata),
             .up_byteenable(avm_byteenable), .up_burstcount(avm_burstcount),
-            .up_write(avm_write && owner == MEMORY), .up_read(avm_read && owner == MEMORY),
+            .up_write(avm_write && memory_granted), .up_read(avm_read && memory_granted),
             .up_waitrequest(mem_wait), .busy(mem_busy),
             .dn_address(q_address), .dn_writedata(q_writedata),
             .dn_byteenable(q_byteenable), .dn_burstcount(q_burstcount),
@@ -108,8 +116,8 @@ module ao486_bus_bridge #(
         assign q_writedata = avm_writedata;
         assign q_byteenable = avm_byteenable;
         assign q_burstcount = avm_burstcount;
-        assign q_write = avm_write && owner == MEMORY;
-        assign q_read = avm_read && owner == MEMORY;
+        assign q_write = avm_write && memory_granted;
+        assign q_read = avm_read && memory_granted;
         assign mem_wait = q_wait;
         assign mem_busy = bridge_busy;
     end endgenerate

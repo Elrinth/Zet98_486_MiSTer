@@ -6,7 +6,8 @@ comparison=${1:-write}
 case "$comparison" in
     write) comparison_param=EARLY_WRITE_COMPLETE; fixed_flags=(-GEARLY_READ_HIT=0);;
     read) comparison_param=EARLY_READ_HIT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1);;
-    *) echo 'Expected write or read comparison' >&2; exit 2;;
+    grant) comparison_param=EARLY_MEMORY_GRANT; fixed_flags=(-GEARLY_WRITE_COMPLETE=1 -GEARLY_READ_HIT=1);;
+    *) echo 'Expected write, read or grant comparison' >&2; exit 2;;
 esac
 cache_flags=()
 for cache in ICACHE DCACHE; do
