@@ -42,8 +42,43 @@ uncached upper RAM and a 16 KB DDR window. Every logged general register
 and the 384 KB conventional-RAM dump matches Unicorn. Evidence:
 `build/ram-dword/fuzz-verified.log` and `build/ram-dword/fuzz/`.
 
-Hardware fit, timing and application qualification are pending. B243 remains
-the released baseline. Local simulation evidence: `build/ram-dword/` and
+The compact implementation at `5ffb5e0` fits at 90 MHz using B243's profile:
+64 MB RAM, PR2, IC32/DC8, native framebuffer only, seed 6 and normal register
+packing. Build `quartus-20261005-154022-8b90db` uses 41,077 ALMs, 4,186 of
+4,191 LABs, 43,047 registers, 551 M10Ks and 50 DSPs. Worst slack is -7.175 ns
+with ten negative timing checks, within the user's <12 ns magnitude allowance;
+timing is not closed. Pixel-clock, HPS-peripheral and FEC-route audits pass.
+The tested-source RBF is `build/ram-dword-compact/PC98_Z486_90_RAM_DWORD_COMPACT.rbf`,
+SHA-256 `c9a44fc7d1d0296e06b2a1c6c921a2afad669071985693f3b66cdebee5b49731`.
+Hardware uses OpenBIOS 2026-10-04.1 with the unchanged full-speed configuration.
+Two fresh menu-first Linux boots pass six stack/page-fault probes and 200
+traced BusyBox `ip` launches. Both trace logs contain exactly 100 normal
+trace/exit pairs and no SIGSEGV. Evidence is `DwordLinuxCheck1.png`,
+`DwordLinuxCheck2.png`, `DwordLinux1.log` and `DwordLinux2.log` under
+`build/ram-dword/`.
+
+DOS QUALIFY passes four division rounds, 4,008 string cases, 531 KB of
+conventional RAM and 16,384 KB of XMS with zero errors. Two EXTBENCH runs
+give 21,010/21,016 KB/s extended reads versus 18,772/18,767 for fresh B243
+controls (about 12% faster), and 13,967/13,967 KB/s extended copies versus
+13,095/13,098 (about 6.6% faster). Extended writes remain 26,818 KB/s.
+XMS extended-to-conventional transfers rise from 14,106 to 15,492/15,491 KB/s.
+Conventional-memory and conventional-to-extended rates remain essentially
+unchanged. Screenshots: `DwordQualify.png`, `DwordExtbench1.png` and
+`DwordExtbench2.png` under `build/ram-dword/`.
+
+Doom `-timedemo demo1 -nosound -nomusic -nosfx` completes 11,520 game ticks
+in **1,725/1,725 real ticks** on two fresh menu-first boots, versus **1,736**
+for the same-session B243 control: **0.64% more throughput** at the same
+90 MHz. Both final counters and returns to DOS were checked visually in
+`DwordDoom1-end.png` and `DwordDoom2-end.png`. The monitored game intervals
+are 723.53/723.44 seconds versus 726.39 seconds for the control. Those
+intervals are approximate because the monitor polls every three seconds;
+the game's final counters provide the relative comparison. These PC-98
+counter values are not interpreted as absolute FPS. No new hardware
+audio-listening result is claimed for this revision.
+B243 remains the released baseline.
+Local simulation evidence: `build/ram-dword/` and
 `build/simulation-20261005-150210-fc9efb/`.
 
 The first implementation (`a643666`) passes simulation and differential
