@@ -6,6 +6,10 @@ CPU parameter, now exposed in the full memory regression runner through
 `Z486_PIPELINE_REGS` (default 2). Default FPGA settings remain unchanged.
 Physical timing and application performance require hardware qualification.
 
+Current hardware status: **PR0 is not qualified**. The completed seed-12
+bitstream panics during Linux boot and stalls during DOS initialization.
+Keep PR2 for the tested performance candidate; details and evidence follow.
+
 ## Destination dependency exposed by the shorter pipeline
 
 With profile 0, 486 differential seed 4 failed after block 921. A cached
@@ -105,3 +109,12 @@ has not been isolated. Source is `9d74068`; evidence is in
 `7f4fea2ea1575d1dfabaa7df73698fed912ef873d8f5ea46f00a1b4480b3029a`.
 A 90 MHz PR2 build of the final source is queued to qualify the retained
 pipeline configuration including both dependency guards.
+
+After these hardware failures, another 400 differential seeds (41-440)
+pass on the same final PR0 RTL: 1,200 blocks per seed, with every GPR
+record and the 384 KB RAM dump matching Unicorn. Together with the original
+40 seeds, the total is 440. This broader run does not reproduce or resolve
+the hardware failure. Evidence: `build/pipeline0/hardware-failure-fuzz/`.
+The failed fit also adds a -0.038 ns slow-minus-40C hold violation on the
+system-clock output, versus +0.228 ns in the working PR2 build. The ignored
+assignment lists match. Neither comparison establishes a root cause.
