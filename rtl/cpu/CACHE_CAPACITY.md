@@ -62,7 +62,7 @@ read-buffer modes, including 52 PUSH/CALL/ENTER fault cases, store/Jcc and
 CMPXCHG/XADD faults, reset during a DDR read, all CPU speed settings and
 memory-driver initialization at three placements.
 
-Eight 486-enabled differential fuzz seeds (1–8, 1,200 blocks each) also pass
+Eight 486-enabled differential fuzz seeds (1â€“8, 1,200 blocks each) also pass
 with both caches at 16 KB: all eight GPRs after each block and 384 KB of RAM
 match Unicorn. This exposed an existing simulation assertion that rejected
 a legal older-shift/younger-load writeback overlap. It also failed with the
@@ -156,9 +156,10 @@ qualification is still required.
 
 The corrected 16/16 KB seed-12 build failed placement: it required 4,214
 LABs, exceeding the device's 4,191, despite reporting 41,790 ALMs. It
-produced no usable RBF. A seed-6 retry still required 4,193 LABs; the final
-seed-3 placement attempt uses the same RTL. Retain the coherence fixes when
-selecting any fitted candidate.
+produced no usable RBF. Seed-6 and seed-3 retries required 4,193 and 4,207
+LABs respectively. All three exceeded 4,191 available LABs. The corrected
+16/16 KB configuration is therefore set aside; retain the coherence fixes
+when selecting a fitted candidate.
 
 ## Experimental 32 KB instruction cache
 
@@ -202,3 +203,34 @@ complete memory suite, including the SMC stream, and eight additional
 Evidence: `build/icache32-coherent/full-sim.log` and
 `fuzz-486-verified.log`. The retained fuzz runner accepts cache/pipeline
 settings and saves them with its results in `profile.txt`.
+
+The corrected 32/8 KB seed-12 attempt passed placement but did not finish
+routing: the existing watchdog stopped it after 25 minutes without output
+(exit 125). Diagnostics are saved in `build/icache32-coherent/watchdog/`;
+there is no qualified RBF from that attempt. A seed-6 retry and a corrected
+8/8 KB fallback are building with a bounded 45-minute silence allowance.
+
+## Reducing instruction patch logic
+
+The byte-enabled line patch helper now uses fixed byte lanes. Previously
+it selected the old DWORD, merged its bytes, and inserted that DWORD back
+into the 128-bit line. The equivalent fixed-lane expression avoids that
+read/modify/insert selection logic. It changes no registers or cycles and
+retains queued, registered and live store forwarding.
+
+Isolated Quartus synthesis at 16 KB reports 2,729 to 1,426 combinational
+ALUTs with both memory reply paths exposed. With whole-line inputs tied to
+zero, matching `z486_pc98_adapter`, the count is 1,428 to 1,009. These are
+component synthesis counts, not whole-core fitted ALMs or timing results.
+The exact smaller-core fit still needs a new FPGA build.
+
+`tests/run-z486-icache-byte-patch.sh` checks 1,152 cases: all 16 byte masks,
+four destination DWORDs, queued/registered/live stores, both memory reply
+paths and all three instruction-cache sizes. Its expected line comes from
+an independent shifted-mask calculation with distinct source bytes. The
+previous implementation also passes; a control that ignores byte enables
+fails. The full memory suite and eight 486 fuzz seeds pass at both 32/8 KB
+and 16/16 KB after the change. The 32/8 KB results have identical
+cycle/instruction/active-cycle records in all
+80 CPU cases compared with the previous implementation. Results are in
+`build/icache-area/`.

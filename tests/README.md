@@ -624,6 +624,14 @@ in `FUZZ_OUT/profile.txt` and fails on a CPU simulation failure. A successful
 simulation still requires `z486_fuzz_compare.py` on every seed's binary,
 dump and manifest before claiming agreement with Unicorn.
 
+`run-z486-icache-coherence.sh` checks fill/invalidation and synchronous
+tag-read/invalidation collisions for 8/16/32 KB instruction caches, CPU/DMA
+snoops, independent/conflicting ways and both memory reply paths (48 cases).
+`run-z486-icache-byte-patch.sh` checks every byte mask and destination DWORD
+for queued, registered and live stores during whole-line and DWORD refills
+at all three cache sizes (1,152 cases). Its shifted-mask reference is
+independent of the fixed-lane RTL implementation.
+
 `run-z486-regression-batch.sh` runs the retained z486 suites and reports
 every result instead of stopping at the first failure.
 `run-z486-flat-regression.sh` belongs to the unfinished flat-admission

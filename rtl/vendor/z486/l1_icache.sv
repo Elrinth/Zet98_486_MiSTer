@@ -214,8 +214,14 @@ function automatic [127:0] patch_line_word_be(
 );
 begin
     patch_line_word_be = line;
-    patch_line_word_be[{word, 5'b0} +: 32] =
-        merge32(line[{word, 5'b0} +: 32], data, be);
+    // Fixed byte lanes avoid selecting an old DWORD and shifting it back
+    // into the line for every patch. Each enabled byte selects only new
+    // data or its own previous value; timing and byte-write semantics stay
+    // the same for queued, registered and live patches.
+    for (int w = 0; w < 4; w++)
+        for (int b = 0; b < 4; b++)
+            if (word == 2'(w) && be[b])
+                patch_line_word_be[w*32+b*8 +: 8] = data[b*8 +: 8];
 end
 endfunction
 
