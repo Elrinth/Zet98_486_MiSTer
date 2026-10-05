@@ -1,5 +1,27 @@
 # Optional larger L1 caches
 
+## Selected hardware candidate
+
+Use 90 MHz, 64 MB, PR2, 32 KB instruction / 8 KB data cache, automatic
+replacement-table placement, and native DDR for the framebuffer only.
+The active branch's synthesis inputs match the hardware-qualified
+`247a8c8` source. The completed bitstream is
+`build/icache32-auto/PC98_Z486_90_ICACHE32_AUTO.rbf`; SHA-256 is
+`eade03b7f7357ff41fa6554d3e52a6ae2b99c40e949f5a572a6f8addfeb2e154`.
+
+Its matched Doom runs are 1,766/1,765 real ticks for 11,520 game ticks,
+5.92% more throughput than B242. Four checked Linux boots give twelve
+stack-fault passes and 400 normal traced `ip` exits with no SIGSEGV.
+DOS QUALIFY and both transfer benchmarks pass. Worst slack is -7.507 ns
+(10 negative checks), within the user's allowance; timing is not closed.
+
+The later PR0 corrections and their trial bitstreams remain on
+`memory-write-completion-pr0-experiments`. PR0 and 16/16 KB trials failed
+Linux boot; the later PR2 trial had an unexplained short first trace loop.
+Those results do not displace the selected, repeatedly checked candidate.
+The following sections retain the experiment history and exact evidence.
+
+
 `scripts/build.ps1 -Cpu z486 -Z486ICacheKB 16` selects 256 sets instead of
 128 in the existing four-way, 16-byte-line instruction cache. The default
 remains 8 KB. `-Z486DCacheKB 16` independently doubles the data cache. Its

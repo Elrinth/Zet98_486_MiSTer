@@ -624,19 +624,10 @@ wire       interrupt_at_boundary = i_rni_delay && interrupt_deliverable && !sing
 
 assign     d2_valid = d2_valid_r;
 wire       d2_payload_ready = d2_push && !d2_ea_split_wait;
-// A younger partial load or register/memory ALU reads its destination in EX.
-// If an older VIPT ALU is in EX now, that capture would coincide with its WB
-// edge. The destination reader forwards plain loads, not the private ALU
-// result. Wait one issue cycle so unchanged byte/word lanes and ALU operands
-// come from the committed register. Independent and full-width MOVs overlap.
-wire       d2_vipt_dst_hazard = vipt_load_ex_r.valid &&
-                      vipt_load_ex_r.is_alu && d2_vipt_candidate &&
-                      (d2_vipt_alu || d2_vipt_write_size != 2'd2) &&
-                      (|(d2_vipt_dst_onehot & vipt_load_ex_r.dst_onehot));
 wire       d2_ready_before_fault = d2_payload_ready && !stall &&
                       !(i_rni && tf_trap_pending && !single_step) &&
                       !interrupt_at_boundary && !q_flush &&
-                      !d2_vipt_ea_hazard && !d2_vipt_dst_hazard;
+                      !d2_vipt_ea_hazard;
 wire       d2_ready_base = d2_ready_before_fault && !any_fault_issue;
 // An occupied EX stage may accept only another direct load. If the older load
 // misses, the accepted younger token moves to the replay slot on this edge.
@@ -1247,7 +1238,7 @@ always_ff @(posedge clk) begin
         if (q_flush || any_fault)
             d2_ea_split_done_r <= 1'b0;
         else if (d2_ea_split_wait)
-            d2_ea_split_done_r <= !d2_ea_split_alu_commit;
+            d2_ea_split_done_r <= 1'b1;
         else if (d2_start || i_issue)
             d2_ea_split_done_r <= 1'b0;
 
@@ -1845,12 +1836,6 @@ wire [7:0] d2_split_commit_mask =
 wire d2_ea_split_refresh = d2_ea_split_done_r &&
     (((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
       d2_split_commit_mask) != 8'h00);
-// Unlike a plain load, a VIPT ALU does not forward its WB result to the EA
-// reader. A partial sum captured on its commit edge still contains old GPR
-// data. Keep that sum unready until the next edge can capture the new value.
-wire d2_ea_split_alu_commit =
-    |((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
-      vipt_load_wb_alu_dst_mask);
 assign d2_ea_split_wait = d2_ea_needs_split &&
                           (!d2_ea_split_done_r || d2_ea_split_refresh);
 // Clear-all events: segment state may change under any committed seg

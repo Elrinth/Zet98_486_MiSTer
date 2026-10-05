@@ -1,4 +1,11 @@
-# Optional unregistered address calculation
+# Shorter address-pipeline experiment
+
+The two experimental dependency corrections described here are preserved
+on branch `memory-write-completion-pr0-experiments` at `21060ab`. The
+active performance branch keeps the CPU implementation from the hardware-
+qualified `247a8c8` source. Its recommended hardware configuration is PR2.
+PR0 remains unqualified; the retained probes preserve the failing cases
+for further work. No PR0 speedup is claimed for the selected candidate.
 
 `-Z486PipelineRegs 0` removes the remaining optional address calculation
 stage relative to the performance candidate's profile 2. This is an existing
