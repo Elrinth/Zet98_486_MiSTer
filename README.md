@@ -16,12 +16,24 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B245 adds **Input > Pad input: Both / Joystick only / Keyboard only** for
+USB and SNAC controllers. Keyboard only avoids duplicate joystick and Z/X
+actions while retaining Shift and the other mapped keys. For Lotus Land Story,
+select Keyboard only with Cursor keys, then bind Z (shot), X (bomb) and Shift
+(slow movement). Both remains the default for existing setups.
+All 1,040 routing simulation cases and keyboard make/break tests pass. The
+90 MHz build fits all 4,191 LABs, with worst slack **-7.354 ns** (within the
+maintainer's accepted 12 ns magnitude limit; static timing is not closed).
+**This bitstream has not yet been tested on MiSTer hardware.** No BIOS update
+is required for input routing; the latest OpenBIOS is
+[2026-10-06](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-06).
+
 B244 returns complete 32-bit reads from the existing extended-RAM buffer.
 At the same 90 MHz, hardware measurements show **12% faster extended-RAM
 reads and 6.6% faster copies** than B243. Doom completes both timedemos in
 1,725 reported realtics versus the same-session B243 control's 1,736
 (**0.64% more throughput**, sound disabled). Linux fault-restart checks and
-DOS QUALIFY pass. OpenBIOS 2026-10-04.1 remains current. See the
+DOS QUALIFY pass with OpenBIOS 2026-10-04.1. See the
 [buffered DWORD read results](rtl/cpu/RAM_DWORD_READ.md).
 
 B243 improves general memory throughput and increases the release's instruction
@@ -639,6 +651,30 @@ PC-98 sound-board joystick port. `rtl/snac_psx_pad.sv` polls both ports about 60
 times per second at 250 kHz and only accepts replies with the PlayStation 5Ah
 handshake, so other user-port hardware cannot create input; with the option Off
 the user port is not driven.
+
+`Input > Pad input` selects **Both / Joystick only / Keyboard only** for USB
+and SNAC controllers. **Both** preserves the previous behavior and existing
+saved settings. **Joystick only** sends no emulated keyboard keys; use it for
+games with native joystick support, such as Touhou Gensoukyou / Lotus Land
+Story, where simultaneous joystick and Z/X input can trigger shot and bomb
+together. **Keyboard only** disconnects both emulated joystick ports and sends
+only the selected keyboard mapping. Physical keyboards and stick-mouse input
+are unaffected.
+
+For Lotus Land Story, prefer **Keyboard only** plus **Pad to keyboard: Cursor
+keys** to retain pad-controlled slow movement as well: use MiSTer's **Define
+joystick buttons** to bind **Fire 1 / Z** (shot), **Fire 2 / X** (bomb), and
+**Shift** (hold for slow movement). The **Esc** binding pauses the game.
+Joystick only avoids the duplicate shot/bomb actions, but its two-button native
+port does not carry Shift; a physical keyboard can still supply it.
+
+`Pad to keyboard` still selects **Numpad / Cursor keys / Buttons only / Off**.
+The first three map the fire buttons to Z/X. **Off** disables keyboard mapping
+even in Keyboard only mode (so no joystick or keyboard pad input is sent).
+Changing routes releases the old emulated inputs through the existing keyboard
+make/break handling. The new route uses status bits 48:47; zero preserves Both,
+the reserved value 3 suppresses both routes, and the existing keyboard mapping
+stays at bits 46:45.
 
 `Stick mouse: On / Off` (default On, status bit 39 clear) moves the PC-98
 mouse with an analog stick of a USB controller or of a DualShock in the

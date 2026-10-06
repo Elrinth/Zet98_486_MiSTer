@@ -205,6 +205,7 @@ parameter CONF_STR = {
 	"P3o6,SNAC PS pads,On,Off;",
 	"P3o7,Stick mouse,On,Off;",
 	"P3o8,Mouse stick,Right,Left;",
+	"P3oFG,Pad input,Both,Joystick only,Keyboard only;",
 	"P3oDE,Pad to keyboard,Numpad,Cursor keys,Buttons only,Off;",
 	"P4,Boot & storage;",
 	"P4OR,Empty boot,Wait for disk,Start BIOS;",
@@ -381,18 +382,25 @@ wire  [3:0] dirs0 = swap_sticks ? (joystick_0[3:0] & ~stick_dirs(joystick_l0, 16
 wire  [3:0] dirs1 = swap_sticks ? (joystick_1[3:0] & ~stick_dirs(joystick_l1, 16)) | stick_dirs(joystick_r1, 42) : joystick_1[3:0];
 wire  [5:0] joy0_bits = {joystick_0[5:4], dirs0} | snac_joy1;
 wire  [5:0] joy1_bits = {joystick_1[5:4], dirs1} | snac_joy2;
-wire  [5:0] joyA = ~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
-wire  [5:0] joyB = ~{joy1_bits[5:4],joy1_bits[0],joy1_bits[1],joy1_bits[2],joy1_bits[3]};
+// New bits leave saved pad-key settings intact: zero keeps the legacy Both
+// route. Bit 47 suppresses keys; bit 48 suppresses the native ports. Keep
+// these as independent enables to minimize logic in this nearly full FPGA.
+// Reserved value 3 suppresses both routes. Joystick inputs are active-low.
+wire  [5:0] joyA = status[48] ? 6'b111111 :
+	~{joy0_bits[5:4],joy0_bits[0],joy0_bits[1],joy0_bits[2],joy0_bits[3]};
+wire  [5:0] joyB = status[48] ? 6'b111111 :
+	~{joy1_bits[5:4],joy1_bits[0],joy1_bits[1],joy1_bits[2],joy1_bits[3]};
 // Pads also press PC-98 keys: directions as numeric keypad 8/2/4/6 or the
 // cursor keys, buttons as Z, X, space, SHIFT, return, ESC, CTRL and f.1
 // (SNAC: Cross, Circle, Square, Triangle, Start, Select, L2, R2). Most games
-// have no joystick support. The joystick port gets the pads either way.
+// have no joystick support. Pad input selects which routes receive the pads;
+// real keyboard input and stick-mouse input are independent of this choice.
 wire  [1:0] pad_key_mode = status[46:45];   // Numpad, Cursor keys, Buttons only, Off
 wire  [3:0] pad_dirs = dirs0 | dirs1 | snac_joy1[3:0] | snac_joy2[3:0];
 wire  [3:0] pad_dir_keys = {pad_dirs[0], pad_dirs[1], pad_dirs[2], pad_dirs[3]};  // right, left, down, up
 wire  [7:0] pad_btn_keys = {joystick_0[13:8] | joystick_1[13:8], joystick_0[5:4] | joystick_1[5:4]} |
 	snac_keys1 | snac_keys2;
-wire [15:0] pad_keys = pad_key_mode == 2'd3 ? 16'd0 : {pad_btn_keys,
+wire [15:0] pad_keys = (status[47] || pad_key_mode == 2'd3) ? 16'd0 : {pad_btn_keys,
 	pad_key_mode == 2'd1 ? pad_dir_keys : 4'd0, pad_key_mode == 2'd0 ? pad_dir_keys : 4'd0};
 
 wire        ioctl_download;
