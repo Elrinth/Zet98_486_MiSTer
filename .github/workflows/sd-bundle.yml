@@ -1,0 +1,52 @@
+name: Build SD-card bundle
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      core:
+        description: Core release tag (or latest)
+        default: latest
+      bios:
+        description: OpenBIOS release tag (or latest)
+        default: latest
+  workflow_call:
+    inputs:
+      bios:
+        type: string
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: sd-bundle-${{ github.repository }}-${{ github.event.release.tag_name || inputs.core || inputs.bios || 'latest' }}
+  cancel-in-progress: false
+jobs:
+  bundle:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Elrinth/Zet98_486_MiSTer
+          ref: main
+      - run: sudo apt-get update -qq && sudo apt-get install -y 7zip
+      - name: Test MIDI installer and scheduling helpers
+        run: |
+          python3 tests/mister_midi_install_test.py
+          python3 tests/mister_midi_irq_guard_test.py
+          python3 tests/sd_bundle_test.py
+          sh -n scripts/mister_midi_menu.sh
+      - name: Build and verify archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORE_TAG: ${{ github.repository == 'Elrinth/Zet98_486_MiSTer' && github.event.release.tag_name || inputs.core || 'latest' }}
+          BIOS_TAG: ${{ inputs.bios || 'latest' }}
+        run: python3 scripts/build_sd_bundle.py --core "$CORE_TAG" --bios "$BIOS_TAG" --output build/sd-bundle
+      - name: Upload completed bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ github.repository }}
+        run: |
+          tag=$(python3 -c 'import glob,json,os; m=json.load(open(glob.glob("build/sd-bundle/*.json")[0])); print(m["core"] if os.environ["TARGET_REPO"].endswith("Zet98_486_MiSTer") else m["bios"])')
+          # A rerun may update metadata but never replaces the core/BIOS assets.
+          gh release upload "$tag" build/sd-bundle/* --repo "$TARGET_REPO" --clobber
