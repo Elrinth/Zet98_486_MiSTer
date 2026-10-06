@@ -7,7 +7,8 @@ module pc98_video_scale (
     input wire [2:0] mode,
     input wire [11:0] custom_x, custom_y,
     output reg [12:0] arx, ary,
-    output reg [11:0] crop_left, crop_top, crop_width, crop_height
+    output reg [11:0] crop_left, crop_top, crop_width, crop_height,
+    output wire [11:0] raster_x, raster_y, raster_width, raster_height
 );
     // Mode/custom aspect arrive on clk_sys; dimensions already use clk_vid.
     // Keep the local two-cycle dimension latency and handshake only host data.
@@ -32,6 +33,9 @@ module pc98_video_scale (
     reg old_de, old_vs;
     reg [11:0] pixels, lines, first_width;
     reg [11:0] source_width, source_height;
+    // Share this pre-overlay raster measurement with the activity badge.
+    assign raster_x=pixels, raster_y=lines;
+    assign raster_width=source_width, raster_height=source_height;
     always @(posedge clk) begin
         if (reset) begin
             old_de<=0; old_vs<=0; pixels<=0; lines<=0; first_width<=0;

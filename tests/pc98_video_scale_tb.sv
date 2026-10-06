@@ -7,15 +7,18 @@ module pc98_video_scale_tb;
     reg [2:0] mode=0;
     wire [12:0] arx, ary;
     wire [11:0] left, top, crop_w, crop_h;
+    wire [11:0] raster_x,raster_y,raster_width,raster_height;
     wire captured;
     pc98_video_scale dut(clk,source_clk,reset,ce,vs,de,width,height,mode,custom_x,custom_y,
-                        arx,ary,left,top,crop_w,crop_h);
+                        arx,ary,left,top,crop_w,crop_h,raster_x,raster_y,raster_width,raster_height);
     pc98_hdmi_crop crop(clk,reset,ce,vs,de,left,top,crop_w,crop_h,captured);
     integer source_w=640, source_h=400;
     integer sx=0, sy=0, capture_pixels=0, source_pixels=0;
     integer expect_left=0, expect_top=0, expect_w=640, expect_h=400;
     reg inspect=0;
     always @(posedge clk) if (inspect && ce && de) begin
+        if (raster_x!==sx || raster_y!==sy)
+            $fatal(1,"shared raster mismatch at %0d,%0d: %0d,%0d",sx,sy,raster_x,raster_y);
         source_pixels=source_pixels+1;
         if (captured) capture_pixels=capture_pixels+1;
         if (captured !== (sx>=expect_left && sx<expect_left+expect_w &&

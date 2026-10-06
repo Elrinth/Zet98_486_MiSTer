@@ -3,6 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
+iverilog -g2012 -Wall -s egc_append_tb -o "$out/append" \
+    rtl/graphics/pc98_egc_shift.sv tests/egc_append_tb.sv
+vvp "$out/append"
 python3 tests/egc_shift_vectors.py generate "$out/input.txt"
 cc -std=c99 -O2 -Wall -Wextra -o "$out/reference" tests/egc_shift_reference.c
 "$out/reference" "$out/input.txt" "$out/vectors.txt"

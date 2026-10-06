@@ -74,6 +74,11 @@ References:
 
 ## Activity overlay
 
+The current compact implementation is documented in
+[`rtl/STORAGE_ACTIVITY.md`](rtl/STORAGE_ACTIVITY.md). It shares the scaler's
+raster counters and uses one badge with a single packed font/icon ROM.
+The following paragraphs describe the earlier overlay implementation.
+
 The optional indicator remains on by default. It displays the supplied
 rotating disk above `LOADING D0` or `LOADING D1` and zero through three dots.
 The caption uses the existing 8x8 boot-help font, rendered separately from the

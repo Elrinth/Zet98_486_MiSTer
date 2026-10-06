@@ -16,6 +16,8 @@ module mister_ide_interface_tb;
     defparam dut.hps_io.PS2DIV=0;
     defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
+    defparam dut.disk_activity.ROM_FILE="rtl/assets/activity.mem";
+    defparam dut.audio_decimator.COEF_FILE="rtl/assets/audio-decimator-coeffs.mem";
     integer floppy_bytes=0;
     always @(posedge clk) begin
         if(dut.sd_ack[2] && (dut.Zet98_top.mist_ack || dut.Zet98_top.mist_buffwr))

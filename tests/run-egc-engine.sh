@@ -11,7 +11,7 @@ ghdl --synth --std=08 -fsynopsys --out=verilog -gADRWIDTH=22 \
 grep -q '^module SDRAMC$' "$out/memory.v" || { head -n 2 "$out/memory.v"; exit 1; }
 sources=(rtl/graphics/pc98_egc_registers.sv rtl/graphics/pc98_egc_shift.sv
          rtl/graphics/pc98_egc_rop.sv rtl/graphics/pc98_egc_write.sv tests/egc_sdram_port.sv)
-for mhz in 20 60 100; do
+for mhz in 20 60 90; do
     for phase in 0 4700; do
         full=0
         if [[ "$mhz" = 60 && "$phase" = 0 ]]; then full=1; fi

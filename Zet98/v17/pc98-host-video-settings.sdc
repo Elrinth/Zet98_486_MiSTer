@@ -46,7 +46,6 @@ foreach instance {
 
 # Independently synchronized one-bit controls. Only the first destination
 # stage is asynchronous; the next stage and every consumer remain timed.
-# (The disk access icon overlay and its synchronizers were removed.)
 foreach first_name {
     {emu|video_out|test_meta}
     {tune_gate|enable_video[0]}
@@ -57,3 +56,14 @@ foreach first_name {
     }
     set_false_path -to $first
 }
+
+# The compact activity overlay synchronizes up to eight independent flags.
+# Profiles without CD/HDD support can constant-fold those device flags.
+# Keep the second stage and all rendering logic fully timed in either profile.
+set activity_first [get_registers {emu|disk_activity|request_meta[*]}]
+set activity_count [get_collection_size $activity_first]
+if {$activity_count < 5 || $activity_count > 8} {
+    error "Missing first-stage disk activity synchronizers"
+}
+post_message "Disk activity: $activity_count independent first-stage synchronizers"
+set_false_path -to $activity_first

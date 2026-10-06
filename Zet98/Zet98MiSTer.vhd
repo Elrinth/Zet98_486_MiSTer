@@ -116,6 +116,7 @@ port(
 	pDip2			: in std_logic_vector(7 downto 0);
 	pLed			: out std_logic;
 	pFloppyAccess : out std_logic_vector(1 downto 0);
+	pFloppyWriteGate : out std_logic;
 
 	-- Video, Audio/CMT ports
 	pVideoR     : out	std_logic_vector( 7 downto 0);  -- RGB_Red / Svideo_C
@@ -4058,6 +4059,10 @@ begin
             end if;
         end if;
     end process;
+	-- WREN comes from the FDC's registered signext output. Reuse that gate
+	-- and the existing per-drive activity selection instead of another decode.
+	-- Cached image writes reach mist_wr only after the 3-second flush delay.
+	pFloppyWriteGate <= not FDE_WRENn;
 	
 	DISKE	:component diskemu_mister 	generic map(SYSFREQ,SYSFREQ,10) port map(
 	--SASI

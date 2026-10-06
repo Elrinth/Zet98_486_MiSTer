@@ -37,6 +37,29 @@ module pc98_egc_shift (
     wire [63:0] next_words;
     wire [15:0] traversal_mask, next_mask;
 
+    // One-hot multiplication implements the shifts in DSP blocks, freeing
+    // logic cells without changing registers or latency. Rotation combines
+    // the disjoint low/high halves of a sixteen-bit left-shift product.
+    // A common interval mask removes wrapped and skipped source pixels.
+    // Keep both operands explicitly sixteen bits so Quartus uses one DSP.
+    // Selecting the upper half also covers pending_count 16..31 exactly.
+    wire [15:0] append_factor = 16'b1 << pending_count[3:0];
+    wire [15:0] append_bits = 16'hffff >> source_skip;
+    (* multstyle = "dsp" *) wire [31:0] append_product;
+    assign append_product = append_bits * append_factor;
+    wire [31:0] append_mask = pending_count[4] ?
+        {append_product[15:0],16'd0} : append_product;
+    wire [3:0] source_left = pending_count[3:0] - source_skip;
+    wire [15:0] rotate_factor = 16'b1 << source_left;
+    wire [15:0] position_factor = 16'b1 << destination_skip;
+    wire [15:0] source_rotated [0:3];
+    // Multiplying by 2^(16-r) exposes word>>r in the upper product half
+    // and its contribution to the preceding word in the lower half.
+    // At r=0 the 17th coefficient bit retains an exact unshifted word.
+    wire [16:0] carry_factor = 17'h10000 >> needed[3:0];
+    wire [15:0] carry_upper_factor = needed[4] ? 16'd0 : carry_factor[15:0];
+    wire [15:0] pending_next [0:3];
+
     genvar p, b;
     generate for (p=0; p<4; p=p+1) begin: planes
         for (b=0; b<16; b=b+1) begin: pixels
@@ -58,9 +81,30 @@ module pc98_egc_shift (
                 (reverse ? positioned[p][b & 7] : positioned[p][7 - (b & 7)]) :
                 (reverse ? positioned[p][REVERSE_BIT] : positioned[p][FORWARD_BIT]);
         end
+        (* multstyle = "dsp" *) wire [31:0] rotate_product;
+        (* multstyle = "dsp" *) wire [31:0] position_product;
+        (* multstyle = "dsp" *) wire [31:0] carry_product_lo;
+        (* multstyle = "dsp" *) wire [31:0] carry_product_hi;
+        assign rotate_product = traversed[16*p +:16] * rotate_factor;
+        assign source_rotated[p] = rotate_product[15:0] | rotate_product[31:16];
         assign joined[p] = {16'b0, pending[p]} |
-            ({16'b0, (traversed[16*p +:16] >> source_skip)} << pending_count);
-        assign positioned[p] = joined[p][15:0] << destination_skip;
+            ({source_rotated[p], source_rotated[p]} & append_mask);
+        assign position_product = joined[p][15:0] * position_factor;
+        assign positioned[p] = position_product[15:0];
+        assign carry_product_lo = (needed[4] ? joined[p][31:16] : joined[p][15:0]) * carry_factor;
+        assign carry_product_hi = joined[p][31:16] * carry_upper_factor;
+        assign pending_next[p] = carry_product_lo[31:16] | carry_product_hi[15:0];
+        // synthesis translate_off
+        wire [15:0] positioned_reference = joined[p][15:0] << destination_skip;
+        wire [15:0] pending_reference = joined[p] >> needed;
+        always @(posedge clk) if (!reset && advance) begin
+            if (joined[p] !== ({16'b0, pending[p]} |
+                ({16'b0, (traversed[16*p +:16] >> source_skip)} << pending_count)))
+                $fatal(1, "EGC append alignment mismatch, plane %0d", p);
+            if (positioned[p] !== positioned_reference || pending_next[p] !== pending_reference)
+                $fatal(1, "EGC output/carry alignment mismatch, plane %0d", p);
+        end
+        // synthesis translate_on
     end
     for (b=0; b<16; b=b+1) begin: masks
         localparam integer FORWARD_BIT = (b < 8) ? 7-b : 23-b;
@@ -115,7 +159,7 @@ module pc98_egc_shift (
                     remaining <= {1'b0, bit_length[11:0]} + 13'd1;
                 end else begin
                     for (plane=0; plane<4; plane=plane+1)
-                        pending[plane] <= joined[plane] >> needed;
+                        pending[plane] <= pending_next[plane];
                     pending_count <= available - {1'b0, needed};
                     source_skip <= 0;
                     destination_skip <= 0;

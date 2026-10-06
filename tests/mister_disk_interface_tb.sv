@@ -18,6 +18,8 @@ module mister_disk_interface_tb;
     defparam dut.hps_io.PS2DIV = 0;
     defparam dut.video_out.BOOT_TEXT_FILE="rtl/assets/boot-text.mem";
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
+    defparam dut.disk_activity.ROM_FILE="rtl/assets/activity.mem";
+    defparam dut.audio_decimator.COEF_FILE="rtl/assets/audio-decimator-coeffs.mem";
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;
@@ -89,6 +91,25 @@ module mister_disk_interface_tb;
     initial begin
         force dut.hps_io.EXT_BUS[32] = 1'b0;
         repeat (5) @(negedge clk);
+        // Guest writes happen before the floppy cache's delayed host flush.
+        // Exercise the real wrapper's activity wiring while no SD write exists.
+        for (integer drive = 0; drive < 2; drive = drive + 1) begin
+            dut.Zet98_top.pFloppyAccess = 2'b01 << drive;
+            dut.Zet98_top.pFloppyWriteGate = 0;
+            repeat (5) @(negedge clk);
+            if (dut.disk_activity.request_sync[3:2] !== 0)
+                $fatal(1, "Floppy read misreported as write for drive %0d", drive);
+            dut.Zet98_top.pFloppyWriteGate = 1;
+            repeat (5) @(negedge clk);
+            if (dut.sd_wr[1:0] !== 0 || dut.disk_activity.request_sync[3:2] !== (2'b01 << drive))
+                $fatal(1, "Missing guest floppy write activity before host flush for drive %0d", drive);
+        end
+        dut.Zet98_top.pFloppyAccess = 0;
+        repeat (5) @(negedge clk);
+        if (dut.disk_activity.request_sync[3:2] !== 0)
+            $fatal(1, "Unselected floppy write gate reported as drive activity");
+        dut.Zet98_top.pFloppyWriteGate = 0;
+        repeat (5) @(negedge clk);
         for (integer slot = 0; slot < 4; slot = slot + 1) begin
             sector(slot, 0);
             sector(slot, 1);
@@ -145,6 +166,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     output pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout,
     input [7:0] pMsExtDX, pMsExtDY, input pMsExtStb, input [1:0] pMsExtBtn,
     input [5:0] pJoyA, pJoyB,
+    input [15:0] pPadKeys,
     input [1:0] pFDSYNC, pFDEJECT,
     input [3:0] mist_mounted, mist_readonly,
     input [63:0] mist_imgsize,
@@ -164,7 +186,8 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     input [1:0] pCPUSpeed,
     input [7:0] pMPUReadData,
     input pMPUOE, pMPUIRQ,
-    output pLed, output [1:0] pFloppyAccess, input [1:0] pDip1, input [7:0] pDip2,
+    output pLed, output reg [1:0] pFloppyAccess=0, output reg pFloppyWriteGate=0,
+    input [1:0] pDip1, input [7:0] pDip2,
     input pSramld, pSramst,
     output [7:0] pVideoR, pVideoG, pVideoB,
     output pVideoHS, pVideoVS, pVideoEN, pVideoClk,
@@ -177,7 +200,6 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     end
     assign mist_buffdin = mist_buffaddr[7:0] ^ 8'ha5;
     assign LDR_ACK = 0;
-    assign pFloppyAccess = 0;
     assign pFloppyPresent = 0;
     assign pCPUDebug = 0;
     assign {pVideoR, pVideoG, pVideoB, pVideoHS, pVideoVS, pVideoEN, pVideoClk} = 0;

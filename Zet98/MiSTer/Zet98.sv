@@ -197,6 +197,7 @@ parameter CONF_STR = {
 	"P1O3,Video test,Off,Color bars;",
 	"P1O4,Startup mute,10s,Off;",
 	"P1o2,Audio filter,On,Off;",
+	"P1oH,Disk activity,On,Off;",
 `ifdef ZET98_MPU_UART
 	"P1OQ,MPU MIDI,Off,UART;",
 	"P1o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
@@ -728,6 +729,9 @@ assign AUDIO_S = 1;
 
 wire disk_led;
 wire [1:0] floppy_access;
+wire floppy_write_gate;
+wire [1:0] floppy_write;
+assign floppy_write = floppy_access & {2{floppy_write_gate}};
 wire [1:0] floppy_present;
 wire boot_hold;
 wire [2:0] boot_prompt;
@@ -755,23 +759,28 @@ video_output video_out (
 	.ce(output_ce), .r(output_r), .g(output_g), .b(output_b),
 	.hs(output_hs), .vs(output_vs), .de(output_de)
 );
-// The on-screen disk/CD/HDD access icons (floppy_overlay) were removed to
-// free ~380 ALMs for the memory-system work; the design had no room left.
-assign CE_PIXEL = output_ce;
-assign VGA_HS = output_hs;
-assign VGA_VS = output_vs;
-assign VGA_DE = output_de;
-assign VGA_R = output_r;
-assign VGA_G = output_g;
-assign VGA_B = output_b;
+wire [11:0] raster_x, raster_y, raster_width, raster_height;
+storage_activity disk_activity (
+    .clk(clk_vid), .reset(!pll_locked), .enabled(!status[49]),
+    .floppy_read(floppy_access | sd_rd[1:0]), .floppy_write(floppy_write | sd_wr[1:0]),
+    .cd_read(|cd_activity), .hdd_read(sd_rd[2]), .hdd_write(sd_wr[2]),
+    .x(raster_x), .y(raster_y), .width(raster_width), .height(raster_height),
+    .crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
+    .crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
+    .in_ce(output_ce), .in_hs(output_hs), .in_vs(output_vs), .in_de(output_de),
+    .in_r(output_r), .in_g(output_g), .in_b(output_b),
+    .out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
+    .out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
+);
 
 // Report native pixel aspect by default. Optional crop is HDMI-only.
 pc98_video_scale hdmi_scale (
-    .source_clk(clk_sys), .clk(clk_vid), .reset(!pll_locked), .ce(CE_PIXEL), .vs(VGA_VS), .de(VGA_DE),
+    .source_clk(clk_sys), .clk(clk_vid), .reset(!pll_locked), .ce(output_ce), .vs(output_vs), .de(output_de),
     .hdmi_width(HDMI_WIDTH), .hdmi_height(HDMI_HEIGHT), .mode(status[25:23]),
     .custom_x(aspect_x), .custom_y(aspect_y), .arx(VIDEO_ARX), .ary(VIDEO_ARY),
     .crop_left(HDMI_CROP_LEFT), .crop_top(HDMI_CROP_TOP),
-    .crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT)
+    .crop_width(HDMI_CROP_WIDTH), .crop_height(HDMI_CROP_HEIGHT),
+    .raster_x(raster_x), .raster_y(raster_y), .raster_width(raster_width), .raster_height(raster_height)
 );
 
 `ifdef ZET98_EXT_RAM_MB
@@ -880,6 +889,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 
 	.pLed(disk_led),
 	.pFloppyAccess(floppy_access),
+	.pFloppyWriteGate(floppy_write_gate),
 	.pDip1(pdip1),
 	.pDip2(pdip2),
 	.pSramld(sramld),

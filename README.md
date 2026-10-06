@@ -16,6 +16,20 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B246 restores optional disk-activity icons and captions for floppy, HDD and
+CD transfers, and moves the EGC shifter into DSP blocks to make room. Its
+Apple Club 1 title matches B244 pixel-for-pixel on three fresh loads; the
+B245 red-dot regression reproduces on both comparison loads. The exact
+90 MHz release bitstream also passes Linux fault-restart/process checks,
+EGC, DOS memory/string tests and a full Doom timedemo. Doom performance is
+essentially unchanged. The combined build uses **41,427 ALMs / 4,191 LABs**
+(47 more ALMs than B245) with worst slack **-7.379 ns**, within the
+maintainer's accepted 12 ns magnitude allowance; static timing is not closed.
+Use the already released OpenBIOS
+[2026-10-06](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-06).
+See [validation and limitations](rtl/STORAGE_ACTIVITY.md), including the
+unresolved Doom/VCPI and Doom II compatibility failures.
+
 B245 adds **Input > Pad input: Both / Joystick only / Keyboard only** for
 USB and SNAC controllers. Keyboard only avoids duplicate joystick and Z/X
 actions while retaining Shift and the other mapped keys. For Lotus Land Story,
@@ -24,7 +38,8 @@ select Keyboard only with Cursor keys, then bind Z (shot), X (bomb) and Shift
 All 1,040 routing simulation cases and keyboard make/break tests pass. The
 90 MHz build fits all 4,191 LABs, with worst slack **-7.354 ns** (within the
 maintainer's accepted 12 ns magnitude limit; static timing is not closed).
-**This bitstream has not yet been tested on MiSTer hardware.** No BIOS update
+At publication this B245 bitstream had not been tested on MiSTer hardware;
+subsequent Apple Club testing found the red-dot regression described above. No BIOS update
 is required for input routing; the latest OpenBIOS is
 [2026-10-06](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-06).
 
@@ -688,7 +703,10 @@ curve keep small movements precise. A USB mouse (and the PS5 touchpad, which
 MiSTer reports as a mouse) keeps working; all sources add up
 (`rtl/stick_mouse.sv`, extra input of `Zet98/MOUSE/MOUSECONV.vhd`).
 
-The on-screen disk/CD/HDD access overlay was removed to free FPGA area.
+The compact disk/CD/HDD activity overlay uses one shared icon/caption and one
+M10K ROM. **Audio & Video → Disk activity** switches it on or off. It shows
+floppy loading/writing and CD/HDD reads or HDD writes. See
+[implementation and qualification notes](rtl/STORAGE_ACTIVITY.md).
 
 The source now offers `Aspect ratio: Full Screen` through MiSTer's scaler.
 The existing 4:3 and 16:9 setting values are preserved. This affects scaling,

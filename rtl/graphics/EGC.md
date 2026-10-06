@@ -26,7 +26,7 @@ writes. These are arithmetic tests, not EGC register/bus tests.
 
 Still required:
 
-- Integration of port 04A0h–04AFh writes, extended-video enable/protection and
+- Integration of port 04A0hÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“04AFh writes, extended-video enable/protection and
   GRCG enable interaction with the machine.
 - Source/pattern latches, shifts across successive byte and word accesses,
   direction, bit count, first/last clipping and read comparisons.
@@ -43,7 +43,7 @@ accounting for that representation would reverse alignment/clipping.
 The current Rusty test image uses the GDC driver, not a working EGC driver.
 
 `pc98_egc_registers.sv` implements the eight write-only programming registers
-at 04A0h–04AFh on the existing 16-bit, byte-selected bus. It stores both lanes
+at 04A0hÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“04AFh on the existing 16-bit, byte-selected bus. It stores both lanes
 independently, decodes the complete port address and commits once per held bus
 cycle. Foreground/background expansion uses the low four color bits. Pixel
 mask writes are ignored while color-select bits 14:13 are nonzero, matching
@@ -117,7 +117,7 @@ This module is not yet in the QSF or active core.
 `tests/run-egc-shift.sh` builds the extracted, unmodified NP2kai shift functions
 under `tests/reference`, validates their outputs using an independent Python
 pixel-list FIFO model, then feeds those same transactions to the RTL. It tests
-all 512 direction/source/destination settings, lengths 1–33 and boundaries
+all 512 direction/source/destination settings, lengths 1ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“33 and boundaries
 63/64/65, 255/256/257 and 4095/4096, two rows without register reload, interrupted
 rows, ignored register bits, idle cycles with changing source data, and reset
 priority. It repeats the RTL corpus with programming performed through the
@@ -129,7 +129,7 @@ the complete EGC bus or physical PC-98 edge cases.
 Reference evidence:
 
 - The original [PC-9800 hardware databook](https://vtda.org/docs/computing/NEC/PC-9800TechnicalDataBookHARDWARE%2BOCR_1993.pdf),
-  printed pages 193–194 (PDF pages 204–205), describes four-plane operation,
+  printed pages 193ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“194 (PDF pages 204ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“205), describes four-plane operation,
   source/destination read-modify-write, bit shifting and the protected extended
   mode switch. It does not specify the detailed shift/count register behavior.
 - [ReC98's EGC copy research](https://rec98.nmlgc.net/blog/2023-03-05)
@@ -242,3 +242,118 @@ fifth negative control. The regression also copies synthetic 640-pixel aligned
 and 624-pixel shifted rows, checking forty source/destination word pairs and
 automatic row restart. These are the transfer sizes observed in a local Rusty
 driver; no game code or assets are included in the test.
+
+## DSP shifter area reduction (2026-10-06)
+
+The current machine instantiates `pc98_egc_word_engine.sv`, including this
+shifter, and lists it in `Zet98/v17/release-Zet98MiSTer.qsf`. Earlier sections
+record the integration state during the original bring-up.
+
+The initial EGC-only 90 MHz candidate saved **231 ALMs and six LABs** versus B245 at the same
+build profile: seed 6, PR2, IC32/DC8, 64 MB, normal register packing, raw IDE,
+MIDI, PEGC and native-DDR framebuffer. Full fitting reports 41,149 ALMs and
+4,185 LABs, versus 41,380 / 4,191. It uses 43,404 registers, 551 M10Ks and
+66 of 112 DSP blocks. Worst slack improves from -7.354 to -6.845 ns. Ten
+setup summaries remain negative; this meets the user's 12 ns allowance,
+not static timing closure. Pixel-clock, HPS-peripheral and FEC route audits
+pass. An earlier 100 MHz/seed 2 experiment also fit, but failed hardware boot and is
+not a usable speed improvement. It occupies all 4,191 LABs with 41,116
+placed ALMs (the separate "ALMs needed" estimate is 40,005), 551 M10Ks and
+66 DSP blocks. Worst slack is -8.676 ns; Linux and DOS both stop at the
+OpenBIOS banner. The detailed timing report shows an 18.243 ns decoder-to-
+prefetch-window feedback path against a 10 ns period. This identifies a
+timing bottleneck, but does not by itself prove the cause of the boot stall.
+The existing NEC BIOS also fails to boot the 100 MHz RBF (blank screen),
+while the identical BIOS and DOS disk reach the command prompt at 90 MHz.
+A temporary diagnostic OpenBIOS reaches the disk-ROM boot-error message at
+100 MHz and DOS at 90 MHz. No explicit 100 MHz limit was found in OpenBIOS;
+the failure is not specific to it. The original OpenBIOS is restored after
+these comparisons. No diagnostic firmware change is proposed for release.
+
+### Arithmetic and resource tradeoff
+
+Power-of-two multiplication implements the four planes' variable shifts in
+spare DSP blocks. The source product's disjoint upper and lower halves form
+a 16-bit rotation; a common 32-bit mask selects the appended source interval.
+Output positioning takes the low half of another product. Two products per
+plane extract residual pixels for the next transfer. The RTL adds no state
+or cycles, and retains clock enables, clipping and traversal behavior.
+
+For destination bit `j`, the original append source index is
+`j - pending_count + source_skip`. Repeating the source word rotated left by
+`(pending_count - source_skip) mod 16` supplies that index modulo 16. The mask
+`(0x0000ffff >> source_skip) << pending_count` removes wrapped/discarded bits,
+including for pending counts 16 through 31. For carry extraction, multiplying
+by `2^(16-r)` exposes a word's right shift by `r` in the upper product half.
+The 17-bit coefficient preserves `r=0`; the upper-word contribution is
+suppressed when the full shift is 16 or more.
+
+The `multstyle = "dsp"` attribute follows the
+[Quartus inferred-multiplier documentation](https://docs.altera.com/r/docs/683283/18.1/quartus-prime-standard-edition-user-guide/multiplier-style-for-inferred-multipliers).
+Synthesis reports confirm the requested mapping. Standalone Quartus 17
+comparisons, all with 171 registers:
+
+- Original shifter: 1,201 combinational ALUTs, no DSP blocks.
+- Shared-mask alignment with LUT shifts: 1,075 ALUTs, no DSPs.
+- DSP source rotation: 909 ALUTs, four DSPs.
+- DSP rotation and output positioning: 784 ALUTs, eight DSPs.
+- DSP rotation, positioning and carry extraction: 670 ALUTs, sixteen DSPs
+  (531 fewer ALUTs, 44.2%).
+
+The fitted shifter uses 436.2 ALMs versus 707.5 before. Whole-core savings are
+smaller because placement and physical optimization also change other logic.
+A preceding LUT-only EGC/prefetch experiment increased total fitted ALMs and
+failed Linux/Doom hardware checks despite passing simulation. It was rejected;
+the DSP build uses the original CPU RTL.
+
+### Validation
+
+`tests/egc_append_tb.sv` checks append, positioning and residual carry with
+all alignment selectors, word/byte modes, both byte lanes and directions,
+zero/every source basis bit, and empty/nonempty pending data: 139,264 cases
+across four planes. Synthesis-excluded assertions compare the original shift
+equations at each active transfer. The final DSP source passes both 732,800-
+record NP2/pixel-list reference runs, 10,040 integrated SDRAM transactions
+at 20/60/100 MHz and two phases, and all nine shifter/engine mutation controls.
+Run `tests/run-egc-shift.sh` and `tests/run-egc-engine.sh` to reproduce them.
+
+The DOS hardware probe `tests/hardware/egc_alignment.asm` uses `EGCVECT.BIN`
+from `tests/hardware/egc_alignment_vectors.py`. Assemble it with NASM `-f bin`
+as `EGCSHIFT.COM`, put both files on a disposable DOS disk, and run `EGCSHIFT`
+from the text prompt. It overwrites small graphics-VRAM regions and leaves
+EGC/GRCG disabled. Independent pixel FIFO lists supply the expected results.
+Both B244 and the DSP candidate pass all 512 alignments/directions, two rows
+without reload, varied pixel masks and 11,904 plane checks (`2E80h`).
+
+With OpenBIOS 2026-10-06 (SHA256
+`d318ff406d5ab76d306e84c415ab82971b4b83b132758e15cfa6e692dd9021ce`),
+the 90 MHz candidate passes two fresh Linux boots, the stack page-fault probe
+and 100 traced normal process exits per boot. DOS QUALIFY passes four division
+rounds, 4,008 string cases, 531 KB conventional memory and 16 MB XMS. Two full
+fresh-boot Doom demos each return to DOS with 11,520 game ticks / 1,724 real ticks,
+exactly matching the repeated B244 control on the same BIOS/disk; the observer
+measures 723.46 / 723.53 seconds from first game frame to completion. These
+PC-98 counters establish relative performance, not absolute FPS.
+
+The 90 MHz build is `quartus-20261006-153716-527ed6`, RBF SHA256
+`3dd94342bc064a7e67a3f44d94e453ad79695cbf64b5418e74bc937a3f29fe7d`.
+Detailed evidence is under `build/egc-dsp/`; component comparisons and rejected
+experiments are under `build/egc-shift-area/` and `build/prefetch-area/`.
+
+### Shared-mask follow-up and activity display
+
+The common append mask now also uses a DSP multiplication. Both operands are
+explicitly sixteen bits, avoiding an unnecessarily wide inferred multiplier.
+Standalone mapping reports 631 ALUTs, 171 registers and seventeen DSP blocks:
+570 fewer ALUTs (47.5%) than the original shifter, with no added cycles.
+
+The updated shifter passes 139,264 append/position/carry cases, 131,072 clipping
+masks, both 732,800-record reference modes, 10,040 integrated SDRAM transactions
+at **20/60/90 MHz**, and all nine mutation controls. No further 100 MHz work is
+planned. The simulation evidence is `simulation-20261006-182858-4c602c`.
+
+The combined core also restores the compact disk activity display. Its full
+resource totals and hardware qualification are tracked in
+[`../STORAGE_ACTIVITY.md`](../STORAGE_ACTIVITY.md); the earlier 231-ALM/six-LAB
+saving above describes the sixteen-DSP core without that display, not the
+combined candidate.
