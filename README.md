@@ -50,7 +50,7 @@ All 1,040 routing simulation cases and keyboard make/break tests pass. The
 maintainer's accepted 12 ns magnitude limit; static timing is not closed).
 At publication this B245 bitstream had not been tested on MiSTer hardware;
 subsequent Apple Club testing found the red-dot regression described above. No BIOS update
-is required for input routing; the latest OpenBIOS is
+was required for input routing; the BIOS tested with B245 was
 [2026-10-06](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-06).
 
 B244 returns complete 32-bit reads from the existing extended-RAM buffer.
@@ -136,12 +136,17 @@ N88-BASIC title and story scenes run with keyboard input.
 
 ## Installing on MiSTer
 
+**OpenBIOS is recommended, not mandatory.** The known-working NEC PC-9801VM ROM
+still boots on B247. Both updates are needed specifically for the new Sword
+Dancer floppy-change fix. See the [BIOS choice and ROM packing guide](docs/BIOS_GUIDE.md)
+for NEC compatibility tests, separate-ROM conversion and old Zet98 BIOS limits.
+
 - Copy the core `.rbf` to `/media/fat/_Computer/`.
 - Put `boot.rom` and your disk images in `/media/fat/games/PC98/` (builds after
   B165; earlier builds use `/games/Zet98/`). Settings are saved as `PC98.CFG`.
 - `boot.rom`: either the free **[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)**
   (download its release zip; no NEC ROM needed), or a `boot.rom` built from
-  your own PC-9801VM BIOS set (see `docs/OPEN_BIOS_NOTES.md`).
+  your own known-working PC-9801VM BIOS set (see [BIOS guide](docs/BIOS_GUIDE.md)).
 - `DEVICE=HIMEM.SYS` works without any extra driver since B165: the core's disk
   extension ROM publishes the extended RAM and clears the V30 flag that the
   PC-9801VM BIOS always sets. `Z98MEM.SYS`/`Z98FIX.SYS` are no longer needed.
@@ -346,10 +351,12 @@ change. Games that time themselves with the timer or vertical sync are already
 correct at Full; use the slower settings for games that count CPU loops. The
 setting takes effect immediately and can be changed while a game runs.
 
-BIOS: the known-working `boot.rom` is built from MAME's PC-9801VM set (see
-`docs/OPEN_BIOS_NOTES.md`). The PC-9801UX, PC-9821, PC-9821Ce2, PC-9821V13 and
-PC-9821V20 sets (NP2-style `bios.rom`/`itf.rom`/`font.rom`) do not start on the
-core yet. The [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS) boots MS-DOS and the games above.
+BIOS: the known-working NEC `boot.rom` is based on PC-9801VM. The supplied
+PC-9801UX, unknown PC-9801/PC-9821, PC-9821Ce2 and PC-9821V20 sets did not reach
+DOS on B247; the supplied V13 set lacks its ITF ROM. See the
+[tested dumps and packaging guide](docs/BIOS_GUIDE.md). The
+[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS) boots MS-DOS and
+the games above.
 
 ## Development history
 

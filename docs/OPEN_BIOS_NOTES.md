@@ -1,5 +1,9 @@
 # Notes for an open PC-98 boot.rom
 
+For current BIOS selection and separate-ROM packaging, see [BIOS_GUIDE.md](BIOS_GUIDE.md).
+The notes below are historical investigation notes; current releases compensate
+for several VM BIOS CPU/memory-identification limitations.
+
 Starting material for a legally distributable replacement for the user-supplied
 `boot.rom`. Findings from 2026-09-26; verify before relying on them.
 
