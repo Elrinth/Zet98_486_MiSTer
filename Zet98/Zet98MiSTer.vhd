@@ -2256,6 +2256,9 @@ signal	FDC_ODAT		:std_logic_vector(7 downto 0);
 signal	FDC_DOE		:std_logic;
 signal	FDC_TC		:std_logic;
 signal	FDC_hmssft	:std_logic;
+signal FDC_MEDIA_IRQ, FDC_MEDIA_OE, FDC_BASE_IRQ : std_logic;
+signal FDC_MEDIA_DATA : std_logic_vector(7 downto 0);
+signal FDC_PRESENT : std_logic_vector(1 downto 0);
 signal	FDC_INTn		:std_logic;
 signal	FDC_INTS		:std_logic;
 signal	FDC_DRQ		:std_logic;
@@ -2722,6 +2725,7 @@ begin
 		'1' & gGDCod					when gGDCoe='1' else
 		'1' & GPAL_ODAT				when GPAL_DOE='1' else
 		'1' & IN00f0_ODAT				when IN00f0_DOE='1' else
+		'1' & FDC_MEDIA_DATA when FDC_MEDIA_OE='1' else
 		'1' & FDC_ODAT				when FDC_DOE='1' else
 		'1' & FDCNT_ODAT				when FDCNT_DOE='1' else
 		'1' & FDCIFS_ODAT				when FDCIFS_DOE='1' else
@@ -3288,7 +3292,15 @@ begin
 		rstn	=>rstn
 	);
 	
-	FDC_INTS<=(not FDC_INTn) or (VFO_INT and VFO_INTEN);
+	pFloppyPresent <= FDC_PRESENT;
+    FDC_BASE_IRQ <= (not FDC_INTn) or (VFO_INT and VFO_INTEN);
+    floppy_events: entity work.pc98_floppy_events port map(
+        clk=>cpuclk, rstn=>srstn, present=>FDC_PRESENT,
+        native_irq=>FDC_BASE_IRQ, busy=>FDC_BUSY,
+        address=>ioaddr_even, rd=>iord, wr=>iowr,
+        wdata=>io_wdata(7 downto 0), rdata=>FDC_MEDIA_DATA,
+        oe=>FDC_MEDIA_OE, irq=>FDC_MEDIA_IRQ);
+    FDC_INTS<=FDC_BASE_IRQ or FDC_MEDIA_IRQ;
 	
 	IR10<= FDC_INTS when FDCIF_H_Dn='0' else '0';
 	IR11<= FDC_INTS when FDCIF_H_Dn='1' else '0';
@@ -4091,7 +4103,7 @@ begin
 		fdc_siden	=>FDE_SIDEn,
 		fdc_wprotn	=>FDE_WPROTn,
 		fdc_eject	=>pFDEJECT,
-		fdc_indisk	=>pFloppyPresent,
+		fdc_indisk	=>FDC_PRESENT,
 		fdc_trackwid=>'1',
 		fdc_dencity	=>FDC_H_Dn,
 		fdc_rpm		=>'0',

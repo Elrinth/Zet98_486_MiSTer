@@ -14,6 +14,7 @@ bash tests/run-sdram-write-bundle.sh
 bash tests/run-sub-write-bundle.sh
 bash tests/run-sdram-read-bundle.sh
 bash tests/run-floppy-sdram.sh
+bash tests/run-floppy-events.sh
 bash tests/run-floppy-read-bundle.sh
 bash tests/run-video-sdram.sh
 bash tests/run-video-settings.sh

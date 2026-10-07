@@ -16,6 +16,16 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B247 fixes floppy disk changes with matching
+[OpenBIOS 2026-10-07](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-07).
+Sword Dancer now accepts Disk D in either drive and reaches gameplay and dialogue;
+its HDD installer also gets past the previously rejected Disk A swap. The core
+reports actual media changes and the BIOS rejects unavailable-interface probes
+without switching interfaces. No game patch is needed. The 90 MHz build uses
+**41,405 ALMs / 4,191 LABs**, with worst slack **-7.740 ns** (within the accepted
+12 ns magnitude allowance; static timing is not closed). See
+[validation and limitations](docs/SWORD_DANCER_FLOPPY_DEBUG.md).
+
 B246 restores optional disk-activity icons and captions for floppy, HDD and
 CD transfers, and moves the EGC shifter into DSP blocks to make room. Its
 Apple Club 1 title matches B244 pixel-for-pixel on three fresh loads; the

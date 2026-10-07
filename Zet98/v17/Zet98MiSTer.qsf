@@ -1039,3 +1039,4 @@ set_global_assignment -name SIGNALTAP_FILE output_files/grsdram.stp
 set_global_assignment -name VHDL_FILE ../sndid.vhd
 set_global_assignment -name SIGNALTAP_FILE int.stp
 set_global_assignment -name SLD_FILE db/int_auto_stripped.stp
+set_global_assignment -name VHDL_FILE ../../rtl/storage/pc98_floppy_events.vhd
