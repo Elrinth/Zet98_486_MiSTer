@@ -40,6 +40,6 @@ for mutation in retained_pattern replay read_shift early_ack reset_early; do
     if vvp "$out/bad" > "$out/bad.log" 2>&1; then
         echo "FAIL: EGC engine $mutation mutation accepted"; exit 1
     fi
-    grep -Eq 'EGC.*(mismatch|replayed|complete)' "$out/bad.log" || { cat "$out/bad.log"; exit 1; }
+    grep -Eq 'EGC.*(mismatch|replayed|complete|consecutive)' "$out/bad.log" || { cat "$out/bad.log"; exit 1; }
     echo "PASS: EGC engine $mutation mutation rejected"
 done
