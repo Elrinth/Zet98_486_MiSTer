@@ -13,6 +13,7 @@ port(
 	
 	RWMODE	:in std_logic_vector(1 downto 0);
 	CNTLAT	:in std_logic;
+	STLAT	:in std_logic;							-- read-back status latch
 	OPMODE	:in std_logic_vector(2 downto 0);
 	OPBCD	:in std_logic;
 	CTLWR	:in std_logic;							-- control word for this channel
@@ -32,6 +33,11 @@ signal	CURCOUNT	:std_logic_vector(15 downto 0);
 signal	RETCOUNT	:std_logic_vector(15 downto 0);
 signal	LATCOUNT	:std_logic_vector(15 downto 0);
 signal	DATH_Ln		:std_logic;
+signal	CNTOUTR		:std_logic;
+signal	LATCHED		:std_logic;						-- LATCOUNT not yet read out
+signal	STPEND		:std_logic;						-- STATBYTE not yet read
+signal	STATBYTE	:std_logic_vector(7 downto 0);
+signal	RDCOUNT		:std_logic_vector(15 downto 0);
 signal	DECVAL		:std_logic_vector(15 downto 0);
 signal	HALFVAL		:std_logic_vector(15 downto 0);
 signal	CNTBGN		:std_logic;
@@ -57,19 +63,37 @@ begin
 		end if;
 	end process;
 
+	-- Reads return a latched count (counter latch or read-back command) until
+	-- it has been read out, else the running count as on the 8253 (NP2kai
+	-- getcount). Returning only the last latch froze any code that polls the
+	-- counter without latching, or latches with read-back: MSDET.DLL's CLI
+	-- delay (D2h, then port 71h) spun forever in Win95 Setup's MPU-401 probe.
+	-- A latched read-back status byte is read first and leaves the LSB/MSB
+	-- flip-flop alone. A newer latch replaces an unread one, as in NP2kai.
 	process(clk,rstn)
 	variable lRD,lWR	:std_logic;
 	begin
 		if(rstn='0')then
 			DATH_Ln<='0';
+			LATCHED<='0';
+			STPEND<='0';
+			LATCOUNT<=(others=>'0');
+			STATBYTE<=(others=>'0');
 			lRD:='0';
 			lWR:='0';
 		elsif(clk' event and clk='1')then
+			if(lRD='1' and RD='0')then
+				if(STPEND='1')then
+					STPEND<='0';
+				elsif(RWMODE/="11" or DATH_Ln='1')then
+					LATCHED<='0';
+				end if;
+			end if;
 			case RWMODE is
 			when "11" =>
 				if(CTLWR='1')then
 					DATH_Ln<='0';		-- a control word restarts with the LSB
-				elsif((lRD='1' and RD='0') or (lWR='1' and WR='0'))then
+				elsif((lRD='1' and RD='0' and STPEND='0') or (lWR='1' and WR='0'))then
 					DATH_Ln<=not DATH_Ln;
 				end if;
 			when "10" =>
@@ -78,18 +102,20 @@ begin
 				DATH_Ln<='0';
 			when others =>
 			end case;
-			lRD:=RD;
-			lWR:=WR;
-		end if;
-	end process;
-
-	process(clk,rstn)begin
-		if(rstn='0')then
-			LATCOUNT<=(others=>'0');
-		elsif(clk' event and clk='1')then
+			if(CTLWR='1')then
+				LATCHED<='0';
+				STPEND<='0';
+			end if;
 			if(CNTLAT='1')then
 				LATCOUNT<=CURCOUNT;
+				LATCHED<='1';
 			end if;
+			if(STLAT='1')then
+				STATBYTE<=CNTOUTR & LOADING & RWMODE & OPMODE & OPBCD;
+				STPEND<='1';
+			end if;
+			lRD:=RD;
+			lWR:=WR;
 		end if;
 	end process;
 
@@ -109,7 +135,7 @@ begin
 			CURCOUNT<=(others=>'0');
 			RETCOUNT<=(others=>'0');
 			PERCOUNT<=(others=>'0');
-			CNTOUT<='0';
+			CNTOUTR<='0';
 			LOADING<='0';
 			LSBHOLD<=(others=>'0');
 			WDATL<=(others=>'0');
@@ -138,9 +164,9 @@ begin
 			if(CTLWR='1')then
 				LOADING<='1';
 				if(CTLMODE="000")then
-					CNTOUT<='0';
+					CNTOUTR<='0';
 				else
-					CNTOUT<='1';
+					CNTOUTR<='1';
 				end if;
 			elsif(done)then
 				RETCOUNT<=newcnt;
@@ -150,12 +176,12 @@ begin
 				when "000" | "100" =>
 					CURCOUNT<=newcnt; PERCOUNT<=newcnt;
 					LOADING<='0';
-					CNTOUT<='0';
+					CNTOUTR<='0';
 				when others =>					-- 2, 3: reload later unless just programmed
 					if(LOADING='1')then
 						CURCOUNT<=newcnt; PERCOUNT<=newcnt;
 						LOADING<='0';
-						CNTOUT<='1';
+						CNTOUTR<='1';
 					end if;
 				end case;
 			elsif(LOADING='0')then
@@ -163,7 +189,7 @@ begin
 				when "000" =>
 					if(CNTIN='1')then
 						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
+							CNTOUTR<='1';
 						else
 							CURCOUNT<=DECVAL;
 						end if;
@@ -172,34 +198,34 @@ begin
 					if(CNTIN='1')then
 						if(CURCOUNT>x"0000")then
 							if(CURCOUNT=x"0001")then
-								CNTOUT<='1';
+								CNTOUTR<='1';
 							end if;
 							CURCOUNT<=DECVAL;
 						else
-							CNTOUT<='0';
+							CNTOUTR<='0';
 						end if;
 					end if;
 				when "001" | "101" =>
 					if(CNTBGN='1')then
 						CURCOUNT<=RETCOUNT;
-						CNTOUT<='0';
+						CNTOUTR<='0';
 					elsif(CNTIN='1')then
 						if(CURCOUNT>x"0000")then
 							if(CURCOUNT=x"0001")then
-								CNTOUT<='1';
+								CNTOUTR<='1';
 							end if;
 							CURCOUNT<=DECVAL;
 						elsif(OPMODE="101")then
-							CNTOUT<='0';
+							CNTOUTR<='0';
 						end if;
 					end if;
 				when "010" | "110" =>
 					if(CNTIN='1')then
 						if(CURCOUNT=x"0001")then
-							CNTOUT<='1';
+							CNTOUTR<='1';
 							CURCOUNT<=RETCOUNT; PERCOUNT<=RETCOUNT;
 						else
-							CNTOUT<='0';
+							CNTOUTR<='0';
 							CURCOUNT<=DECVAL;
 						end if;
 					end if;
@@ -217,9 +243,9 @@ begin
 					-- after a full period; low-first made the BIOS interval timer,
 					-- which reloads from its callback, tick every half period.
 					if(CURCOUNT>HALFVAL)then
-						CNTOUT<='1';
+						CNTOUTR<='1';
 					else
-						CNTOUT<='0';
+						CNTOUTR<='0';
 					end if;
 				when others =>
 				end case;
@@ -275,8 +301,11 @@ begin
 		end if;
 	end process;
 	
-	RDAT<=	LATCOUNT(7 downto 0) when DATH_Ln='0' else
-			LATCOUNT(15 downto 8);
+	RDCOUNT<=LATCOUNT when LATCHED='1' else CURCOUNT;
+	RDAT<=	STATBYTE when STPEND='1' else
+			RDCOUNT(7 downto 0) when DATH_Ln='0' else
+			RDCOUNT(15 downto 8);
 	OE<=RD;
+	CNTOUT<=CNTOUTR;
 
 end rtl;

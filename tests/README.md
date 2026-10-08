@@ -539,6 +539,14 @@ a full period later. The old low-first square wave ticked every half period
 (hardware: 194 callbacks per 1.07 s instead of NP2kai's 104). A counter-latch
 command must not rewrite the channel mode. Both old behaviours are rejected.
 
+`run-pit-readback.sh` checks the uPD71054 (8254) read-back command and
+unlatched reads: D2h latches counter 0's count, E2h its status (read first,
+without moving the LSB/MSB flip-flop), and with no latch pending a read
+returns the running count. Win95 Setup's MPU-401 probe (MSDET.DLL) times
+its CLI delays with D2h and port 71h; the PIT ignored read-back and returned
+only the last 8253 latch, so detection hung at 98%. Latch-only reads and an
+ignored read-back are rejected.
+
 `run-vsync-irq.sh` checks the CRT retrace interrupt (IRQ2, `rtl/pc98_vsync_irq.vhd`):
 a port 64h write arms it, the next retrace raises IRQ2 once, unarmed retraces
 raise nothing, and a write during a retrace arms the following one. IRQ2 used

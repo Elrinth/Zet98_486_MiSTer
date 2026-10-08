@@ -27,6 +27,7 @@ signal	RWMODE0	:std_logic_vector(1 downto 0);
 signal	RWMODE1	:std_logic_vector(1 downto 0);
 signal	RWMODE2	:std_logic_vector(1 downto 0);
 signal	CNTLAT	:std_logic_vector(2 downto 0);
+signal	STLAT	:std_logic_vector(2 downto 0);
 signal	OPMODE0	:std_logic_vector(2 downto 0);
 signal	OPMODE1	:std_logic_vector(2 downto 0);
 signal	OPMODE2	:std_logic_vector(2 downto 0);
@@ -48,6 +49,7 @@ port(
 	
 	RWMODE	:in std_logic_vector(1 downto 0);
 	CNTLAT	:in std_logic;
+	STLAT	:in std_logic;
 	OPMODE	:in std_logic_vector(2 downto 0);
 	OPBCD	:in std_logic;
 	CTLWR	:in std_logic;
@@ -77,12 +79,14 @@ begin
 			RWMODE1<=(others=>'0');
 			RWMODE2<=(others=>'0');
 			CNTLAT<=(others=>'0');
+			STLAT<=(others=>'0');
 			OPMODE0<=(others=>'0');
 			OPMODE1<=(others=>'0');
 			OPMODE2<=(others=>'0');
 			OPBCD<=(others=>'0');
 		elsif(clk' event and clk='1')then
 			CNTLAT<=(others=>'0');
+			STLAT<=(others=>'0');
 			if(CS='1' and WR='1' and ADDR="11")then
 				case WDAT(7 downto 6) is
 				when "00" =>
@@ -110,6 +114,13 @@ begin
 						OPBCD(2)<=WDAT(0);
 					end if;
 				when others =>
+					-- uPD71054/8254 read-back: bit 5 low latches the count,
+					-- bit 4 low the status, of each counter whose select bit
+					-- (1-3) is set. MSDET's CLI delay times with D2h + port 71h.
+					for i in 0 to 2 loop
+						CNTLAT(i)<=WDAT(i+1) and not WDAT(5);
+						STLAT(i)<=WDAT(i+1) and not WDAT(4);
+					end loop;
 				end case;
 			end if;
 		end if;
@@ -136,6 +147,7 @@ begin
 		
 		RWMODE	=>RWMODE0,
 		CNTLAT	=>CNTLAT(0),
+		STLAT	=>STLAT(0),
 		OPMODE	=>OPMODE0,
 		OPBCD	=>OPBCD(0),
 		CTLWR	=>CTLWR(0),
@@ -158,6 +170,7 @@ begin
 		
 		RWMODE	=>RWMODE1,
 		CNTLAT	=>CNTLAT(1),
+		STLAT	=>STLAT(1),
 		OPMODE	=>OPMODE1,
 		OPBCD	=>OPBCD(1),
 		CTLWR	=>CTLWR(1),
@@ -180,6 +193,7 @@ begin
 		
 		RWMODE	=>RWMODE2,
 		CNTLAT	=>CNTLAT(2),
+		STLAT	=>STLAT(2),
 		OPMODE	=>OPMODE2,
 		OPBCD	=>OPBCD(2),
 		CTLWR	=>CTLWR(2),
