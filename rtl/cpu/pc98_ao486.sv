@@ -40,6 +40,10 @@ module pc98_ao486 #(
     input  wire [1:0]  cpu_speed_sel,
     input  wire        cache_invalidate,
     input  wire        cache_upper_ram_native,
+    // A store to 80000-BFFFF accepted this clock. Its legacy strobe starts on
+    // the next clock; the cache policy predicts that alias from these bits.
+    output wire        cache_window_write,
+    output wire        cache_window_ab,
     input  wire        interrupt_do,
     input  wire [7:0]  interrupt_vector,
     output wire        interrupt_done,
@@ -91,6 +95,10 @@ module pc98_ao486 #(
     reg a20_enable;
     reg [3:0] reset_count;
     wire cpu_reset = reset || (reset_count != 0);
+    // Byte address bits 19:17 are avm_address[17:15]; z486 applies A20.
+    assign cache_window_write = avm_write && !avm_waitrequest &&
+                                avm_address[29:18] == 0 && avm_address[17:16] == 2'b10;
+    assign cache_window_ab = avm_address[15];
 
     // PC-98 CPU controls, based on NP2kai io/cpuio.c commit
     // 5939e0c6d5985c4c08fc70f289a83290e5d3e6f7 (reference, not copied code).

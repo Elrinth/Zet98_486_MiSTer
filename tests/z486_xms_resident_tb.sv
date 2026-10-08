@@ -77,7 +77,7 @@ module z486_xms_resident_tb;
         .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_pixel_clk(clk),
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
-        .pegc_video_readdatavalid(),.pegc_video_readdata(),.*);
+        .pegc_video_readdatavalid(),.pegc_video_readdata(),.cache_window_write(),.cache_window_ab(),.*);
     reg [7:0] memory[0:1048575];
     reg [28:0] keys[0:DDR_WORDS-1];
     reg [63:0] words[0:DDR_WORDS-1];

@@ -42,7 +42,7 @@ module pc98_ide_bios_tb;
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
         .pegc_video_readdatavalid(),.pegc_video_readdata(),
-        .cpu_speed_sel(tb_cpu_speed),.*);
+        .cpu_speed_sel(tb_cpu_speed),.cache_window_write(),.cache_window_ab(),.*);
 
     reg [7:0] memory [0:1048575];
     reg [7:0] ports [0:65535];

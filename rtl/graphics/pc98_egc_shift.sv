@@ -5,6 +5,10 @@
 // eight pixels of lane byte_lane go in, and eight pixels come out in that lane
 // (copied to both lanes; the caller writes only the addressed byte).
 // The result/mask stays latched until the next advance or explicit reload.
+// Two stages: the source rotation product is registered on the advance edge
+// and the result/state update on the following edge. Inputs (other than
+// source_words) must not change between the two edges and advance must not
+// be asserted on consecutive clocks; reset or reload cancels a pending stage.
 module pc98_egc_shift (
     input  wire        clk, reset, reload, advance,
     input  wire        byte_mode, byte_lane,
@@ -20,6 +24,7 @@ module pc98_egc_shift (
     reg [4:0] pending_count;
     reg [3:0] source_skip, destination_skip;
     reg [12:0] remaining;
+    reg advance_r = 1'b0;
     wire reverse = shift_control[12];
     // Byte mode: a source skip of 8+ drops the whole input byte, a destination
     // skip of 8+ produces an empty output byte (both then shrink by 8).
@@ -53,6 +58,7 @@ module pc98_egc_shift (
     wire [15:0] rotate_factor = 16'b1 << source_left;
     wire [15:0] position_factor = 16'b1 << destination_skip;
     wire [15:0] source_rotated [0:3];
+    reg [31:0] rotate_r [0:3];
     // Multiplying by 2^(16-r) exposes word>>r in the upper product half
     // and its contribution to the preceding word in the lower half.
     // At r=0 the 17th coefficient bit retains an exact unshifted word.
@@ -86,7 +92,10 @@ module pc98_egc_shift (
         (* multstyle = "dsp" *) wire [31:0] carry_product_lo;
         (* multstyle = "dsp" *) wire [31:0] carry_product_hi;
         assign rotate_product = traversed[16*p +:16] * rotate_factor;
-        assign source_rotated[p] = rotate_product[15:0] | rotate_product[31:16];
+        // Registered at the DSP output: the two multipliers are not chained
+        // within one clock.
+        always @(posedge clk) rotate_r[p] <= rotate_product;
+        assign source_rotated[p] = rotate_r[p][15:0] | rotate_r[p][31:16];
         assign joined[p] = {16'b0, pending[p]} |
             ({source_rotated[p], source_rotated[p]} & append_mask);
         assign position_product = joined[p][15:0] * position_factor;
@@ -97,9 +106,13 @@ module pc98_egc_shift (
         // synthesis translate_off
         wire [15:0] positioned_reference = joined[p][15:0] << destination_skip;
         wire [15:0] pending_reference = joined[p] >> needed;
-        always @(posedge clk) if (!reset && advance) begin
+        reg [15:0] traversed_r;
+        always @(posedge clk) traversed_r <= traversed[16*p +:16];
+        always @(posedge clk) if (!reset && !reload && advance && advance_r)
+            $fatal(1, "EGC shifter advanced on consecutive clocks");
+        always @(posedge clk) if (!reset && !reload && advance_r) begin
             if (joined[p] !== ({16'b0, pending[p]} |
-                ({16'b0, (traversed[16*p +:16] >> source_skip)} << pending_count)))
+                ({16'b0, (traversed_r >> source_skip)} << pending_count)))
                 $fatal(1, "EGC append alignment mismatch, plane %0d", p);
             if (positioned[p] !== positioned_reference || pending_next[p] !== pending_reference)
                 $fatal(1, "EGC output/carry alignment mismatch, plane %0d", p);
@@ -118,6 +131,7 @@ module pc98_egc_shift (
 
     integer plane;
     always @(posedge clk) begin
+        advance_r <= advance && !reset && !reload;
         if (reset || reload) begin
             for (plane=0; plane<4; plane=plane+1) pending[plane] <= 0;
             pending_count <= 0;
@@ -127,7 +141,7 @@ module pc98_egc_shift (
             shifted_words <= 0;
             clip_mask <= 0;
             result_valid <= 0;
-        end else if (advance) begin
+        end else if (advance_r) begin
             if (dst_byte_skip) begin
                 // Empty output byte; the input byte still joins the queue.
                 for (plane=0; plane<4; plane=plane+1)

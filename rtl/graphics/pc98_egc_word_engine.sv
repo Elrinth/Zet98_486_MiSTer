@@ -27,7 +27,8 @@ module pc98_egc_word_engine #(
     input wire [63:0] memory_readdata
 );
     localparam [3:0] IDLE=0, READ_MEMORY=1, READ_RESULT=2,
-        WRITE_SHIFT=3, WRITE_BUILD=4, WRITE_MEMORY=5, RELEASE=6, REJECT=7;
+        WRITE_SHIFT=3, WRITE_BUILD=4, WRITE_MEMORY=5, RELEASE=6, REJECT=7,
+        READ_ALIGN=8, WRITE_ALIGN=9;
     reg [3:0] state;
     reg reset_pending;
     // Posted writes: a valid word write is acknowledged when accepted and the
@@ -159,8 +160,10 @@ module pc98_egc_word_engine #(
                 READ_MEMORY: if (memory_acknowledge) begin
                     returned_words<=memory_readdata;
                     if (transfer_operation[9:8] == 1) pattern_latch<=pattern_merge;
-                    state<=READ_RESULT;
+                    // The shifter result follows its second stage.
+                    state<=transfer_operation[10] ? READ_RESULT : READ_ALIGN;
                 end
+                READ_ALIGN: state<=READ_RESULT;
                 READ_RESULT: begin
                     // NP2's native word-read convention. Compare-mode behavior
                     // differs in other references and remains an integration gate.
@@ -172,7 +175,8 @@ module pc98_egc_word_engine #(
                     if (!transfer_operation[10]) retained_source<=shifted_words;
                     acknowledge<=!reset_pending && !soft_reset; state<=RELEASE;
                 end
-                WRITE_SHIFT: state<=WRITE_BUILD;
+                WRITE_SHIFT: state<=WRITE_ALIGN;
+                WRITE_ALIGN: state<=WRITE_BUILD;
                 WRITE_BUILD: begin
                     // Coefficients stay held throughout arbitrary memory waits.
                     memory_base<=next_base; memory_xor_mask<=next_mask;

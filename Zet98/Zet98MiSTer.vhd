@@ -189,6 +189,7 @@ generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :int
 port(
     clk, reset :in std_logic;
     cache_invalidate, cache_upper_ram_native :in std_logic;
+    cache_window_write, cache_window_ab :out std_logic;
     cpu_speed_sel :in std_logic_vector(1 downto 0);
     interrupt_do :in std_logic;
     interrupt_vector :in std_logic_vector(7 downto 0);
@@ -1987,6 +1988,7 @@ signal	cpuack	:std_logic;
 signal	cpu_iord	:std_logic;
 signal	cpu_iowr	:std_logic;
 signal	cpu_dbus	:std_logic_vector(15 downto 0);
+signal	cpu_vector	:std_logic_vector(7 downto 0);
 
 --DMA
 signal	DMA_CS	:std_logic;
@@ -2025,6 +2027,10 @@ signal dma_mem_high, dma_mem_low :std_logic_vector(8 downto 0);
 signal dbus_high, dbus_low :std_logic_vector(8 downto 0);
 signal cache_invalidate :std_logic;
 signal cache_upper_ram_native :std_logic;
+signal cache_window_write, cache_window_ab, cache_window_alias :std_logic;
+signal cache_window_address :std_logic_vector(19 downto 1);
+signal cache_invalidate_held, cache_window_alias_r :std_logic := '0';
+signal cache_invalidate_cpu :std_logic;
 signal	bussel	:std_logic_vector(1 downto 0);
 
 --io port
@@ -2655,11 +2661,12 @@ begin
         cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE, CLOCK_RATE_MHZ=>SYSFREQ/1000, PEGC_ENABLE=>PEGC_ENABLE) port map(
             cpu_speed_sel=>pCPUSpeed,
             clk=>cpuclk, reset=>not srstn,
-            interrupt_do=>INTM, interrupt_vector=>cpu_dbus(7 downto 0), interrupt_done=>tgca,
+            interrupt_do=>INTM, interrupt_vector=>cpu_vector, interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
             bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open, debug_snapshot=>pCPUDebug,
-            cache_invalidate=>cache_invalidate, cache_upper_ram_native=>cache_upper_ram_native,
+            cache_invalidate=>cache_invalidate_cpu, cache_upper_ram_native=>cache_upper_ram_native,
+            cache_window_write=>cache_window_write, cache_window_ab=>cache_window_ab,
             ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
             ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
             ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
@@ -2680,6 +2687,12 @@ begin
 		x"00" & INTM_ODAT				when INTM_OE='1' and tgca='1' else
 		x"00" & INTS_ODAT				when INTS_OE='1' and tgca='1' else
 		dbus;
+	-- The 486 reads only the acknowledged PIC's vector (FF if none drives it).
+	-- Keeping the peripheral data bus out of this path shortens its INTA read.
+	cpu_vector<=
+		INTM_ODAT	when INTM_OE='1' else
+		INTS_ODAT	when INTS_OE='1' else
+		x"ff";
 	
 	-- BEGIN PC98 DATA BUS
 	-- Bit 8 marks a driven lane. Resolve devices before DMA byte routing so
@@ -2968,6 +2981,25 @@ begin
                  bank89=>BNK89_SEL, bankab=>BNKAB_SEL,
                  invalidate=>cache_invalidate, upper_ram_native=>cache_upper_ram_native);
     -- END PC98 CACHE INVALIDATION
+    -- The decoded invalidate reaches the CPU one clock late, keeping the bus
+    -- decode out of the CPU's stall/ROM-address paths. A posted store to
+    -- 80000-BFFFF is strobed one clock after the CPU bridge accepts it, so the
+    -- accepted address predicts its own alias invalidation for that first
+    -- strobe clock; the registered decode covers the rest of the transfer.
+    cache_window_address <= "10" & cache_window_ab & "0000000000000000";
+    cache_window_policy : entity work.pc98_cache_policy generic map(UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE)
+        port map(dma_active=>'0', load_active=>LDR_OE, cpu_address=>cache_window_address,
+                 cpu_write=>'1', cpu_strobe=>cache_window_write, cpu_io=>'0',
+                 odd_io_address=>x"0000", io_write=>'0',
+                 bank89=>BNK89_SEL, bankab=>BNKAB_SEL,
+                 invalidate=>cache_window_alias, upper_ram_native=>open);
+    process(cpuclk) begin
+        if rising_edge(cpuclk) then
+            cache_invalidate_held <= cache_invalidate;
+            cache_window_alias_r <= cache_window_alias;
+        end if;
+    end process;
+    cache_invalidate_cpu <= cache_invalidate_held or cache_window_alias_r;
 	
 	DMAU_CS<='1' when ioaddr_odd(15 downto 3)=(x"002" & "0") and ioaddr_odd(0)='1' else '0';
 	DMAUM_CS<='1' when ioaddr_odd=x"0029" else '0';

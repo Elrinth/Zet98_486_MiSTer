@@ -14,10 +14,25 @@ module ao486_upper_cache_tb;
     wire bus_write, bus_strobe, bus_io, unmapped_access;
     wire io_write = bus_write && bus_strobe && bus_io;
     wire alias_write = bus_write && bus_strobe && !bus_io && bus_address[19:17] == 3'b101;
-    wire cache_invalidate = policy_invalidate &&
+    wire decoded_invalidate = policy_invalidate &&
         !(SKIP_INVALIDATION == 1 && alias_write) &&
         !(SKIP_INVALIDATION == 2 && dma_active) &&
         !(SKIP_INVALIDATION == 3 && io_write);
+    // Same CPU-side timing as Zet98MiSTer.vhd: the decode is registered and
+    // an accepted window store predicts its own first strobe clock.
+    wire cache_window_write, cache_window_ab, window_alias;
+    pc98_cache_policy window_policy (
+        .dma_active(1'b0), .load_active(1'b0), .cpu_address({2'b10, cache_window_ab, 16'b0}),
+        .cpu_write(1'b1), .cpu_strobe(cache_window_write), .cpu_io(1'b0),
+        .odd_io_address(16'h0000), .io_write(1'b0),
+        .bank89(bank89), .bankab(bankab), .invalidate(window_alias),
+        .upper_ram_native());
+    reg invalidate_held = 0, window_alias_r = 0;
+    always @(posedge clk) begin
+        invalidate_held <= decoded_invalidate;
+        window_alias_r <= window_alias && SKIP_INVALIDATION != 1;
+    end
+    wire cache_invalidate = invalidate_held || window_alias_r;
     pc98_cache_policy policy (
         .dma_active(dma_active), .load_active(1'b0), .cpu_address(bus_address),
         .cpu_write(bus_write), .cpu_strobe(bus_strobe), .cpu_io(bus_io),

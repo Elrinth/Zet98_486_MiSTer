@@ -5,8 +5,9 @@ module egc_append_tb;
     reg byte_mode=0, byte_lane=0;
     reg [15:0] shift_control=0;
     reg [63:0] source_words=0;
+    reg clk=0;
     pc98_egc_shift dut (
-        .clk(1'b0), .reset(1'b0), .reload(1'b0), .advance(1'b0),
+        .clk(clk), .reset(1'b0), .reload(1'b0), .advance(1'b0),
         .byte_mode(byte_mode), .byte_lane(byte_lane),
         .shift_control(shift_control), .bit_length(16'd15),
         .source_words(source_words), .shifted_words(), .clip_mask(), .result_valid()
@@ -32,6 +33,8 @@ module egc_append_tb;
                 source_words[16*plane +:16]=basis==16 ? 16'b0 : (16'b1<<((basis+plane)%16));
                 dut.pending[plane]=carry ? (16'h9a53 ^ (plane*16'h1357)) : 16'b0;
             end
+            // Load the registered rotation stage; no advance changes state.
+            #1 clk=1; #1 clk=0;
             #1;
             for (plane=0; plane<4; plane=plane+1) begin
                 input_word=source_words[16*plane +:16];

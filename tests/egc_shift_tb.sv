@@ -63,6 +63,10 @@ module egc_shift_tb;
                 write_register(16'h04ae, lengths);
             end
             @(negedge clk);
+            // Second shifter stage; the engine never advances back to back.
+            advance=0; reload=0;
+            source_words=~source_words;
+            @(negedge clk);
             if (clip_mask!==expected_mask ||
                 (shifted_words & {4{expected_mask}})!==expected_data ||
                 result_valid!==(expected_mask!=0))
