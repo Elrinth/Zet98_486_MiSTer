@@ -16,6 +16,18 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B248 adds native PC-9821 ROM banks, shadow RAM, software-DIP readback and
+precise segment checks for the supplied Ce2 and unknown-model BIOS sets. Both
+boot DOS and pass ROM-integrity, bank and GDC diagnostics. The recommended
+build runs at **75 MHz** and retains PR2, IC32/DC8, packed graphics, MIDI and
+the native-DDR framebuffer path. Its exact bitstream passes DOS qualification
+and Linux fault-restart checks with 100 normal process exits. The separate
+**90 MHz image is experimental** because it faults in Linux. No performance
+increase is claimed. Use the paired [OpenBIOS 2026-10-08 rebuild](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-08),
+or follow the [original NEC BIOS setup instructions](docs/OFFICIAL_BIOS_SETUP.md)
+to pack your own ROM set and install it on MiSTer. Release qualification and
+clock-specific limitations are recorded in the [BIOS guide](docs/BIOS_GUIDE.md).
+
 B247 fixes floppy disk changes with matching
 [OpenBIOS 2026-10-07](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-07).
 Sword Dancer now accepts Disk D in either drive and reaches gameplay and dialogue;
@@ -87,7 +99,8 @@ for the matching Policenauts/EMM386 floppy fix. This pair was checked on MiSTer:
 Policenauts and Cyberblock Metal Orange music is smooth, and Hokuto no Ken's
 N88-BASIC title and story scenes run with keyboard input.
 
-- **CPU:** z486 (486-class) at 90 MHz, **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
+- **CPU:** z486 (486-class), **75 MHz recommended / 90 MHz experimental**,
+  **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
   An OSD **CPU speed** setting slows the CPU for older speed-sensitive games
   (see [game setup notes](#game-setup-notes)).
 - **Graphics:** 640x400 16 colours from 4096, GRCG and EGC, 256-colour PEGC,
@@ -136,9 +149,10 @@ N88-BASIC title and story scenes run with keyboard input.
 
 ## Installing on MiSTer
 
-**OpenBIOS is recommended, not mandatory.** The known-working NEC PC-9801VM ROM
-still boots on B247. Both updates are needed specifically for the new Sword
-Dancer floppy-change fix. See the [BIOS choice and ROM packing guide](docs/BIOS_GUIDE.md)
+**OpenBIOS is recommended, not mandatory.** Use B248 with OpenBIOS 2026-10-08,
+or pack your own matching NEC ROM set. B248 adds the hardware behavior needed
+by the tested PC-9821Ce2 and unknown-model PC-9821 sets. See the
+[BIOS choice and ROM packing guide](docs/BIOS_GUIDE.md)
 for NEC compatibility tests, separate-ROM conversion and old Zet98 BIOS limits.
 
 - Copy the core `.rbf` to `/media/fat/_Computer/`.
@@ -146,7 +160,7 @@ for NEC compatibility tests, separate-ROM conversion and old Zet98 BIOS limits.
   B165; earlier builds use `/games/Zet98/`). Settings are saved as `PC98.CFG`.
 - `boot.rom`: either the free **[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)**
   (download its release zip; no NEC ROM needed), or a `boot.rom` built from
-  your own known-working PC-9801VM BIOS set (see [BIOS guide](docs/BIOS_GUIDE.md)).
+  your own matching, tested NEC BIOS set (see [original BIOS instructions](docs/OFFICIAL_BIOS_SETUP.md)).
 - `DEVICE=HIMEM.SYS` works without any extra driver since B165: the core's disk
   extension ROM publishes the extended RAM and clears the V30 flag that the
   PC-9801VM BIOS always sets. `Z98MEM.SYS`/`Z98FIX.SYS` are no longer needed.
@@ -343,7 +357,8 @@ EMM386.EXE.
 | Valis and other early (V30-era) games | CPU speed | Games that time themselves by CPU loops (written for an 8-10 MHz V30) can run too fast at Full; try **CPU speed: V30** (or 286). Not yet hardware-tested. |
 | Rusty, Nightslave, Bomber Quest, Brandish 2, Briganty, Branmarker 2, Dead of the Brain, Gate of Souls, Groundseed, Harlem Blade, Lemmings, Star Cruiser II, Starfire, The Screamer, Xenon, Yu-No | - | Reach the title or gameplay with either BIOS. |
 
-**CPU speed** (main menu): **Full** is the 90 MHz z486. **386/486** (~8 MIPS),
+**CPU speed** (main menu): **Full** uses the bitstream's clock (75 MHz in the
+recommended B248 build). **386/486** (~8 MIPS),
 **286** (~2 MIPS, a 286 at 10-12 MHz) and **V30** (~0.8 MIPS, a V30 at 8-10 MHz)
 limit only how fast the CPU executes instructions; the timer, video, sound,
 disk and DMA keep their real speed, so music tempo and frame timing do not
@@ -547,10 +562,11 @@ reach their menus and play on the 90 MHz z486 test build B164 (see below); sound
 
 The imported baseline is `dentnz/Zet98_MiSTer` commit
 `1efa2d5` (full upstream history retained). The MiSTer project is
-`Zet98/v17/Zet98.qpf`, revision `release-Zet98MiSTer`, using Quartus Lite 17.0.
-The internal core name remains `Zet98` during baseline work, preserving the
-existing game-directory and settings identity. The GitHub repository name is
-independent of that identifier.
+`Zet98/v17/Zet98.qpf`, revision `release-Zet98MiSTer`. New builds default to
+Quartus Lite 17.0.2 build 602; earlier builds used 17.0.0 build 595.
+The Quartus project retains the `Zet98` name. The runtime core name is
+`PC98`, using `games/PC98` and `PC98.CFG`. The GitHub repository name is
+independent of these identifiers.
 
 With Docker Desktop running, from PowerShell:
 
@@ -558,7 +574,14 @@ With Docker Desktop running, from PowerShell:
 ./scripts/build.ps1
 ```
 
-The B242 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
+The recommended B248 profile uses `-Cpu z486 -SystemClockMHz 75 -ExtendedRamMB 64
+-SoundBoard PC9801_86 -OpnaBackend JT08 -RegisterPacking Normal -RawIde
+-MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2
+-Z486ICacheKB 32 -Z486DCacheKB 8 -Seed 7 -NativeDdr
+-NativeDdrFramebufferOnly`. The separate 90 MHz B248 image is experimental:
+it passes DOS diagnostics but faults in the Linux test.
+
+The historical B242 release profile uses `-Cpu z486 -SystemClockMHz 90 -ExtendedRamMB 64
 -SoundBoard PC9801_86 -OpnaBackend JT08 -RegisterPacking Normal -RawIde
 -MidiUart -PackedGraphics -UpperRamICache -Z486PipelineRegs 2 -Seed 12
 -NativeDdr -NativeDdrFramebufferOnly`.
@@ -568,10 +591,11 @@ Pipeline value 2 keeps the effective-address register, removes the registered
 decoder entry delay and enables early data requests. The larger October 2026
 upstream z486 rewrite is not included.
 
-The script uses the locally installed `theypsilon/quartus-lite-c5:17.0` image
-by default. Override `-Image` and `-DockerContext` if needed. It compiles an
+The script uses the `theypsilon/quartus-lite-c5:17.0.2` image by default;
+install it with `docker pull theypsilon/quartus-lite-c5:17.0.2`.
+Override `-Image` and `-DockerContext` if needed. It compiles an
 isolated source snapshot under `build/`, retaining the log and Quartus reports.
-Builds default to three CPU cores and one concurrent Quartus container.
+Builds default to eight CPU cores and one concurrent Quartus container.
 `-BuildCpus` controls both the container CPU quota and Quartus worker count;
 `-MaxConcurrentBuilds` allows an explicit concurrency override (up to three).
 A launch is rejected while the chosen number of build containers is running.
