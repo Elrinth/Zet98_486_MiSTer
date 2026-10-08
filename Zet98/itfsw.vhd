@@ -23,9 +23,10 @@ begin
 		elsif(clk' event and clk='1')then
 			if(CS='1' and WR='1')then
 				case DIN is
-				when x"10" =>
+				-- 00h/02h are the PC-9821 aliases of 10h/12h.
+				when x"00" | x"10" =>
 					ITFEN<='1';
-				when x"12" =>
+				when x"02" | x"12" =>
 					ITFEN<='0';
 				when others =>
 				end case;

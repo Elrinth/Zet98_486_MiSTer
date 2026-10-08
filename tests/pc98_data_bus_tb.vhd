@@ -6,6 +6,10 @@ use std.env.all;
 
 entity pc98_data_bus_tb is end entity;
 architecture test of pc98_data_bus_tb is
+    -- Devices added after the legacy mux baseline remain inactive in this
+    -- equivalence test; their register behavior has separate testbenches.
+    signal SDIP_ODAT, FDC_MEDIA_DATA : std_logic_vector(7 downto 0) := x"FF";
+    signal SDIP_DOE, FDC_MEDIA_OE : std_logic := '0';
     signal pMPUReadData : std_logic_vector(7 downto 0) := x"5a";
     signal pMPUOE : std_logic := '0';
     signal legacy_bus : std_logic_vector(15 downto 0);

@@ -1,7 +1,7 @@
 #requires -Version 7.0
 param(
     [string]$DockerContext = 'desktop-linux',
-    [string]$QuartusImage = 'theypsilon/quartus-lite-c5:17.0',
+    [string]$QuartusImage = 'theypsilon/quartus-lite-c5:17.0.2',
     [string]$SimulationImage = 'zet98-mixed-sim:latest',
     [ValidateRange(1, 3)][int]$TestCpus = 1,
     [ValidateRange(1, 8)][int]$MemoryGB = 2,
@@ -48,7 +48,7 @@ try {
     $sourceFiles = @(git -c core.quotepath=false ls-files --cached --others --exclude-standard)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate simulation sources.' }
     foreach ($file in $sourceFiles) {
-        if ($file -match '(^|/)(db|incremental_db|output_files|build|test-assets|\.idea)/' -or
+        if ($file -match '(^|/)(db|incremental_db|output_files|build|test-assets|\.idea|flat-regression-evidence|segment-regression-evidence|xms-sim-output)/' -or
             $file -match '^releases/' -or $file -match '\.(log|qws)$') { continue }
         $inputFile = Join-Path $projectRoot $file
         if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { continue }

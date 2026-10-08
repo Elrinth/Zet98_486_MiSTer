@@ -590,3 +590,6 @@ set_global_assignment -name VERILOG_MACRO "MISTER_DISABLE_ADAPTIVE=1"
 set_global_assignment -name VERILOG_MACRO "MISTER_DOWNSCALE_NN=1"
 
 set_global_assignment -name VHDL_FILE ../../rtl/storage/pc98_floppy_events.vhd
+
+set_global_assignment -name VHDL_FILE ../../rtl/pc98_sdip.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/pc98_rombank.vhd

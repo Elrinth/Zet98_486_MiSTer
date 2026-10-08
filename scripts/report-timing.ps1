@@ -1,7 +1,7 @@
 #requires -Version 7.0
 param(
     [Parameter(Mandatory=$true)][string]$BuildDirectory,
-    [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
+    [string]$Image,
     [string]$DockerContext = 'desktop-linux',
     [ValidateRange(1, 3)][int]$BuildCpus = 1,
     [ValidateRange(2, 8)][int]$MemoryGB = 4,
@@ -11,6 +11,12 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'docker-command.ps1')
 $buildRoot = (Resolve-Path -LiteralPath $BuildDirectory).Path
+if (-not $Image) {
+    $imageRecord = Join-Path $buildRoot 'toolchain-image.txt'
+    $Image = if (Test-Path -LiteralPath $imageRecord) {
+        (Get-Content -LiteralPath $imageRecord -Raw).Trim()
+    } else { 'theypsilon/quartus-lite-c5:17.0.2' }
+}
 $sourceRoot = Join-Path $buildRoot 'source'
 $projectPath = Join-Path $sourceRoot 'Zet98/v17'
 if (-not (Test-Path -LiteralPath (Join-Path $projectPath 'db') -PathType Container)) {

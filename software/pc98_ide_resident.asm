@@ -1,5 +1,5 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
-; RAM-resident half of the Zet98 PC-98 disk option ROM. Only our D8000-DFFFF
+; RAM-resident half of the PC98 PC-98 disk option ROM. Only our D8000-DFFFF
 ; reserved RAM is used for code, state, scratch sectors and private stacks.
 bits 16
 cpu 386
@@ -614,7 +614,7 @@ int1f_old_gdtr: dw 0
     dd 0
 
 geometries: db 8,17, 8,32, 16,63, 16,32, 8,63, 4,17, 16,17, 8,33, 8,25, 4,32, 2,17, 0,0
-error_text: db 'Zet98: VHD boot failed. Use a raw 512-byte-sector PC-98 DOS image.',0
+error_text: db 'PC98: VHD boot failed. Use a raw 512-byte-sector PC-98 DOS image.',0,0 ; retain resident entry offsets
 %include "software/pc98_ide_read_bios.inc"
 %if ($-$$) > 4000h
 %error Resident BIOS overlaps scratch sectors

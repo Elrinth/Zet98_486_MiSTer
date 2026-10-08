@@ -7,15 +7,18 @@ module crash_recorder_de_tb;
     reg gate_read = 0;
     reg [31:0] gate_addr = 0, eip = 32'h0000fff0;
     reg [15:0] cs = 16'hf000;
+    reg io_wr = 0, io_rd = 0;
+    reg [15:0] io_addr = 0;
+    reg [31:0] io_wdata = 0, io_rdata = 0;
     wire tx;
     z486_crash_recorder #(.CLOCK_HZ(1152000), .DE_TRIGGER(1)) dut(.clk(clk), .gate_read(gate_read),
         .gate_addr(gate_addr), .cs(cs), .eip(eip), .eflags(32'h2), .pe(1'b0), .vm(1'b0), .pf_code(3'd0),
         .pf_addr(32'h0), .triple_fault(1'b0), .port_f0_write(1'b0), .port_f0_data(8'h00),
         .page_fault(1'b0), .walk_pde(32'h0), .walk_pte(32'h0), .cr3(32'h0), .a20(1'b1), .sp(16'h0),
         .mem_write(1'b0), .mem_addr(32'h0), .mem_data(32'h0), .mem_be(4'h0),
-        .io_wr(1'b0), .io_rd(1'b0), .io_addr(16'h0), .io_wdata(32'h0), .io_rdata(32'h0), .tx(tx));
+        .io_wr(io_wr), .io_rd(io_rd), .io_addr(io_addr), .io_wdata(io_wdata), .io_rdata(io_rdata), .tx(tx));
     reg [7:0] line[0:63]; integer n = 0, e_lines = 0; reg seen_b = 0, done = 0;
-    reg [127:0] last_e, far_e; integer far_n = 0;
+    reg [127:0] last_e, far_e; integer far_n = 0, sample_n = 0, io_n = 0;
     task automatic rx_byte(output [7:0] b);
         begin
             @(negedge tx); repeat (15) @(posedge clk);
@@ -33,6 +36,23 @@ module crash_recorder_de_tb;
                 v = 0; for (integer i = 1; i < 33; i++) v = {v[123:0], hv(line[i])};
                 if (v >> 124) begin e_lines++; last_e = v; end
                 if ((v >> 124) == 12) begin far_n++; far_e = v; end
+                if ((v >> 124) == 14) begin
+                    sample_n++;
+                    if (v[75:44] !== 32'h2) $fatal(1, "bad periodic EFLAGS sample");
+                end
+                if ((v >> 124) == 10 || (v >> 124) == 11) begin
+                    io_n++;
+                    case (io_n)
+                        1: if (v[127:108] !== {4'd10,16'h0439} || v[107:76] !== 32'hb4)
+                            $fatal(1, "bad POST register write: %h", v);
+                        2: if (v[127:108] !== {4'd11,16'h0439} || v[107:76] !== 32'hb4)
+                            $fatal(1, "bad POST register read: %h", v);
+                        3: if (v[127:108] !== {4'd10,16'h0080} || v[107:76] !== 32'ha55a)
+                            $fatal(1, "bad POST result marker: %h", v);
+                        default: $fatal(1, "unexpected I/O record: %h", v);
+                    endcase
+                    if (v[75:60] !== 16'h1234) $fatal(1, "I/O CS lost");
+                end
             end
             n = 0;
         end else begin line[n] = b; n++; end
@@ -40,6 +60,11 @@ module crash_recorder_de_tb;
     initial begin
         repeat (20) @(posedge clk);             // power-on at F000:FFF0: must not freeze
         @(negedge clk); cs = 16'h1234;
+        @(negedge clk); io_wr=1; io_addr=16'h0439; io_wdata=32'hb4;
+        @(negedge clk); io_wr=0; io_rd=1; io_rdata=32'hb4;
+        @(negedge clk); io_rd=0; io_wr=1; io_addr=16'h005f; io_wdata=32'hff;
+        @(negedge clk); io_addr=16'h0080; io_wdata=32'ha55a;
+        @(negedge clk); io_wr=0;
         for (integer k = 1; k <= 20; k++) begin    // real-mode interrupts (vector*4)
             @(negedge clk); gate_read = 1; gate_addr = 4 * (8 + k % 8); eip = k;
             @(negedge clk); gate_read = 0;
@@ -51,7 +76,9 @@ module crash_recorder_de_tb;
         wait (done);
         if (far_n < 1 || far_e[123:108] !== 16'h1234 || far_e[75:60] !== 16'hf000)
             $fatal(1, "CS change not logged: %0d entries, last %h", far_n, far_e);
-        if (e_lines != 21 + far_n) $fatal(1, "expected %0d entries, got %0d", 21 + far_n, e_lines);
+        if (io_n != 3) $fatal(1, "missing POST I/O records: %0d", io_n);
+        if (e_lines != 21 + far_n + sample_n + io_n)
+            $fatal(1, "expected %0d entries, got %0d", 21 + far_n + sample_n + io_n, e_lines);
         if (last_e[123:108] !== 16'h2345 || last_e[107:76] !== 32'h0000abcd || last_e[75:44] !== 0)
             $fatal(1, "newest entry is not the INT 0 fault: %h", last_e);
         $display("PASS: crash recorder DE_TRIGGER: real-mode vectors, freeze on INT 0 with the faulting CS:EIP, CS changes with the old CS:IP");

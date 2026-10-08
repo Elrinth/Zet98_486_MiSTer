@@ -487,6 +487,9 @@ port(
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
+	PCI_BANK :in std_logic := '0';
+	PCI_CS :out std_logic := '0';
+	PCI_WORD :out std_logic_vector(15 downto 0) := x"FFFF";
 	UMA_OPEN	:out std_logic;
 	SOUNDROM	:in std_logic;
 	SND_STUB	:out std_logic;
@@ -2052,6 +2055,7 @@ signal	IDEBIOSEN	:std_logic;
 signal	SCSIBIOSEN	:std_logic;
 signal	SASIBIOSEN	:std_logic;
 signal	SNDBIOSEN	:std_logic;
+signal IO439_LATCH, IO439_READ :std_logic_vector(7 downto 0);
 --IO0439(memory bank select)
 signal	IO043F_CS	:std_logic;
 signal	NECEMSSEL	:std_logic;
@@ -2398,6 +2402,10 @@ signal	TSTMP_DOE	:std_logic;
 signal	TSTMP_WAITn	:std_logic;
 
 --Machine status
+signal SDIP_ODAT, SDIP_DSW2 : std_logic_vector(7 downto 0);
+signal SDIP_DOE, SDIP_RAW_OE, ROMBANK_OE, ROMBANK_PCI, PCI_CS : std_logic;
+signal SDIP_RAW, ROMBANK_DATA : std_logic_vector(7 downto 0);
+signal PCI_WORD, DBIO_ROM_DATA : std_logic_vector(15 downto 0);
 signal	IN00f0_ODAT	:std_logic_vector(7 downto 0);
 signal	IN00f0_DOE	:std_logic;
 
@@ -2724,6 +2732,7 @@ begin
 		'1' & tGDCod					when tGDCoe='1' else
 		'1' & gGDCod					when gGDCoe='1' else
 		'1' & GPAL_ODAT				when GPAL_DOE='1' else
+		'1' & SDIP_ODAT when SDIP_DOE='1' else
 		'1' & IN00f0_ODAT				when IN00f0_DOE='1' else
 		'1' & FDC_MEDIA_DATA when FDC_MEDIA_OE='1' else
 		'1' & FDC_ODAT				when FDC_DOE='1' else
@@ -3013,6 +3022,7 @@ begin
 		
 		DBIOS_CS	=>DBIO_CS,
 		DBIOS_ADDR	=>DBIO_ADDR,
+        PCI_BANK=>ROMBANK_PCI, PCI_CS=>PCI_CS, PCI_WORD=>PCI_WORD,
 		UMA_OPEN	=>UMA_OPEN,
 		SOUNDROM	=>SND_ROMLOADED,
 		SND_STUB	=>SND_STUB,
@@ -3053,13 +3063,14 @@ begin
 --		q			=>DBIO_ODAT
 --	);
     ide_boot_firmware: if USE_IDE_BOOTROM/=0 generate
-        firmware: pc98_ide_bootrom port map(cpuclk,DBIO_ADDR,DBIO_ODAT);
+        firmware: pc98_ide_bootrom port map(cpuclk,DBIO_ADDR,DBIO_ROM_DATA);
     end generate;
     no_ide_boot_firmware: if USE_IDE_BOOTROM=0 generate
-        DBIO_ODAT<=(others=>'1');
+        DBIO_ROM_DATA<=(others=>'1');
     end generate;
 
-	DBIO_DOE<=	MRD when DBIO_CS='1' else '0';
+	DBIO_ODAT <= PCI_WORD when PCI_CS='1' else DBIO_ROM_DATA;
+	DBIO_DOE<=	MRD when DBIO_CS='1' or PCI_CS='1' else '0';
 	UMA_DOE<=	MRD when UMA_OPEN='1' else '0';
 	SND_DOE<=	MRD when SND_STUB='1' else '0';
 
@@ -3175,7 +3186,8 @@ begin
 		memory_acknowledge=>G_ACK, memory_readdata=>G_RDAT
 	);
 
-	IN00f0_ODAT<="11101011";
+	-- 386/486 models report no alternate-CPU switch request (NP2kai/MAME).
+	IN00f0_ODAT<=x"00" when CPU486/=0 else x"EB";
 	IN00f0_DOE<='1' when ioaddr_even=x"00f0" and iord='1' else '0';
 	
 	IO043F_CS<='1' when ioaddr_odd=x"043f" else '0';
@@ -3892,7 +3904,17 @@ begin
 		rstn	=>srstn
 	);
 	
-	SYSP_PAI<=pDip2;
+    software_dip : entity work.pc98_sdip port map(
+        clk=>cpuclk, rstn=>srstn, even_address=>ioaddr_even,
+        odd_address=>ioaddr_odd, rd=>iord, wr=>iowr, wdata=>io_wdata,
+        legacy_dsw2=>pDip2, rdata=>SDIP_RAW, dsw2=>SDIP_DSW2, oe=>SDIP_RAW_OE);
+    firmware_bank : entity work.pc98_rombank port map(
+        clk=>cpuclk, rstn=>srstn, even_address=>ioaddr_even,
+        rd=>iord, wr=>iowr, wdata=>io_wdata(7 downto 0),
+        rdata=>ROMBANK_DATA, oe=>ROMBANK_OE, pci_bank=>ROMBANK_PCI);
+    SDIP_ODAT <= ROMBANK_DATA when ROMBANK_OE='1' else SDIP_RAW;
+    SDIP_DOE <= ROMBANK_OE or SDIP_RAW_OE;
+	SYSP_PAI<=SDIP_DSW2;
 	SYSP_PBI<="0000100" & RTC_CDAT;
 	SYSP_PCI<=SYSP_PCO;
 	BEEPON<=not SYSP_PCO(3);
@@ -3930,43 +3952,50 @@ begin
 		rstn	=>srstn
 	);
 
-	O439	:IO_WR generic map(x"0439") port map(
+	-- BEGIN PC98 DMA CONTROL READBACK
+	IO439_LATCH(2)<=DMA1MMASK;
+	IO439_LATCH(1)<=FASTLIOBIOSEN;
+	-- PC-9821 POST writes 00h here before restarting; forcing bit 3
+	-- high prevents that restart path. Retain the complete readback latch.
+	IO439_READ<=IO439_LATCH when CPU486/=0 else x"08";
+	O439	:entity work.IO_WR generic map(x"0439") port map(
 		ADR		=>ioaddr_odd,
 		WR		=>iowr,
 		DAT		=>io_wdata(15 downto 8),
 		
-		bit7	=>open,
-		bit6	=>open,
-		bit5	=>open,
-		bit4	=>open,
-		bit3	=>open,
+		bit7	=>IO439_LATCH(7),
+		bit6	=>IO439_LATCH(6),
+		bit5	=>IO439_LATCH(5),
+		bit4	=>IO439_LATCH(4),
+		bit3	=>IO439_LATCH(3),
 		bit2	=>DMA1MMASK,
 		bit1	=>FASTLIOBIOSEN,
-		bit0	=>open,
+		bit0	=>IO439_LATCH(0),
 
 		clk		=>cpuclk,
 		rstn	=>srstn
 	);
 	
-	I439	:IO_RD generic map(x"0439") port map(
+	I439	:entity work.IO_RD generic map(x"0439") port map(
 		ADR		=>ioaddr_odd,
 		RD		=>iord,
 		DATOUT	=>IO439_ODAT,
 		DATOE	=>IO439_DOE,
 		
-		bit7	=>'0',
-		bit6	=>'0',
-		bit5	=>'0',
-		bit4	=>'0',
-		bit3	=>'1',
+		bit7	=>IO439_READ(7),
+		bit6	=>IO439_READ(6),
+		bit5	=>IO439_READ(5),
+		bit4	=>IO439_READ(4),
+		bit3	=>IO439_READ(3),
 		bit2	=>DMA1MMASK,
 		bit1	=>FASTLIOBIOSEN,
-		bit0	=>'0',
+		bit0	=>IO439_READ(0),
 
 		clk		=>cpuclk,
 		rstn	=>srstn
 	);
 	
+	-- END PC98 DMA CONTROL READBACK
 	FDCH_CS<=	'1' when (ioaddr_even(15 downto 2)="00000000100100" and ioaddr_even(0)='0')else '0';
 	FDCD_CS<=	'1' when (ioaddr_even(15 downto 2)="00000000110010" and ioaddr_even(0)='0')else '0';
 	FDC_CSn<=	not FDCH_CS when FDCIF_H_Dn='1' else

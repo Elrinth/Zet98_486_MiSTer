@@ -266,12 +266,22 @@ module z486_pc98_adapter #(
                           .DE_LOG_DATA(RECORDER_LOG_DATA),
                           .DE_FREEZE_DATA(RECORDER_FREEZE_DATA)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
-        .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm), .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr),
+        .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
-        .port_f0_data(io_write_data[7:0]), .page_fault(dbg_page_fault), .walk_pde(dbg_walk_pde),
-        .walk_pte(dbg_walk_pte), .cr3(dbg_cr3), .a20(a20_enable), .sp(dbg_sp),
+        .port_f0_data(io_write_data[7:0]), .a20(a20_enable), .sp(dbg_sp),
+`ifdef ZET98_RECORDER_POST_ONLY
+        // POST diagnosis needs I/O, CS changes, mode changes and exception
+        // vectors. Remove unrelated memory watches/page-walk payload hardware.
+        .pf_code(3'd0), .pf_addr(32'd0), .page_fault(1'b0),
+        .walk_pde(32'd0), .walk_pte(32'd0), .cr3(32'd0),
+        .mem_write(1'b0), .mem_addr(32'd0), .mem_data(32'd0), .mem_be(4'd0),
+`else
+        .pf_code(dbg_pf_code), .pf_addr(dbg_pf_addr), .page_fault(dbg_page_fault),
+        .walk_pde(dbg_walk_pde), .walk_pte(dbg_walk_pte), .cr3(dbg_cr3),
         .mem_write(avm_write && !avm_waitrequest), .mem_addr({address, 2'b00}), .mem_data(write_data),
-        .mem_be(byte_enable), .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
+        .mem_be(byte_enable),
+`endif
+        .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
         .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),
         .io_rdata(io_read_data), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .tx(crash_tx));
 `else

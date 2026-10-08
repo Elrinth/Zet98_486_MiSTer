@@ -1,6 +1,6 @@
 #requires -Version 7.0
 param(
-    [string]$Image = 'theypsilon/quartus-lite-c5:17.0',
+    [string]$Image = 'theypsilon/quartus-lite-c5:17.0.2',
     [string]$DockerContext = 'desktop-linux',
     [ValidateRange(1, 16)]
     [int]$BuildCpus = 8,
@@ -20,6 +20,9 @@ param(
     [string]$OpnaBackend = 'Legacy',
     [ValidateSet('SparseAuto', 'Normal')]
     [string]$RegisterPacking = 'SparseAuto',
+    # Controlled fitter experiment for hold-repair routing congestion.
+    # This does not relax any setup, hold, or CDC constraints.
+    [switch]$NoBeneficialSkew,
     [switch]$LowMemoryCache,
     [switch]$UpperRamICache,
     [ValidateSet(8, 32, 64)]
@@ -48,6 +51,8 @@ param(
     # With -Z486DebugUart: the crash recorder freezes on the first real-mode
     # divide error (INT 0) and logs real-mode interrupts.
     [switch]$RecorderDivide,
+    # Compact POST trace: omit memory-write and page-fault details to save area.
+    [switch]$RecorderPostOnly,
     # With -RecorderDivide: also freeze on the first far transfer into this
     # real-mode CS (hex, e.g. 0DE3) to catch a wild jump.
     [string]$RecorderFreezeCs,
@@ -101,6 +106,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'docker-command.ps1')
+if ($NoBeneficialSkew -and $Cpu -ne 'z486') { throw 'NoBeneficialSkew is supported only by the z486 fitter profile.' }
 if ($Z486DebugUart -and ($Cpu -ne 'z486' -or $MidiUart)) { throw 'Z486 debug UART requires z486 and exclusive use of UART (omit MidiUart).' }
 if ($ExtendedRamMB -ne 0 -and $Cpu -eq 'Zet') { throw 'Extended RAM requires ao486 or z486.' }
 if ($RawIde -and $Cpu -eq 'Zet') { throw 'The native hard-disk boot ROM requires ao486 or z486 (386 instructions).' }
@@ -141,7 +147,7 @@ try {
     $sourceFiles = @(git -c core.quotepath=false ls-files --cached --others --exclude-standard)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate project source files.' }
     foreach ($sourceFile in $sourceFiles) {
-        if ($sourceFile -match '(^|/)(db|incremental_db|output_files|build|test-assets|\.idea)/' -or
+        if ($sourceFile -match '(^|/)(db|incremental_db|output_files|build|test-assets|\.idea|flat-regression-evidence|segment-regression-evidence|xms-sim-output)/' -or
             $sourceFile -match '^releases/' -or $sourceFile -match '\.(log|qws)$') { continue }
         $inputFile = Join-Path $projectRoot $sourceFile
         if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { continue }
@@ -166,6 +172,7 @@ try {
     [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
     [bool]$NativeDdr | Set-Content -LiteralPath (Join-Path $buildRoot 'native-ddr.txt')
     $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
+    (-not [bool]$NoBeneficialSkew) | Set-Content -LiteralPath (Join-Path $buildRoot 'beneficial-skew.txt')
     'OSD Full/33/8/3 MHz' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
     $Seed | Set-Content -LiteralPath (Join-Path $buildRoot 'fitter-seed.txt')
     $BuildCpus | Set-Content -LiteralPath (Join-Path $buildRoot 'build-cpus.txt')
@@ -204,6 +211,13 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR_FB_ONLY=1"
     }
     if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
+    if ($RecorderPostOnly -and (-not $RecorderDivide -or $RecorderITrace -or $RecorderITraceBranches -or $RecorderMatch -or $RecorderStack -or $RecorderWatchAddr -or $RecorderLogData -or $RecorderFreezeData)) {
+        throw 'RecorderPostOnly needs -RecorderDivide and cannot use instruction/memory watch options.'
+    }
+    [bool]$RecorderPostOnly | Set-Content -LiteralPath (Join-Path $buildRoot 'recorder-post-only.txt')
+    if ($RecorderPostOnly) {
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_POST_ONLY=1"
+    }
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
         if ($RecorderDivide) {
@@ -326,7 +340,7 @@ try {
         Add-Content -LiteralPath $projectSettings -Value @(
             'set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"',
             ('set_global_assignment -name QII_AUTO_PACKED_REGISTERS "' + $packingSetting + '"'),
-            'set_global_assignment -name ENABLE_BENEFICIAL_SKEW_OPTIMIZATION ON',
+            ('set_global_assignment -name ENABLE_BENEFICIAL_SKEW_OPTIMIZATION ' + $(if ($NoBeneficialSkew) { 'OFF' } else { 'ON' })),
             "set_global_assignment -name SEED $Seed",
             # B120 packed this opposite-edge transfer onto a 0.632 ns local
             # ASDATA route despite a 2.097 ns hold violation. Leave these few

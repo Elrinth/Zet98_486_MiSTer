@@ -641,6 +641,20 @@ independent of the fixed-lane RTL implementation.
 
 `run-z486-regression-batch.sh` runs the retained z486 suites and reports
 every result instead of stopping at the first failure.
+Its final segment checks use the production `pm16-limit` and `load-limits`
+runners. The old `segment-regression` and `flat-regression` runners build
+historical prototypes against pinned baseline sources and are not release
+qualification for the current integrated CPU.
+`run-z486-release-profile.sh` repeats the production limit checks and the
+general CPU/cache/64 MiB suite with the shipped PR2, IC32/DC8 configuration.
+`run-z486-pm16-limit.sh` reproduces the NEC UX POST segment-limit check with
+a self-authored program: a word read from a one-byte ES segment must deliver
+precise #GP(0), preserving AX and the faulting instruction address.
+`run-z486-load-limits.sh` checks production direct-load admission with 236
+protected/real-mode boundary, store/load, fault and instruction-placement
+cases. Both runners use the Verilator-equipped CPU simulation image and need
+no BIOS or game files. The placement cases check correctness; they do not
+independently establish that an internal replay or pipeline overlap occurred.
 `run-z486-flat-regression.sh` belongs to the unfinished flat-admission
 candidate: it refuses to run once `z486.sv` no longer matches its pinned base.
 
@@ -733,6 +747,64 @@ DWORD halves, broken buffer tags and missing write coherence must fail.
 off/on at the B243 cache and pipeline profile. Design and measured cycle
 changes are in `rtl/cpu/RAM_DWORD_READ.md`.
 
+### PC-9821 software DIP registers
+
+`run-sdip.sh` checks the two twelve-byte banks at 841Eh..8F1Eh, bank selection
+through 8F1Fh, storage retention across CPU reset, byte-lane isolation and held
+word writes. It also checks DSW2 parity/MEMSW translation and the 0534h CPU-mode
+readback. Settings start at FFh on FPGA configuration; this does not implement
+host-file persistence. Passing this device test does not establish BIOS boot
+compatibility, which requires a hardware test with the original ROM.
+
+`run-itfsw.sh` checks all 256 ITF bank commands from both bank states, including
+the PC-9821 `00h/02h` aliases, deselected cycles and reset. The original decoder
+fails the `02h` case. `run-dma-control.sh` extracts the production `0439h`
+readback wiring and checks all 256 values for all three CPU configurations,
+including zero reset status and preservation of the legacy Zet readback.
+
+`run-bios-shadow.sh` checks the POST ROM-to-shadow copy through both banked
+memory windows across all 96 KiB, followed by readback with ROM disabled.
+The original mapper directs the first copy destination into ROM storage and
+fails this test. These tests contain no NEC ROM bytes.
+
+`hardware/pc9821_boot_controls.asm` builds a self-contained combined boot ROM
+for a debug-UART core. It checks `0439h`, `F0h`, ITF bank aliases and a shadow
+copy whose data differs from the ROM source. `OUT 80h` reports `A55Ah` on
+success or `E001h..E007h` on failure, followed by an `INT 0` trace trigger.
+The `-RecorderPostOnly` build option keeps I/O, control-flow and exception
+tracing but omits memory watches and page-fault detail to reduce diagnostic
+area. It requires `-RecorderDivide`; it is not a normal release profile.
+
+`hardware/pc9821_memory_copy.asm` is a separate, self-authored boot ROM that
+checks 64 rounds of patterned 64 KiB RAM copies and execution of a rewritten
+RAM function. It reports `A55Ah` on success, `E101h` for a copy mismatch or
+`E102h` for incorrect RAM execution, followed by the `INT 0` trace trigger.
+This isolates basic memory behavior from NEC firmware and DOS; it does not
+test disk transfers or interrupt-driven operation. The recorder survives CPU
+reset, so reload the FPGA between independent runs and stop the MIDI serial
+reader after the core has loaded before collecting the trace.
+
 ### Keyboard request during interrupt service
 
 `run-kbconv-pic-eoi.sh` connects production KBCONV and z8259 using the byte adapter and mapping models from the keyboard transport test. Across five EOI delays and one/four-cycle acknowledgement, it checks queued make/break, extended arrows, modifiers and typematic, IRR clearing at acknowledge and stable vectors. The baseline loses the next keyboard edge at EOI; the corrected PIC preserves it. Production wire receiver coverage remains in `run-kbconv-backpressure.sh`. This integration regression does not by itself establish the cause of a particular game failure.
+
+### PC-9821 internal firmware bank
+
+`run-rombank.sh` exercises all 256 values of the `063Ch` bank selector,
+checks every word of its 32 KiB bank-1 window, and checks address isolation,
+I/O exclusion, both bank-window aliases and reset. The empty POST initializer
+at D800:000Ch returns without installing PCI services; this core has no PCI bus.
+The normal D800 resident RAM is visible again outside bank 1.
+
+`hardware/pc9821_rombank.asm` builds `ROMBANK.COM` for DOS. It checks selector
+readback, the banked POST entry and a far call/return, then verifies the original
+D800 RAM word and restores the original selector before reporting PASS/FAIL.
+It never writes D800 RAM. Run it on a private test disk, with no memory manager
+remapping that region. A model with the bank overlay removed fails the probe.
+
+Hardware validation on `quartus-20261007-221549-e92d94` (75 MHz, IC32/DC8)
+passes this probe with OpenBIOS, original Ce2 and unknown-model PC-9821 ROMs.
+The previous `134406-6f11c9` core fails the same DOS probe, without corrupting
+its running DOS session. Both original PC-9821 ROMs also run `DIR` after
+repeat FPGA reloads; a private ROM fingerprint probe verifies their identity.
+This does not qualify all PC-9821 bank services or application compatibility.

@@ -40,6 +40,9 @@ port(
 	
 	DBIOS_CS	:out std_logic;
 	DBIOS_ADDR	:out std_logic_vector(12 downto 1);
+	PCI_BANK :in std_logic := '0';
+	PCI_CS :out std_logic := '0';
+	PCI_WORD :out std_logic_vector(15 downto 0) := x"FFFF";
 	-- No device in C0000h-D7FFFh: reads float to FFh as on a PC-98, so
 	-- EMM386 can turn the block into UMB. The SDRAM cycle still runs (and
 	-- acknowledges) into unused shadow RAM.
@@ -147,7 +150,14 @@ begin
 		sel_MRAM;
 	
 		
-	SDWADDR<=	RAM_ITF+(allzero(27 downto 19) & (MODADDR-(ADDR_ITF & "000")))		when MSEL=sel_ITF else --or (MSEL=sel_RWIN8 and W8SEL=sel_ITF) or (MSEL=sel_RWINA and WASEL=sel_ITF)) else
+	-- PC-9821 POST copies ROM through the 80000h/A0000h windows into
+	-- shadow RAM, then enables that RAM with port 053Dh. Window writes
+	-- must not overwrite the ROM backing store or leave shadow RAM empty.
+	SDWADDR<=	RAM_MAIN+(allzero(27 downto 19) & MODADDR) when
+				DMAEN='0' and CPUOE='1' and CPUTGA='0' and
+				(SELADDR(19 downto 17)="100" or SELADDR(19 downto 17)="101") and
+				(MSEL=sel_BIOS or MSEL=sel_ITF) else
+				RAM_ITF+(allzero(27 downto 19) & (MODADDR-(ADDR_ITF & "000")))		when MSEL=sel_ITF else --or (MSEL=sel_RWIN8 and W8SEL=sel_ITF) or (MSEL=sel_RWINA and WASEL=sel_ITF)) else
 				RAM_BIOS+(allzero(27 downto 19) & (MODADDR-(ADDR_BIOS & "000")))		when MSEL=sel_BIOS else --or (MSEL=sel_RWIN8 and W8SEL=sel_BIOS) or (MSEL=sel_RWINA and WASEL=sel_BIOS)) else
 				RAM_SOUND+(allzero(27 downto 19) & (MODADDR-(ADDR_SOUND & "000")))	when MSEL=sel_SOUND and SOUNDEN='1' else
 				RAM_SASI+(allzero(27 downto 19) & (MODADDR-(ADDR_SASI & "000")))		when MSEL=sel_SASI else
@@ -205,7 +215,15 @@ begin
 				'1' when MSEL=sel_SASI else
 				'0';
 
-	-- D8000h-DFFFFh stays RAM: the disk BIOS resident lives there.
+	-- Internal PCI-bank POST entry. No PCI devices exist in this core, so
+	-- D800:000C returns without installing services. Do not execute the disk
+	-- BIOS resident underneath it. Bank-window aliases use MODADDR too.
+	-- Writes still reach underlying RAM; switching back restores its contents.
+	PCI_CS <= '1' when PCI_BANK='1' and MSEL=sel_MRAM and
+		MODADDR(19 downto 15)="11011" and (CPUTGA='0' or DMAEN='1') else '0';
+	PCI_WORD <= x"FFCB" when MODADDR(14 downto 1)="00000000000110" else x"FFFF";
+
+	-- Outside PCI bank 1, D8000h-DFFFFh stays RAM for the disk BIOS resident.
 	UMA_OPEN<=	'0' when CPUTGA='1' and DMAEN='0' else
 				'0' when CPUSEG<x"c000" or CPUSEG>=x"d800" else
 				'1' when MSEL=sel_MRAM else

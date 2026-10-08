@@ -2232,7 +2232,41 @@ wire [2:0] d2_vipt_dst_wide = (d2_vipt_write_size == 2'd0)
 assign d2_vipt_dst_onehot = 8'h01 << d2_vipt_dst_wide;
 assign d2_vipt_result_kind = !d2_vipt_movx ? LOAD_RESULT_COPY :
     (i_bus.opcode[3] ? LOAD_RESULT_SIGN_EXTEND : LOAD_RESULT_ZERO_EXTEND);
-assign d2_vipt_candidate = !hardwired_off &&
+// Direct loads bypass the microcode segment check. Admit only complete
+// 64 KiB / 4 GiB segments, with the entire access inside their bounds.
+// Unusual limits (including the NEC ITF's one-byte segment), expand-down
+// segments and unreadable descriptors retain precise microcode fault handling.
+wire [31:0] d2_vipt_offset = issue_eff_mask ? ea_early : {16'b0, ea_early[15:0]};
+// Decode each descriptor before selection: muxing the full limit/attributes
+// here costs FPGA area and adds a wide mux to the instruction issue path.
+wire [7:0] d2_vipt_seg_64k, d2_vipt_seg_4g, d2_vipt_seg_readable;
+genvar seg;
+generate for (seg = 0; seg < 8; seg = seg + 1) begin : g_vipt_seg_class
+    if (seg < 6) begin
+        assign d2_vipt_seg_64k[seg] = desc_cache[seg].G
+            ? (desc_cache[seg].limit == 20'h0000f)
+            : (desc_cache[seg].limit == 20'h0ffff);
+        assign d2_vipt_seg_4g[seg] = desc_cache[seg].G && (&desc_cache[seg].limit);
+        assign d2_vipt_seg_readable[seg] = desc_cache[seg].P && desc_cache[seg].S &&
+            (desc_cache[seg].seg_type[3] ? desc_cache[seg].seg_type[1]
+                                       : !desc_cache[seg].seg_type[2]);
+    end else begin
+        assign d2_vipt_seg_64k[seg] = 1'b0;
+        assign d2_vipt_seg_4g[seg] = 1'b0;
+        assign d2_vipt_seg_readable[seg] = 1'b0;
+    end
+end endgenerate
+wire d2_vipt_64k_end_ok = (d2_vipt_mem_size == 2'd0) ||
+    ((d2_vipt_mem_size == 2'd1) && (d2_vipt_offset[15:0] != 16'hffff)) ||
+    ((d2_vipt_mem_size == 2'd2) && (d2_vipt_offset[15:0] <= 16'hfffc));
+wire d2_vipt_4g_end_ok = (d2_vipt_mem_size == 2'd0) ||
+    ((d2_vipt_mem_size == 2'd1) && (d2_vipt_offset != 32'hffffffff)) ||
+    ((d2_vipt_mem_size == 2'd2) && (d2_vipt_offset <= 32'hfffffffc));
+wire d2_vipt_readable = !pe || vm || d2_vipt_seg_readable[i_bus.mem_seg[2:0]];
+wire d2_vipt_segment_ok = i_bus.mem_seg <= SEG_GS && d2_vipt_readable &&
+    ((d2_vipt_seg_64k[i_bus.mem_seg[2:0]] && (d2_vipt_offset[31:16] == 0) && d2_vipt_64k_end_ok) ||
+     (d2_vipt_seg_4g[i_bus.mem_seg[2:0]] && d2_vipt_4g_end_ok));
+assign d2_vipt_candidate = d2_vipt_segment_ok && !hardwired_off &&
                            (i_bus.rep_lock == PREFIX_NOREPLOCK) &&
                            (d2_vipt_plain_mov || d2_vipt_movx || d2_vipt_alu) &&
                            i_bus.has_modrm &&
