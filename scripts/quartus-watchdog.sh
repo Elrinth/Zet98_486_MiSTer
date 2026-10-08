@@ -11,13 +11,19 @@
 #
 # If no line is written for STALL_MINUTES, or the whole run exceeds
 # MAX_MINUTES, save per-thread diagnostics, print a Z98_WATCHDOG line, stop
-# every Quartus process and exit 125 (stall) or 124 (time limit). The
+# every Quartus process and exit 125 (stall) or 124 (time limit). A routing
+# failure after a slow first routing pass stops early with exit 126. The
 # Zet98Monitor recognizes both exit codes and the Z98_WATCHDOG line.
 #
 # Usage: quartus-watchdog.sh "<command line>"   (from Zet98/v17)
 set -u
 STALL_MINUTES=${STALL_MINUTES:-25}
 MAX_MINUTES=${MAX_MINUTES:-150}
+# A routing failure after a slow first routing pass makes the fitter
+# re-place and route again. Across 267 completed builds, every such retry
+# followed a first pass of at most 11 minutes; the two retries after 15+
+# minute first passes never finished. Stop those early (0 disables).
+SLOW_RETRY_MINUTES=${SLOW_RETRY_MINUTES:-13}
 POLL_SECONDS=${POLL_SECONDS:-30}
 dir=/project/Zet98/v17/watchdog
 mkdir -p "$dir"
@@ -72,7 +78,12 @@ while kill -0 "$child" 2>/dev/null; do
         diagnostics "silent for ${silent}s (still running)"
     fi
     reason=""; code=0
-    if [ "$silent" -ge $(( STALL_MINUTES * 60 )) ]; then
+    first_route=$(grep -m1 -o 'Fitter routing operations ending: elapsed time is [0-9]*:[0-9]*' "$log" | awk -F'[ :]+' '{print $(NF-1)*60+$NF}')
+    if [ "$SLOW_RETRY_MINUTES" -gt 0 ] && [ -n "$first_route" ] &&
+       [ "$first_route" -ge "$SLOW_RETRY_MINUTES" ] &&
+       grep -q 'Cannot fit design in device -- retrying' "$log"; then
+        reason="SLOW RETRY: routing failed after a ${first_route}-minute first pass; retries like this have not finished"; code=126
+    elif [ "$silent" -ge $(( STALL_MINUTES * 60 )) ]; then
         reason="STALL: no Quartus output for $(( silent / 60 )) min"; code=125
     elif [ "$elapsed" -ge $(( MAX_MINUTES * 60 )) ]; then
         reason="TIME LIMIT: build exceeded ${MAX_MINUTES} min"; code=124
@@ -82,7 +93,7 @@ while kill -0 "$child" 2>/dev/null; do
         last=$(grep -v '^Z98_WATCHDOG' "$log" | tail -n 1)
         echo "Z98_WATCHDOG $reason; last output: $last"
         echo "Z98_WATCHDOG diagnostics: $dir/diagnostics.txt (exported with the Quartus database)"
-        status "$( [ $code = 125 ] && echo stalled || echo time-limit )" "$silent" "$elapsed"
+        status "$( [ $code = 125 ] && echo stalled || ([ $code = 126 ] && echo slow-retry || echo time-limit) )" "$silent" "$elapsed"
         stop_quartus
         wait "$child" 2>/dev/null
         exit "$code"
