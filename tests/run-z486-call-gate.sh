@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-nasm -f bin ${CALL_GATE_DEFINES:-} tests/hardware/pm16_call_gate.asm -o "$out/csc.bin"
+nasm -f bin ${CALL_GATE_DEFINES--DFLAT_SS0 -DTARGET_RPL3} tests/hardware/pm16_call_gate.asm -o "$out/csc.bin"
 mapfile -t sources < <(tr -d '\r' < rtl/vendor/z486/sources.txt | sed 's@^@rtl/vendor/z486/@')
 verilator --binary --timing -j 2 -Wno-fatal -Wno-WIDTH -Wno-TIMESCALEMOD \
   -Wno-PINMISSING -Wno-UNOPTFLAT -DZET98_Z486 -DZ486_ALTERA_ALU -DZET98_Z486_DEBUG \
@@ -21,4 +21,4 @@ if ! (cd "$out"; "$out/obj/Vz486_xms_resident_tb" "+program=$out/csc.bin") > "$o
   exit 1
 fi
 grep -E 'PASS|FAIL|fatal' "$out/run.log" | tail -3
-echo "PASS: z486 ring-3 to ring-0 286 call gate with six parameter words and RETF 12, after DPL rewrite, 100 rounds"
+echo "PASS: z486 ring-3 to ring-0 286 call gate (${CALL_GATE_DEFINES--DFLAT_SS0 -DTARGET_RPL3}) with six parameter words and RETF 12, after DPL rewrite, 100 rounds"

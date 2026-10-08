@@ -233,10 +233,20 @@ reg [15:0] DS = 16'h0000;
 reg [15:0] FS = 16'h0000;
 reg [15:0] GS = 16'h0000;
 reg [15:0] LDTR, TR;                // Task Register
+// A call gate's code-segment selector RPL is ignored (Intel CALL/JMP
+// call-gate rules): the target DPL alone is checked against CPL and becomes
+// the new CPL. Windows 95 Setup builds 286 call gates whose target selectors
+// carry RPL 3 (SYSDETMG.DLL ring-0 port I/O). The microcode reads SLCTR[1:0]
+// again (UADDR_MORE_PRIVILEGE, TSS stack slot) before the pipelined WRITE_RPL
+// lands, so a stale RPL selected the wrong TSS stack. Between PTGATE (gate
+// accepted) and the target's PTGEN privilege test, the gate's target selector
+// is loaded with RPL 0, exactly like an ordinary RPL-0 gate target.
+reg        gate_target_check;
 reg [31:0] SLCTR;                   // Selector temp used by protected-mode descriptor microcode (32-bit: LAR/LSL store full descriptor hi DWORD)
 // Forward SLCTR from dest_value when being written in the same cycle
 wire        slctr_fwd_en = uc_exec && (uc_dest == DEST_SLCTR || uc_dest == DEST_TMP_TR) && !prot_is_ptovrr;
-wire [31:0] slctr_fwd = slctr_fwd_en ? dest_value : SLCTR;
+wire [31:0] slctr_dest_value = gate_target_check ? {dest_value[31:2], 2'b00} : dest_value;
+wire [31:0] slctr_fwd = slctr_fwd_en ? slctr_dest_value : SLCTR;
 
 wire [31:0] desc_raw_hi;            // Raw descriptor high DWORD, owned by protection_unit
 wire        seg_cmd_valid;          // Segmentation command executes at i_issue/uc_exec
@@ -1592,8 +1602,14 @@ end
 
 // synthesis translate_off
 always_ff @(posedge clk) begin
-    if (reset_n && fast_store_valid && dcache_req_valid)
+    if (reset_n && fast_store_valid && dcache_req_valid) begin
+        $display("WR_FAST COLLISION eip=%h uc=%h fast_be=%h fast_wdata=%h req_phys=%h req_write=%b mem_servicing=%b",
+                 dbg_EIP, uc_addr, fast_store_be, fast_store_wdata,
+                 dcache_req_phys_addr_raw, dcache_req_write, mem_servicing);
+`ifndef Z486_COLLISION_WARN
         $fatal(1, "WR_FAST collided with paging demand");
+`endif
+    end
     if (reset_n && uc_exec &&
         (i.ucode_action == RECIPE_ACTION_RMW_FAST) &&
         (uc_addr == (i.entry_point + 12'd1)) && !rd_fast_finish &&
@@ -2898,6 +2914,7 @@ always_ff @(posedge clk) begin
         dbg_first_done <= 1'b0;
         debug_ip <= 32'h0;
         gate_in_progress <= 1'b0;
+        gate_target_check <= 1'b0;
         interrupt_entry <= 1'b0;
         tf_active_r <= 1'b0;
         tf_trap_suppress_r <= 1'b0;
@@ -2941,6 +2958,10 @@ always_ff @(posedge clk) begin
 
             if (gate_detect_now)
                 gate_in_progress <= 1'b1;
+            if (pe && uc_aluop == ALUJMP_PTGATE)
+                gate_target_check <= 1'b1;
+            else if (uc_aluop == ALUJMP_PTGEN)
+                gate_target_check <= 1'b0;
         end
 
         if (direct_wb_retire && uc_active && !instr_eip_written && !any_fault)
@@ -2958,6 +2979,7 @@ always_ff @(posedge clk) begin
                 ((i_bus.boundary_action == BOUNDARY_ACTION_INTO) && EFLAGS[11]);
             instr_eip_written <= 1'b0;
             gate_in_progress <= 1'b0;
+            gate_target_check <= 1'b0;
         end
 
         if (q_flush && pe_mode_toggle_now)
@@ -3192,7 +3214,7 @@ always_ff @(posedge clk) begin
         // DSTREG/SRCREG/IRF).  Restore a leg if the ROM ever changes.
         case (uc_dest)
             DEST_TMP_TR: begin
-                SLCTR <= external_dest_value; // encoding 0x13 = SLCTR2, same register as SLCTR
+                SLCTR <= slctr_dest_value; // encoding 0x13 = SLCTR2, same register as SLCTR
             end
             DEST_TMPeIP: TMPeIP <= external_dest_value;
             DEST_TMPeSP: TMPeSP <= external_dest_value;
@@ -3240,7 +3262,7 @@ always_ff @(posedge clk) begin
             DEST_LDTR: LDTR <= external_dest_value[15:0];
             DEST_TR: TR <= external_dest_value[15:0];
             DEST_SLCTR: begin
-                SLCTR <= external_dest_value;
+                SLCTR <= slctr_dest_value;
             end
 
             DEST_IRF: begin

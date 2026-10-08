@@ -106,6 +106,15 @@ pm:     mov     ax, R0_DATA
 
 ring3:  mov     ax, R3_DATA
         mov     ds, ax
+%ifdef ESP_HIGH
+        ; Windows leaves ESP[31:16] nonzero with a 16-bit ring-3 SS (Win95
+        ; Setup: ESP 8001B2DA). Only SP addresses the stack; the gate must
+        ; copy its parameter words from SS:SP.
+        mov     eax, esp
+        and     eax, 0FFFFh
+        or      eax, 80010000h
+        mov     esp, eax
+%endif
         mov     ax, LDT_ALIAS
         mov     es, ax
         mov     ebp, 1
@@ -119,7 +128,13 @@ ring3:  mov     ax, R3_DATA
         and     byte [es:TDESC+5], 9Fh
         ; Gate: offset, selector, then count/type/access like SYSDETMG.
         mov     word [es:GDESC], gate_target
+%ifdef TARGET_RPL3
+        ; Windows stores AllocSelector's RPL-3 selector in the gate (2367h);
+        ; a call gate ignores its target selector's RPL.
+        mov     word [es:GDESC+2], TARGET | 3
+%else
         mov     word [es:GDESC+2], TARGET
+%endif
         mov     al, [es:GDESC+4]
         xor     al, 6
         and     ax, 0Fh
