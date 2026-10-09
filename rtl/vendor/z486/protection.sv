@@ -404,6 +404,11 @@ always_comb begin
             end
             if (!p)
                 pla_test_flags = 4'b0100;
+            // Selector past the GDT/LDT limit: #GP(selector), no descriptor read.
+            if (!p && s1_selector_oob) begin
+                pla_test_addr = 12'h85D;
+                pla_test_flags = 4'b0000;
+            end
             // else: 0x000 (pass)
         end
 
@@ -567,6 +572,11 @@ always_comb begin
             // Term 135: p → 0x85D
             if (p)
                 pla_test_addr = pla_test_addr | 12'h85D;
+            // Selector past the GDT/LDT limit: #GP(selector), no descriptor read.
+            if (!p && s1_selector_oob) begin
+                pla_test_addr = 12'h85D;
+                pla_test_flags = 4'b0000;
+            end
         end
 
         //----------------------------------------------------------------------
@@ -973,6 +983,13 @@ always_comb begin
             // Term 120: p → 0x592
             if (p)
                 pla_test_addr = 12'h592;
+            // Selector past the GDT/LDT limit: #GP(selector), no descriptor read.
+            // LxS decide at the later PTOVRR, where p is the present bit; a null
+            // selector is never out of bounds, so oob alone selects the fault.
+            if (s1_selector_oob) begin
+                pla_test_addr = 12'h85D;
+                pla_test_flags = 4'b0000;
+            end
         end
 
         //----------------------------------------------------------------------
@@ -984,6 +1001,13 @@ always_comb begin
                 pla_test_addr = 12'h592;
             end else begin
                 pla_test_flags = 4'b0100;
+            end
+            // Selector past the GDT/LDT limit: #GP(selector), no descriptor read.
+            // LxS decide at the later PTOVRR, where p is the present bit; a null
+            // selector is never out of bounds, so oob alone selects the fault.
+            if (s1_selector_oob) begin
+                pla_test_addr = 12'h85D;
+                pla_test_flags = 4'b0000;
             end
             // else: 0x000 (pass)
         end
@@ -1110,6 +1134,13 @@ always_comb begin
                 pla_test_flags = 4'b0100;
             end else begin
                 pla_test_addr = 12'h592;  // p → redirect
+            end
+            // Selector past the GDT/LDT limit: #GP(selector).
+            // LxS decide at the later PTOVRR, where p is the present bit; a null
+            // selector is never out of bounds, so oob alone selects the fault.
+            if (s1_selector_oob) begin
+                pla_test_addr = 12'h85D;
+                pla_test_flags = 4'b0000;
             end
         end
 
