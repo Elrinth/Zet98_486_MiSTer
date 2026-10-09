@@ -238,6 +238,11 @@ module z486_pc98_adapter #(
 `else
     localparam [31:0] RECORDER_FREEZE_GATE = 32'h0;
 `endif
+`ifdef ZET98_RECORDER_ARM_SECONDS
+    localparam integer RECORDER_ARM_SECONDS = `ZET98_RECORDER_ARM_SECONDS;
+`else
+    localparam integer RECORDER_ARM_SECONDS = 0;
+`endif
 `ifdef ZET98_RECORDER_FREEZE_GATE_EIP
     localparam [31:0] RECORDER_FREEZE_GATE_EIP = `ZET98_RECORDER_FREEZE_GATE_EIP;
 `else
@@ -276,7 +281,8 @@ module z486_pc98_adapter #(
                           .DE_LOG_DATA(RECORDER_LOG_DATA),
                           .DE_FREEZE_DATA(RECORDER_FREEZE_DATA),
                           .DE_FREEZE_GATE(RECORDER_FREEZE_GATE),
-                          .DE_FREEZE_GATE_EIP(RECORDER_FREEZE_GATE_EIP)) crash_recorder (
+                          .DE_FREEZE_GATE_EIP(RECORDER_FREEZE_GATE_EIP),
+                          .ARM_SECONDS(RECORDER_ARM_SECONDS)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),

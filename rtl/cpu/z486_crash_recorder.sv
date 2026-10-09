@@ -78,6 +78,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [31:0] DE_FREEZE_GATE = 32'h0,
                              // -RecorderFreezeGateEip: only when EIP is this value (0 = any).
                              parameter [31:0] DE_FREEZE_GATE_EIP = 32'h0,
+                             // -RecorderArmSeconds: ignore everything (and every reset-type
+                             // freeze) until this many seconds after the core starts.
+                             parameter integer ARM_SECONDS = 0,
                              // ITRACE = 3: log only stores of exactly DE_LOG_DATA (type 8,
                              // with the last issued EIP and the address), e.g. every copy of
                              // a handle value, until the watch freeze.
@@ -218,7 +221,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         de_at_ip_d <= de_at_ip;
         pf_d1 <= page_fault; pf_d2 <= pf_d1 && pe;
         if (mem_write && mem_addr[31:20] != 0) ext_writes <= ext_writes + 1'b1;
-        if (pe || IO_MODE || DE_TRIGGER) armed <= 1'b1;
+        if ((pe || IO_MODE || DE_TRIGGER) && up_seconds >= ARM_SECONDS) armed <= 1'b1;
         if (armed && !frozen && !pause && ev_valid && !(ev_type == 4'd5 && !armed)) begin
             ring[wp] <= entry;
             newest <= entry;

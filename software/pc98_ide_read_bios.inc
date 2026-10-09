@@ -152,7 +152,10 @@ bios_int1b:
     add edi,eax
     mov eax,edi
     add eax,ebx
-    cmp eax,100000h
+    ; DOS=HIGH keeps disk buffers in the HMA (FFFF:0010-FFFF:FFFF, linear up
+    ; to 10FFEFh); NEC's BIOS serves them. Rejecting buffers past 1 MB made
+    ; DOS and Windows 95 (V86 real-mode mapper) report write errors.
+    cmp eax,10FFF0h
     ja .range
     ; Use a stack bounce buffer: the service itself can later reside in ROM.
     ; [bp-516]: byte offset of the transfer in the current block (first only).
@@ -223,10 +226,8 @@ bios_int1b:
     pop ds
     lea si,[bp-512]
     add si,[bp-516]
-    mov eax,edi
-    shr eax,4
+    call .buffer_seg
     mov es,ax
-    and di,15
     call .chunk
 .copy:
     ; Keep the bounce buffer and status check, but avoid a string iteration
@@ -246,11 +247,9 @@ bios_int1b:
     ; Normalizing DS:SI per sector also handles a caller's 64K offset wrap.
     push esi
     push edi
-    mov eax,edi
-    shr eax,4
+    call .buffer_seg
     mov ds,ax
-    mov esi,edi
-    and si,15
+    movzx esi,di
     push ss
     pop es
     lea di,[bp-512]
@@ -294,6 +293,19 @@ bios_int1b:
     call bios_end_pio
     mov al,60h
     jmp .return
+; Linear EDI -> AX = segment, DI = offset; HMA addresses use segment FFFFh.
+.buffer_seg:
+    mov eax,edi
+    cmp eax,0FFFF0h
+    jae .hma_seg
+    shr eax,4
+    and di,15
+    ret
+.hma_seg:
+    sub eax,0FFFF0h
+    mov di,ax
+    mov ax,0FFFFh
+    ret
 ; ECX = bytes of this block to transfer: the rest of the block after the
 ; offset, or the remaining request if shorter.
 .chunk:
