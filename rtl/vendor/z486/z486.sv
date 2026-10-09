@@ -2458,10 +2458,6 @@ wire selector_null_wire = (slctr_fwd[15:3] == 13'b0) && !slctr_fwd[2];
 wire prot_jump_valid;               // Status outputs retained for debug visibility
 wire prot_validation_ok;
 wire prot_result_valid;
-wire [15:0] selector_desc_end = {slctr_fwd[15:3], 3'b111};
-wire selector_oob_wire = slctr_fwd[2]
-    ? ({12'h0, desc_cache[7].limit} < {4'h0, selector_desc_end})
-    : (gdt_limit[15:0] < selector_desc_end);
 // Protected-mode IDT limit: interrupt delivery writes the gate offset
 // (vector*8) to DESIDT; a gate whose last byte lies past IDTR.limit must
 // raise #GP(vector*8+2+EXT). The IDT is a base-0 pseudo-segment here, so the
@@ -2484,7 +2480,14 @@ always @(posedge clk)
     end
 wire [11:0] idt_gate_end = {1'b0, idt_gate_off_r} + 12'd7;
 wire idt_oob_r = idt_gate_pe_r && ({8'h0, idt_gate_end} > idt_limit);
-wire prot_int_gate_test = (uc_alu_src == TST_DES_INT_SW) || (uc_alu_src == TST_DES_INT_HW);
+// Descriptor-table bound from the SLCTR register (not the forwarded value):
+// the protection unit uses it in its first stage, one clock after the test,
+// when SLCTR already holds the tested selector. Keeps the late forward path
+// out of the comparator (it cost ~770 ALMs of duplication at 90 MHz).
+wire [15:0] slctr_desc_end = {SLCTR[15:3], 3'b111};
+wire selector_oob_reg = SLCTR[2]
+    ? ({12'h0, desc_cache[7].limit} < {4'h0, slctr_desc_end})
+    : (gdt_limit[15:0] < slctr_desc_end);
 
 wire [1:0]  prot_desc_dpl;
 wire        protun_write_low16_nonzero;
@@ -2506,7 +2509,8 @@ protection_unit protection_unit_inst (
     .selector_rpl(slctr_fwd[1:0]),
     .selector_ti(slctr_fwd[2]),
     .selector_null(selector_null_wire),
-    .selector_oob(prot_int_gate_test ? idt_oob_r : selector_oob_wire),
+    .selector_oob(selector_oob_reg),
+    .idt_oob(idt_oob_r),
 
     .cpl(cpl),
     .transition_rpl(SLCTR[1:0]),

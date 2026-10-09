@@ -35,8 +35,8 @@ for def in -DSOFT_INT "" -DFULL_IDT; do
 done
 echo 'PASS: gates past IDTR.limit raise #GP (INT DCh 6E2h, external vector FFh 7FBh); full IDT reaches gate 255'
 tr -d '\r' < rtl/vendor/z486/z486.sv |
-  sed 's/\.selector_oob(prot_int_gate_test ? idt_oob_r : selector_oob_wire),/.selector_oob(selector_oob_wire),/' > "$out/old_z486.sv"
-[ "$(grep -c 'selector_oob(selector_oob_wire),' "$out/old_z486.sv")" = 1 ]
+  sed "s/\.idt_oob(idt_oob_r),/.idt_oob(1'b0),/" > "$out/old_z486.sv"
+[ "$(grep -c "idt_oob(1'b0)," "$out/old_z486.sv")" = 1 ]
 build "$out/old_z486.sv"
 if run -DSOFT_INT; then echo 'FAIL: negative control (no IDT limit check) passed'; exit 1; fi
 echo 'PASS: negative control without the IDT limit check fails'

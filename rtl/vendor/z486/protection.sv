@@ -22,7 +22,8 @@ module protection_unit
     input        [1:0]  selector_rpl,     // Requested Privilege Level (bits[1:0])
     input               selector_ti,      // Table Indicator (0=GDT, 1=LDT)
     input               selector_null,    // Null selector (TI=0 AND Index=0)
-    input               selector_oob,     // Selector exceeds GDT/LDT limit
+    input               selector_oob,     // SLCTR exceeds GDT/LDT limit (registered inputs; used in stage 1)
+    input               idt_oob,          // Interrupt gate past IDTR.limit (registered; used in stage 1)
 
     // Processor State
     input        [1:0]  cpl,              // Current Privilege Level
@@ -193,7 +194,7 @@ logic [1:0] s1_desc_rpl;        // Pipelined descriptor_hi[1:0] (dest RPL for AR
 logic [1:0] s1_cpl;             // Pipelined CPL for CPL guards
 logic [1:0] s1_desc_dpl;        // Pipelined descriptor DPL for CPL guards
 logic       s1_desc_low16_nonzero;
-logic       s1_selector_oob;
+logic       s1_selector_oob;    // Stage-1 bound check: IDT for interrupt-gate tests, else GDT/LDT
 
 //==============================================================================
 // Stage 2 Pipeline Registers (PLA4 outputs)
@@ -341,7 +342,6 @@ always_ff @(posedge clk) begin
         s1_cpl <= 2'b0;
         s1_desc_dpl <= 2'b0;
         s1_desc_low16_nonzero <= 1'b0;
-        s1_selector_oob <= 1'b0;
         p1 <= 1'b0;
         p2 <= 1'b0;
         b13 <= 1'b0;
@@ -361,7 +361,6 @@ always_ff @(posedge clk) begin
         s1_cpl <= cpl_live;
         s1_desc_dpl <= desc_dpl;
         s1_desc_low16_nonzero <= descriptor_low16_nonzero;
-        s1_selector_oob <= selector_oob;
         p1 <= p1_comb;
         p2 <= p2_comb;
         b13 <= b13_comb;
@@ -374,6 +373,10 @@ always_ff @(posedge clk) begin
         a <= a_comb;
     end
 end
+
+// Bound flags come from registers already one clock behind the test.
+assign s1_selector_oob = (s1_test_const == TST_DES_INT_SW || s1_test_const == TST_DES_INT_HW)
+                       ? idt_oob : selector_oob;
 
 // PLA4 input uses registered state vector + registered test_const
 assign pla_test_input = {p1, p2, b13, b12, p,
