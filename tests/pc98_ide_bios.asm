@@ -24,6 +24,12 @@ start:
     mov word [1bh*4],bios_int1b
     mov word [1bh*4+2],0
     mov word [055ch],0023h
+    ; Windows 95's NECATAPI leaves device 1 (CD-ROM) selected on this bus;
+    ; an absent device reads status 00h. The BIOS must select the master
+    ; before polling status (INITIALIZE here, and the read below).
+    mov dx,064ch
+    mov al,0f0h
+    out dx,al
     mov ax,0380h
     int 1bh
     jc failed
@@ -54,6 +60,13 @@ start:
     mov esi,99aabbcch
     mov edi,0ddeeff00h
     mov eax,0aa550680h
+    push dx
+    push ax
+    mov dx,064ch
+    mov al,0f0h
+    out dx,al
+    pop ax
+    pop dx
     std
     int 1bh
     jc failed

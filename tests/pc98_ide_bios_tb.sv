@@ -137,7 +137,8 @@ module pc98_ide_bios_tb;
                                ide_delay=ide_delay-1;
                                if(ide_delay==0) ide_status=ide_next_status;
                            end
-                           bus_readdata={8'hff,ide_status};
+                           // Device 1 (absent) selected in the drive/head register: 00h.
+                           bus_readdata={8'hff,ports[16'h64c][4] ? 8'h00 : ide_status};
                        end
                        if(!held_write && held_addr==20'h00640) begin
                            if(ide_status!=8'h58 || held_select!=3) $fatal(1,"Invalid ATA data read");

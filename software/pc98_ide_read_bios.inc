@@ -73,6 +73,9 @@ bios_int1b:
 .selected:
     cld
     mov al,[ss:bp+29]
+%ifdef BIOS_ERROR_TRACE
+    mov [cs:bios_trace_cmd],al
+%endif
     and al,0fh
     cmp al,3
     je .initialize
@@ -168,6 +171,12 @@ bios_int1b:
     mov al,2                 ; polled PIO; no pending IRQ is left on return
     out dx,al
 .sector:
+    ; Select the master before reading its status: Windows 95's NECATAPI
+    ; shares this bus (CD-ROM as device 1) and, while trapping this BIOS's
+    ; port I/O in V86 mode, leaves device 1 selected. An absent device reads
+    ; status 00h, which the ready check took for "no drive" (60h): DOS and
+    ; Windows reported "cannot write to drive A:".
+    call bios_select_master
     call bios_wait_idle
     jc .io_failed
 %ifdef BIOS_ALLOW_WRITES
@@ -363,12 +372,49 @@ bios_int1b:
     and word [ss:bp+40],0fffeh
     cmp al,20h
     jb .restore
+%ifdef BIOS_ERROR_TRACE
+    ; Debug builds only: report the failed request on port 7FE8h (status,
+    ; caller AX, BX, CX, DX, ES, BP), then pass through CS = RESIDENT_SEGMENT+1
+    ; so a crash recorder with FREEZE_CS D801h freezes right here.
+    push ax
+    push dx
+    mov dx,7fe8h
+    out dx,ax
+    mov ax,[ss:bp+28]
+    out dx,ax
+    mov ax,[ss:bp+16]
+    out dx,ax
+    mov ax,[ss:bp+24]
+    out dx,ax
+    mov ax,[ss:bp+20]
+    out dx,ax
+    mov ax,[ss:bp+32]
+    out dx,ax
+    mov ax,[ss:bp+8]
+    out dx,ax
+    pop dx
+    pop ax
+    push ax
+    mov al,[cs:bios_trace_cmd]
+    and al,0fh
+    cmp al,5                ; freeze the recorder only for a failed WRITE
+    pop ax
+    jne .trace_back
+    jmp (RESIDENT_SEGMENT+1):(.trace_alias-10h)
+.trace_alias:
+    jmp RESIDENT_SEGMENT:.trace_back
+.trace_back:
+%endif
     or word [ss:bp+40],1
 .restore:
     popad
     pop es
     pop ds
     iret
+
+%ifdef BIOS_ERROR_TRACE
+bios_trace_cmd: db 0
+%endif
 
 bios_program_sector:
     mov eax,esi
@@ -437,10 +483,18 @@ bios_wait_write_complete:
     ret
 %endif
 
+; Drive/head register: device 0 (master), LBA mode. Clobbers AL, DX.
+bios_select_master:
+    mov dx,064ch
+    mov al,0e0h
+    out dx,al
+    ret
+
 bios_present:
     mov dx,0432h
     xor al,al
     out dx,al
+    call bios_select_master
     ; Continue with the bounded ready poll.
 bios_wait_idle:
     call bios_poll_begin
