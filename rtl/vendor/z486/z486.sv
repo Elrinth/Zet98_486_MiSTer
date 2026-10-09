@@ -2468,12 +2468,22 @@ wire selector_oob_wire = slctr_fwd[2]
 // segment unit cannot check it. Windows 95's VMM keeps a 60h-entry IDT and
 // relies on that #GP to reflect INT DCh and other high vectors; without it
 // the CPU took a "gate" from the data after the IDT and Windows hung after
-// "Init = Display Resources". The flag feeds the interrupt-gate tests.
-reg idt_oob_r;
+// "Init = Display Resources". The flag feeds the interrupt-gate tests, which
+// run several micro-steps after the DESIDT write: only the 11-bit gate offset
+// (vector*8 <= 7F8h) is captured there, keeping the late dest_value out of the
+// limit compare (an adder on it broke 90 MHz placement: MEMTEST failures).
+reg [10:0] idt_gate_off_r;
+reg        idt_gate_pe_r;
 always @(posedge clk)
-    if (!reset_n) idt_oob_r <= 1'b0;
-    else if (uc_exec && uc_dest == DEST_DESIDT)
-        idt_oob_r <= pe && ({12'h0, idt_limit} < (dest_value + 32'd7));
+    if (!reset_n) begin
+        idt_gate_off_r <= 11'd0;
+        idt_gate_pe_r <= 1'b0;
+    end else if (uc_exec && uc_dest == DEST_DESIDT) begin
+        idt_gate_off_r <= dest_value[10:0];
+        idt_gate_pe_r <= pe;
+    end
+wire [11:0] idt_gate_end = {1'b0, idt_gate_off_r} + 12'd7;
+wire idt_oob_r = idt_gate_pe_r && ({8'h0, idt_gate_end} > idt_limit);
 wire prot_int_gate_test = (uc_alu_src == TST_DES_INT_SW) || (uc_alu_src == TST_DES_INT_HW);
 
 wire [1:0]  prot_desc_dpl;
