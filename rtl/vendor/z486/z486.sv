@@ -2462,6 +2462,19 @@ wire [15:0] selector_desc_end = {slctr_fwd[15:3], 3'b111};
 wire selector_oob_wire = slctr_fwd[2]
     ? ({12'h0, desc_cache[7].limit} < {4'h0, selector_desc_end})
     : (gdt_limit[15:0] < selector_desc_end);
+// Protected-mode IDT limit: interrupt delivery writes the gate offset
+// (vector*8) to DESIDT; a gate whose last byte lies past IDTR.limit must
+// raise #GP(vector*8+2+EXT). The IDT is a base-0 pseudo-segment here, so the
+// segment unit cannot check it. Windows 95's VMM keeps a 60h-entry IDT and
+// relies on that #GP to reflect INT DCh and other high vectors; without it
+// the CPU took a "gate" from the data after the IDT and Windows hung after
+// "Init = Display Resources". The flag feeds the interrupt-gate tests.
+reg idt_oob_r;
+always @(posedge clk)
+    if (!reset_n) idt_oob_r <= 1'b0;
+    else if (uc_exec && uc_dest == DEST_DESIDT)
+        idt_oob_r <= pe && ({12'h0, idt_limit} < (dest_value + 32'd7));
+wire prot_int_gate_test = (uc_alu_src == TST_DES_INT_SW) || (uc_alu_src == TST_DES_INT_HW);
 
 wire [1:0]  prot_desc_dpl;
 wire        protun_write_low16_nonzero;
@@ -2483,7 +2496,7 @@ protection_unit protection_unit_inst (
     .selector_rpl(slctr_fwd[1:0]),
     .selector_ti(slctr_fwd[2]),
     .selector_null(selector_null_wire),
-    .selector_oob(selector_oob_wire),
+    .selector_oob(prot_int_gate_test ? idt_oob_r : selector_oob_wire),
 
     .cpl(cpl),
     .transition_rpl(SLCTR[1:0]),

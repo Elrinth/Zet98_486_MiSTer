@@ -922,6 +922,9 @@ always_comb begin
             // Term 67: !p1 !p !u ce rw → 0x871
             if (!p1 && !p && !u && ce && rw)
                 pla_test_addr = pla_test_addr | 12'h871;
+            // Gate past IDTR.limit: #GP(vector*8+2), the DPL-failure path.
+            if (s1_selector_oob)
+                pla_test_addr = 12'h865;
         end
 
         //----------------------------------------------------------------------
@@ -955,6 +958,9 @@ always_comb begin
                 pla_test_addr = 12'h8CC;
             end
             // else: 0x000 (pass)
+            // Gate past IDTR.limit: #GP(vector*8+2+EXT).
+            if (s1_selector_oob)
+                pla_test_addr = 12'h865;
         end
 
         //----------------------------------------------------------------------

@@ -14,6 +14,7 @@ module z486_xms_resident_tb;
     parameter EXT_RAM_DWORD_READ=1;
     parameter TRACE_LIMIT=2000;
     parameter PIT_PM_TEST=0;
+    parameter [7:0] IRQ_VECTOR=8'h08;   // vector the PIT_PM_TEST IRQ0 acknowledge returns
     parameter PM_PAYLOAD_TEST=0;
     parameter PM_MIN_DDR=1000;
     parameter WATCHDOG_NS=50000000;
@@ -39,7 +40,7 @@ module z486_xms_resident_tb;
     wire cache_invalidate=0;
     reg interrupt_do=0;
     wire cache_upper_ram_native = 0;
-    wire [7:0] interrupt_vector=PIT_PM_TEST ? 8'h08 : 0;
+    wire [7:0] interrupt_vector=PIT_PM_TEST ? IRQ_VECTOR : 0;
     wire interrupt_done,unmapped_access;
     wire [19:1] bus_address;
     wire [1:0] bus_select;
