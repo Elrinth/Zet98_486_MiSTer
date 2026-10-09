@@ -73,6 +73,11 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // -RecorderWatchAddr: with ITRACE, watch only this dword and
                              // match the whole {DE_MATCH, DE_MATCH2} value.
                              parameter [31:0] DE_WATCH_ADDR = 32'h0,
+                             // -RecorderFreezeGate: freeze on the first protected-mode IDT
+                             // gate read at this linear address (e.g. IDT base = vector 0).
+                             parameter [31:0] DE_FREEZE_GATE = 32'h0,
+                             // -RecorderFreezeGateEip: only when EIP is this value (0 = any).
+                             parameter [31:0] DE_FREEZE_GATE_EIP = 32'h0,
                              // ITRACE = 3: log only stores of exactly DE_LOG_DATA (type 8,
                              // with the last issued EIP and the address), e.g. every copy of
                              // a handle value, until the watch freeze.
@@ -250,6 +255,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             end
         end
         if (armed && timed_freeze) frozen <= 1'b1;
+        if (DE_FREEZE_GATE != 0 && armed && !pause && gate_read && pe && gate_addr == DE_FREEZE_GATE &&
+            (DE_FREEZE_GATE_EIP == 0 || eip == DE_FREEZE_GATE_EIP))
+            frozen <= 1'b1;
         // The watched store may complete in a cycle with no logged event.
         if (ITRACE && ITRACE != 3 && DE_FREEZE_DATA != 0 && armed && !pause && mem_write &&
             mem_data == DE_FREEZE_DATA &&
