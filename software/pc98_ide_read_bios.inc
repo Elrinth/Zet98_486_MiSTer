@@ -14,8 +14,13 @@ cpu 386
 %error Define BIOS_HEADS, BIOS_SECTORS and BIOS_CYLINDERS for the image
 %endif
 %endif
-%ifndef BIOS_POLL_LIMIT
-%define BIOS_POLL_LIMIT 1000000
+; Device waits end after BIOS_TIMEOUT units of the ARTIC counter's bits 8-23
+; (256 / 307.2 kHz = 0.83 ms; 12000 = 10 s), real time at any CPU speed. A
+; fixed count of status reads lasted well under a second at 90 MHz, shorter
+; than a MiSTer host stall on a VHD write: Win95's WININIT then reported
+; "cannot write to drive A:" (status 60h).
+%ifndef BIOS_TIMEOUT
+%define BIOS_TIMEOUT 12000
 %endif
 %ifdef BIOS_DYNAMIC_GEOMETRY
 ; Native boot ROM validates these DWORDs before installing the service.
@@ -374,9 +379,31 @@ bios_program_sector:
     mov dx,064eh
     ret
 
+; ECX bits 16-31 = start of a device wait (ARTIC bits 8-23). Keeps AL, DX.
+bios_poll_begin:
+    push ax
+    in ax,5eh
+    mov cx,ax
+    shl ecx,16
+    pop ax
+    ret
+
+; CF = 1 once BIOS_TIMEOUT has elapsed since bios_poll_begin. Keeps AL, DX, ECX.
+bios_poll_expired:
+    push ax
+    push ecx
+    in ax,5eh
+    shr ecx,16
+    sub ax,cx
+    pop ecx
+    cmp ax,BIOS_TIMEOUT
+    cmc
+    pop ax
+    ret
+
 %ifdef BIOS_ALLOW_WRITES
 bios_wait_write_complete:
-    mov ecx,BIOS_POLL_LIMIT
+    call bios_poll_begin
     mov dx,074ch
 .poll:
     in al,dx
@@ -391,8 +418,8 @@ bios_wait_write_complete:
     clc
     ret
 .again:
-    dec ecx
-    jnz .poll
+    call bios_poll_expired
+    jnc .poll
 .failed:
     stc
     ret
@@ -404,15 +431,14 @@ bios_present:
     out dx,al
     ; Continue with the bounded ready poll.
 bios_wait_idle:
-    mov ecx,BIOS_POLL_LIMIT
+    call bios_poll_begin
     mov dx,074ch
 .poll:
     in al,dx
     test al,80h
     jz .ready
-    dec ecx
-    jnz .poll
-    stc
+    call bios_poll_expired
+    jnc .poll
     ret
 .ready:
     ; Empty/unplugged buses must not count as ready.
@@ -425,7 +451,7 @@ bios_wait_idle:
     ret
 
 bios_wait_data:
-    mov ecx,BIOS_POLL_LIMIT
+    call bios_poll_begin
     mov dx,074ch
 .poll:
     in al,dx
@@ -436,8 +462,8 @@ bios_wait_data:
     test al,8
     jnz .ready
 .again:
-    dec ecx
-    jnz .poll
+    call bios_poll_expired
+    jnc .poll
 .failed:
     stc
     ret

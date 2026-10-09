@@ -36,6 +36,8 @@ def inp(uc,port,size,data):
   state['word']+=1
   if state['word']==256:state['status']=0x50
   return value
+ if port==0x5e:  # ARTIC bits 8-23: one BIOS timeout unit per read
+  state['artic']=(state.get('artic',0)+1)&65535;return state['artic']
  return ports.get(port,(1<<(8*size))-1)
 def interrupt(uc,vector,data):
  flags=uc.reg_read(UC_X86_REG_EFLAGS);cs=uc.reg_read(UC_X86_REG_CS);ip=uc.reg_read(UC_X86_REG_IP)

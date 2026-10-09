@@ -19,6 +19,7 @@ module pc98_ide_bios_tb;
     wire [15:0] bus_writedata;
     wire bus_write, bus_strobe, bus_io, unmapped_access;
     reg [15:0] bus_readdata = 0;
+    reg [15:0] artic = 0;
     reg bus_ack = 0;
     wire [127:0] debug_snapshot;
     wire [28:0] ddr_address;
@@ -126,6 +127,11 @@ module pc98_ide_bios_tb;
                            end
                        end
                        bus_readdata = {ports[held_addr[15:0]+16'd1], ports[held_addr[15:0]]};
+                       // ARTIC bits 8-23 (BIOS device timeouts): one unit per read, so a
+                       // BIOS_TIMEOUT of N allows N status polls as the old poll limit did.
+                       if(!held_write && held_addr==20'h0005e) begin
+                           bus_readdata=artic; artic=artic+16'd1;
+                       end
                        if(!held_write && (held_addr==20'h0074c || held_addr==20'h0064e)) begin
                            if(ide_delay>0) begin
                                ide_delay=ide_delay-1;

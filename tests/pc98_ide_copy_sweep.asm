@@ -6,7 +6,7 @@ org 1000h
 %define BIOS_HEADS 8
 %define BIOS_SECTORS 17
 %define BIOS_CYLINDERS 8162
-%define BIOS_POLL_LIMIT 256
+%define BIOS_TIMEOUT 256
 start:
     cli
     xor ax,ax
