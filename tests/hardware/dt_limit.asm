@@ -26,7 +26,7 @@ dq 0
 dq 00cf9a000000ffffh            ; 08h flat code
 dq 00cf92000000ffffh            ; 10h flat data
 dw ldt_end-ldt-1, ldt-0, 8200h, 0 ; 18h LDT (base patched below)
-dq 00cf92000000ffffh            ; 20h flat data
+dw 0fh, 1000h, 8280h, 0          ; 20h byte-granular LDT at 00801000h (base bit 23 set)
 dw 0, ldt-0, 8200h, 0080h       ; 28h the same LDT, page-granular (G=1, limit 0 = 4 KB)
 gdt_end:
 dq 00cf92000000ffffh            ; 30h past the limit: a valid-looking data trap
@@ -128,6 +128,39 @@ mov gs,ax
 mov ax,10h
 mov gs,ax
 cmp dword [gp_count],0
+jne fail
+; case 11: back to the byte-granular LDT (G=0); index 2 is past its limit again.
+mov ebp,11
+mov dword [gp_count],0
+mov dword [expect],14h
+mov dword [resume],.after11
+mov ax,18h
+lldt ax
+mov ax,14h
+mov gs,ax
+.after11:
+mov ax,10h
+mov gs,ax
+cmp dword [gp_count],1
+jne fail
+; case 12: a byte-granular LDT whose base has bit 23 set; index 2 is past its
+; 16-byte limit. G must come from descriptor bit 55, not base bit 23.
+mov ebp,12
+mov esi,ldt
+mov edi,00801000h
+mov ecx,6
+rep movsd
+mov dword [gp_count],0
+mov dword [expect],14h
+mov dword [resume],.after12
+mov ax,20h
+lldt ax
+mov ax,14h
+mov gs,ax
+.after12:
+mov ax,10h
+mov gs,ax
+cmp dword [gp_count],1
 jne fail
 mov ax,600dh
 jmp report
