@@ -9,7 +9,9 @@
 // Data is 16-bit at 0640h; task-file registers occupy even low-byte ports.
 // A byte OUT to 0640h holds the low byte until a byte OUT to 0641h supplies
 // the high byte and stores the word: Windows 95 splits trapped word writes
-// that way (NECATAPI.VXD writes 0640h, the VMM then 0641h).
+// that way (NECATAPI.VXD writes 0640h, the VMM then 0641h). Likewise a byte
+// IN from 0640h returns the low byte without advancing; the following byte
+// IN from 0641h returns the same word's high byte and advances.
 module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     input wire clk, reset,
     input wire [15:0] io_address, io_writedata,
@@ -67,6 +69,7 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     reg [27:0] current_lba;
     reg [7:0] word_index;
     reg previous_read, previous_write, data_read_active;
+    reg low_read_active = 0, high_pending = 0;
     wire channel = !bank[0];
     wire selected = channel && !device_head[4] && present;
     wire task_port = io_address >= 16'h0640 && io_address <= 16'h064e;
@@ -75,7 +78,10 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     wire decoded = !io_address[0] && io_select[0] && (task_port || control_port || bank_port);
     wire read_start = io_read && !previous_read && decoded;
     wire write_start = io_write && !previous_write && decoded;
-    assign io_oe = decoded && io_read;
+    wire data_phase;                                     // defined with busy below
+    wire high_byte_read = io_read && io_select==2'b10 && io_address_odd==16'h0641 &&
+        high_pending && data_phase;
+    assign io_oe = (decoded && io_read) || high_byte_read;
     wire hdd_irq = pending_irq && !control[1] && !control[2];
 
     // ---- secondary channel: ATAPI CD-ROM ----------------------------------
@@ -212,6 +218,8 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     wire busy = host_busy || state==READ_START || state==READ_WAIT ||
         state==WRITE_START || state==WRITE_WAIT || control[2];
     wire drq = state==READ_DATA || state==WRITE_DATA || state==IDENTIFY;
+    assign data_phase = selected && !busy && (state==READ_DATA || state==IDENTIFY);
+    wire [15:0] data_word = state==IDENTIFY ? identify_word(word_index) : {cpu_high,cpu_low};
     wire [7:0] status = !selected ? 8'b0 : busy ? 8'h80 :
                         8'h50 | (drq ? 8'h08 : 8'h00) | {7'b0,failed};
     always @* begin
@@ -219,10 +227,7 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
         case(io_address)
             16'h0430: io_readdata={8'hff,7'b0,present};
             16'h0432: io_readdata={8'hff,bank};
-            16'h0640: if(selected && !busy) begin
-                if(state==IDENTIFY) io_readdata=identify_word(word_index);
-                else if(state==READ_DATA) io_readdata={cpu_high,cpu_low};
-            end
+            16'h0640: if(data_phase) io_readdata=data_word;
             16'h0642: io_readdata={8'hff,selected ? error_reg : 8'hff};
             16'h0644: io_readdata={8'hff,count};
             16'h0646: io_readdata={8'hff,sector};
@@ -238,6 +243,7 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
                 io_readdata={8'hff,2'b11,~cd_readdata[3:0],!cd_readdata[4],cd_readdata[4]};
             else io_readdata=cd_readdata;
         end
+        if(high_byte_read) io_readdata={data_word[15:8],8'hff};
         if(!io_select[1]) io_readdata[15:8]=8'hff;
     end
 
@@ -273,14 +279,26 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
             device_head<=8'ha0; bank<=0; control<=0; error_reg<=1; failed<=0;
             pending_irq<=0; word_index<=0; left<=0; current_lba<=0;
             previous_read<=0; previous_write<=0; data_read_active<=0; low_pending<=0;
+            low_read_active<=0; high_pending<=0;
         end else begin
             if(read_start && io_address==16'h064e && channel) pending_irq<=0;
-            if(read_start && io_address==16'h0640 && selected && !busy &&
-               (state==READ_DATA || state==IDENTIFY)) data_read_active<=1;
+            if(read_start && io_address==16'h0640 && data_phase) begin
+                if(io_select[1]) data_read_active<=1;
+                else low_read_active<=1;           // low byte only: keep the word
+                high_pending<=0;
+            end
+            // Stay pending (and driven) until the CPU releases the IN.
+            if(io_read && !previous_read && high_byte_read) data_read_active<=1;
+            if(!io_read && low_read_active) begin
+                low_read_active<=0; high_pending<=1;
+            end
+            if(!(state==READ_DATA || state==IDENTIFY)) begin
+                low_read_active<=0; high_pending<=0;
+            end
             // Change the read pointer only after the CPU has sampled/released
             // the bus. A held IN strobe never consumes multiple data words.
             if(!io_read && data_read_active) begin
-                data_read_active<=0;
+                data_read_active<=0; high_pending<=0;
                 word_index<=word_index+1'b1;
                 if(word_index==255) begin
                     if(state==IDENTIFY) state<=IDLE;

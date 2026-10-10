@@ -89,7 +89,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // window stores exactly this value (e.g. a handle into an ioreq).
                              parameter [31:0] DE_FREEZE_DATA = 32'h0,
                              // DE_FREEZE_PORT[16] set: freeze (after DE_POST more entries)
-                             // on the first logged I/O write to port DE_FREEZE_PORT[15:0].
+                             // on the first logged I/O access to port DE_FREEZE_PORT[15:0].
                              parameter [16:0] DE_FREEZE_PORT = 17'h0) (
     input wire clk,
     input wire gate_read,
@@ -254,7 +254,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
                               gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
-            if (DE_TRIGGER && DE_FREEZE_PORT[16] && ev_type == 4'd10 && io_addr == DE_FREEZE_PORT[15:0]) begin
+            if (DE_TRIGGER && DE_FREEZE_PORT[16] && (ev_type == 4'd10 || ev_type == 4'd11) && io_addr == DE_FREEZE_PORT[15:0]) begin
                 if (DE_POST == 0) frozen <= 1'b1;
                 else post_active <= 1'b1;
             end
