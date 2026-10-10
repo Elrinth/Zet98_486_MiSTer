@@ -102,6 +102,7 @@ port(
 	psramst			:in std_logic;
 	-- Optional PC-98 ATA task file in the MiSTer wrapper (same CPU clock).
 	pIDEAddress, pIDEWriteData :out std_logic_vector(15 downto 0);
+	pIDEOddAddress :out std_logic_vector(15 downto 0);  -- high-lane byte address
 	pIDESelect :out std_logic_vector(1 downto 0);
 	pIDERead, pIDEWrite, pIDEResetn :out std_logic;
 	pIDEReadData :in std_logic_vector(15 downto 0);
@@ -4335,6 +4336,7 @@ begin
 	
 	COM_CS<='1' when (ioaddr_even(15 downto 2)=x"003" & "00") and ioaddr_even(0)='0' else '0';
 	pIDEAddress<=ioaddr_even;
+	pIDEOddAddress<=ioaddr_odd;
 	pIDESelect<=cpusel when DMAen='0' else "00";
 	pIDEWriteData<=io_wdata;
 	pIDERead<=iord;

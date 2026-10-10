@@ -179,6 +179,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     output [7:0] mist_buffdin,
     input mist_buffwr,
     output reg [15:0] pIDEAddress, pIDEWriteData,
+    output reg [15:0] pIDEOddAddress = 16'hffff,
     output reg [1:0] pIDESelect,
     output reg pIDERead, pIDEWrite, pIDEResetn,
     input [15:0] pIDEReadData,

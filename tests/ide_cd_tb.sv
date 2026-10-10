@@ -6,6 +6,7 @@ module ide_cd_tb;
     reg clk = 0; always #5 clk = ~clk;
     reg reset = 1;
     reg [15:0] io_address = 0, io_writedata = 0;
+    reg [15:0] io_address_odd = 16'hffff;
     reg [1:0] io_select = 0;
     reg io_read = 0, io_write = 0;
     wire [15:0] io_readdata;

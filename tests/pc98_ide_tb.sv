@@ -4,6 +4,7 @@ module pc98_ide_tb;
     reg clk=0; always #5 clk=!clk;
     reg reset=1;
     reg [15:0] io_address=0, io_writedata=0;
+    reg [15:0] io_address_odd=16'hffff;
     reg [1:0] io_select=3;
     reg io_read=0, io_write=0;
     wire [15:0] io_readdata;
@@ -71,6 +72,18 @@ module pc98_ide_tb;
             repeat(4) @(negedge clk);
             io_write=0;
             repeat(3) @(negedge clk);
+        end
+    endtask
+    // Byte OUT to the high lane only: the even address bus is FFFF and the
+    // byte travels on io_writedata[15:8], as the CPU bus bridge drives it.
+    task automatic outb_odd(input [15:0] port, input [7:0] value);
+        begin
+            @(negedge clk); io_address=16'hffff; io_address_odd=port; io_writedata={value,8'h00};
+            io_select=2'b10; io_write=1;
+            repeat(4) @(negedge clk);
+            io_write=0;
+            repeat(3) @(negedge clk);
+            io_address_odd=16'hffff;
         end
     endtask
     task automatic inw(input [15:0] port, output [15:0] value, input [1:0] lanes);
@@ -179,6 +192,24 @@ module pc98_ide_tb;
                 if({disk[(7+j)*512+i*2+1],disk[(7+j)*512+i*2]} !== ((16'hc000+j*256+i)&16'hffff))
                     $fatal(1,"write data mismatch");
         end
+        // Windows 95 (NECATAPI.VXD + VMM) splits each data word into a byte
+        // OUT to 0640h and one to 0641h; the pair must store one whole word.
+        taskfile(9,1); outw('h64e,'h30,1);
+        await_status('h58);
+        for(i=0;i<256;i=i+1) begin
+            outw('h640,{8'h55,8'h4e^i[7:0]},1);   // high byte on the bus is ignored
+            if(i==0) begin
+                // A lone low byte stores nothing yet.
+                if(dut.word_index!==0) $fatal(1,"low byte alone advanced the data pointer");
+            end
+            outb_odd('h641,8'ha0^i[7:0]);
+        end
+        await_status('h50);
+        if(!irq) $fatal(1,"byte-pair write completion IRQ missing");
+        inw('h64e,value,1);
+        for(i=0;i<256;i=i+1)
+            if({disk[9*512+i*2+1],disk[9*512+i*2]} !== {8'ha0^i[7:0],8'h4e^i[7:0]})
+                $fatal(1,"byte-pair write mismatch word %0d: %h",i,{disk[9*512+i*2+1],disk[9*512+i*2]});
         // CHS head/cylinder rollover: cylinder 0, head 15, sector 32 -> 1/0/1.
         outw('h644,2,1); outw('h646,32,1); outw('h648,0,1); outw('h64a,0,1); outw('h64c,'haf,1);
         outw('h64e,'h21,1); check_sector(511); check_sector(512); await_status('h50);
@@ -223,7 +254,7 @@ module pc98_ide_tb;
         mount(1521,0); inw('h430,value,1); if(value!==16'hff01) $fatal(1,"image with partial tail rejected");
         outw('h64e,'hec,1); await_status('h58);
         for(int i=0;i<256;i++) begin inw('h640,value,3); if(i==60 && value!==2) $fatal(1,"partial tail capacity %0d",value); end
-        $display("PASS PC98 ATA: IDENTIFY, LBA/CHS, 256 sectors, writes, IRQ, lanes, bounds, RO, reset drain (%0d reads/%0d writes)",reads,writes);
+        $display("PASS PC98 ATA: IDENTIFY, LBA/CHS, 256 sectors, writes, 0640h/0641h byte-pair writes, IRQ, lanes, bounds, RO, reset drain (%0d reads/%0d writes)",reads,writes);
         $finish;
     end
     initial begin #50000000; $fatal(1,"IDE test watchdog"); end

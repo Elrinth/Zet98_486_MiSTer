@@ -426,7 +426,7 @@ wire   [3:0] legacy_sd_rd, legacy_sd_wr;
 wire  [31:0] ide_lba;
 wire         ide_rd, ide_wr;
 wire   [7:0] ide_buff_din;
-wire  [15:0] ide_address, ide_writedata, ide_readdata;
+wire  [15:0] ide_address, ide_odd_address, ide_writedata, ide_readdata;
 wire   [1:0] ide_select;
 wire         ide_read, ide_write, ide_oe, ide_irq, ide_resetn;
 `ifdef ZET98_RAW_IDE
@@ -501,7 +501,7 @@ assign img_mounted = hps_mounted[3:0];
 generate if(RAW_IDE) begin : raw_ide
 	pc98_ide #(.CLK_HZ(SYS_CLK_KHZ*1000)) controller (
 		.clk(clk_sys), .reset(!ide_resetn),
-		.io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
+		.io_address(ide_address), .io_address_odd(ide_odd_address), .io_writedata(ide_writedata), .io_select(ide_select),
 		.io_read(ide_read), .io_write(ide_write), .io_readdata(ide_readdata),
 		.io_oe(ide_oe), .irq(ide_irq),
 		.image_mounted(core_img_mounted[2]), .image_readonly(core_img_readonly), .image_size(core_img_size),
@@ -874,7 +874,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.mist_buffdout(core_buff_dout[legacy_buffer_slot]),
 	.mist_buffdin(sd_buff_din),
 	.mist_buffwr(|(core_buff_wr & (RAW_IDE ? 4'b1011 : 4'b1111))),
-	.pIDEAddress(ide_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
+	.pIDEAddress(ide_address), .pIDEOddAddress(ide_odd_address), .pIDESelect(ide_select), .pIDEWriteData(ide_writedata),
 	.pIDERead(ide_read), .pIDEWrite(ide_write), .pIDEResetn(ide_resetn),
 	.pIDEReadData(artic_oe ? artic_readdata : ide_readdata), .pIDEOE(ide_oe | artic_oe), .pIDEIRQ(ide_irq),
 	// z486 execution-rate throttle (rtl/vendor/z486/cpu_throttle.sv): Full,

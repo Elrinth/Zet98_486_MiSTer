@@ -7,9 +7,13 @@
 // Channel 1 (bank 1) master is an ATAPI CD-ROM (pc98_atapi) on its own image
 // slot, where NEC's NECCDD.SYS expects it. Both share the IDE interrupt.
 // Data is 16-bit at 0640h; task-file registers occupy even low-byte ports.
+// A byte OUT to 0640h holds the low byte until a byte OUT to 0641h supplies
+// the high byte and stores the word: Windows 95 splits trapped word writes
+// that way (NECATAPI.VXD writes 0640h, the VMM then 0641h).
 module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     input wire clk, reset,
     input wire [15:0] io_address, io_writedata,
+    input wire [15:0] io_address_odd,    // high-lane byte address, FFFF if unselected
     input wire [1:0] io_select,
     input wire io_read, io_write,
     output reg [15:0] io_readdata,
@@ -141,8 +145,14 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
     (* ramstyle="M10K, no_rw_check" *) reg [7:0] data_low[0:255], data_high[0:255];
     reg [7:0] cpu_low, cpu_high, host_low, host_high;
     reg host_byte;
-    wire cpu_buffer_write = !reset && selected && !control[2] &&
-        write_start && io_address==16'h0640 && state==WRITE_DATA;
+    wire data_write_ready = !reset && selected && !control[2] && state==WRITE_DATA;
+    reg [7:0] low_byte;
+    reg low_pending = 0;
+    wire low_byte_write = data_write_ready && write_start && io_address==16'h0640 && io_select==2'b01;
+    wire high_byte_write = data_write_ready && low_pending && io_write && !previous_write &&
+        io_select==2'b10 && io_address_odd==16'h0641;
+    wire cpu_buffer_write = high_byte_write ||
+        (data_write_ready && write_start && io_address==16'h0640 && io_select==2'b11);
     wire host_buffer_write = sd_buff_wr && sd_ack && host_busy && !host_write;
     wire [7:0] buffer_address = host_buffer_write ? sd_buff_addr[8:1] : word_index;
     always @(posedge clk) begin
@@ -152,10 +162,10 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
             if(sd_buff_addr[0]) data_high[buffer_address] <= sd_buff_dout;
             else data_low[buffer_address] <= sd_buff_dout;
         end else if(cpu_buffer_write) begin
-            data_low[buffer_address] <= io_writedata[7:0];
-            // An 8-bit OUT consumes a word, with the unselected byte zero.
-            data_high[buffer_address] <= io_select[1] ? io_writedata[15:8] : 8'b0;
+            data_low[buffer_address] <= io_select[0] ? io_writedata[7:0] : low_byte;
+            data_high[buffer_address] <= io_writedata[15:8];
         end
+        if(low_byte_write) low_byte <= io_writedata[7:0];
         host_low <= data_low[sd_buff_addr[8:1]];
         host_high <= data_high[sd_buff_addr[8:1]];
         host_byte <= sd_buff_addr[0];
@@ -262,7 +272,7 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
             state<=IDLE; count<=1; sector<=1; cylinder_low<=0; cylinder_high<=0;
             device_head<=8'ha0; bank<=0; control<=0; error_reg<=1; failed<=0;
             pending_irq<=0; word_index<=0; left<=0; current_lba<=0;
-            previous_read<=0; previous_write<=0; data_read_active<=0;
+            previous_read<=0; previous_write<=0; data_read_active<=0; low_pending<=0;
         end else begin
             if(read_start && io_address==16'h064e && channel) pending_irq<=0;
             if(read_start && io_address==16'h0640 && selected && !busy &&
@@ -280,6 +290,8 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
                     end
                 end
             end
+            if(low_byte_write) low_pending<=1;
+            if(cpu_buffer_write || state!=WRITE_DATA) low_pending<=0;
             if(cpu_buffer_write) begin
                 word_index<=word_index+1'b1;
                 if(word_index==255) state<=WRITE_START;
