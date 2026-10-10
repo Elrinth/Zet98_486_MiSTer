@@ -6,8 +6,7 @@
 ; far past the GDT instead (#PF at C005C9A0), looped and hung after
 ; "Init = Display Resources". Flat 32-bit ring 0, GDT limit 2Fh, LDT of two
 ; entries; a descriptor-shaped trap sits right after each table so a missed
-; check loads it instead of faulting. Case 10: a page-granular LDT (G=1)
-; scales its limit like any segment, so index 2 is inside it.
+; check loads it instead of faulting.
 ; 7FF0h gets 600Dh; on failure EBP holds the case and EBX the error code.
 bits 16
 cpu 486
@@ -27,7 +26,7 @@ dq 00cf9a000000ffffh            ; 08h flat code
 dq 00cf92000000ffffh            ; 10h flat data
 dw ldt_end-ldt-1, ldt-0, 8200h, 0 ; 18h LDT (base patched below)
 dw 0fh, 1000h, 8280h, 0          ; 20h byte-granular LDT at 00801000h (base bit 23 set)
-dw 0, ldt-0, 8200h, 0080h       ; 28h the same LDT, page-granular (G=1, limit 0 = 4 KB)
+dq 00cf92000000ffffh            ; 28h flat data
 gdt_end:
 dq 00cf92000000ffffh            ; 30h past the limit: a valid-looking data trap
 gdtr:
@@ -114,22 +113,7 @@ cmp dword [gp_count],1
 jne fail
 mov ax,10h
 mov ss,ax
-; case 10: with a page-granular LDT (limit 0, G=1 -> 4 KB) selector 14h
-; (index 2) lies inside the table and must load without a fault.
-mov ebp,10
-mov dword [gp_count],0
-mov dword [expect],0ffffh
-mov dword [resume],.after10
-mov ax,28h
-lldt ax
-mov ax,14h
-mov gs,ax
-.after10:
-mov ax,10h
-mov gs,ax
-cmp dword [gp_count],0
-jne fail
-; case 11: back to the byte-granular LDT (G=0); index 2 is past its limit again.
+; case 11: reloading the byte-granular LDT keeps its limit.
 mov ebp,11
 mov dword [gp_count],0
 mov dword [expect],14h

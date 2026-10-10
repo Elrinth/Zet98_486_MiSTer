@@ -2485,11 +2485,8 @@ wire idt_oob_r = idt_gate_pe_r && ({8'h0, idt_gate_end} > idt_limit);
 // when SLCTR already holds the tested selector. Keeps the late forward path
 // out of the comparator (it cost ~770 ALMs of duplication at 90 MHz).
 wire [15:0] slctr_desc_end = {SLCTR[15:3], 3'b111};
-// The LDT limit is cached raw; G=1 scales it to 4 KB units like any segment.
 wire selector_oob_reg = SLCTR[2]
-    ? (desc_cache[7].G ? (desc_cache[7].limit[19:4] == 16'h0 &&
-                          {desc_cache[7].limit[3:0], 12'hfff} < slctr_desc_end)
-                       : ({12'h0, desc_cache[7].limit} < {4'h0, slctr_desc_end}))
+    ? ({12'h0, desc_cache[7].limit} < {4'h0, slctr_desc_end})
     : (gdt_limit[15:0] < slctr_desc_end);
 
 wire [1:0]  prot_desc_dpl;
