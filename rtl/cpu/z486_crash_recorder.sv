@@ -100,7 +100,11 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // freeze (after DE_POST entries) when a status read on the
                              // hard disk bank (last 0432h write bit 0 clear) shows ERR.
                              parameter integer DE_IDE_ONLY = 0,
-                             parameter DE_FREEZE_ATA_ERR = 0) (
+                             parameter DE_FREEZE_ATA_ERR = 0,
+                             // DE_FREEZE_ATA_CMD: freeze (after DE_POST) on a hard-disk bank
+                             // command the controller does not implement (not 08h/10h/20h/
+                             // 21h/30h/31h/40h/41h/70h/A0h/A1h/E7h/ECh).
+                             parameter DE_FREEZE_ATA_CMD = 0) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -167,6 +171,12 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     always @(posedge clk) if (io_wr && io_addr == 16'h0432 && !io_wdata[7]) ide_bank <= io_wdata[0];
     wire ata_err = io_rd && !ide_bank && (io_addr == 16'h064e || io_addr == 16'h074c) &&
                    io_rdata[7:0] != 8'hff && !io_rdata[7] && io_rdata[0];
+    wire [7:0] ata_c = io_wdata[7:0];
+    wire ata_odd_cmd = io_wr && !ide_bank && io_addr == 16'h064e &&
+        !(ata_c == 8'h08 || ata_c == 8'h10 || ata_c == 8'h20 || ata_c == 8'h21 ||
+          ata_c == 8'h30 || ata_c == 8'h31 || ata_c == 8'h40 || ata_c == 8'h41 ||
+          ata_c == 8'h70 || ata_c == 8'ha0 || ata_c == 8'ha1 || ata_c == 8'he7 ||
+          ata_c == 8'hec);
     wire ide_any = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h074e ||
                    io_addr == 16'h0430 || io_addr == 16'h0432;
     wire io_rd_ev = IO_MODE && io_rd && (io_addr == 16'h0642 || io_addr == 16'h0644);
@@ -183,8 +193,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                     : mem_addr[31:8] == DE_STACK &&
                       (mem_data[31:16] == DE_MATCH || mem_data[15:0] == DE_MATCH))) begin
                 ev_type = 4'd13; ev_payload = mem_data;
-            end else if (ITRACE == 3) begin
-                if (mem_write && mem_data == DE_LOG_DATA) begin ev_type = 4'd8; ev_payload = mem_data; end
+            end else if (ITRACE >= 3) begin
+                // 3: stores of exactly DE_LOG_DATA; 4: every store.
+                if (mem_write && (ITRACE == 4 || mem_data == DE_LOG_DATA)) begin ev_type = 4'd8; ev_payload = mem_data; end
                 else ev_valid = 1'b0;
             end else if (insn_issue && (ITRACE != 2 || !insn_sequential)) begin
                 ev_type = 4'd15; ev_payload = ITRACE == 2 ? prev_issue_eip : eflags;
@@ -216,7 +227,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
         else if (ext_sample && !DE_TRIGGER) begin ev_type = 4'd9; ev_payload = mem_data; end
         else ev_valid = 1'b0;
     end
-    wire [127:0] entry = (ITRACE == 3 && ev_type == 4'd8) ?
+    wire [127:0] entry = (ITRACE >= 3 && ev_type == 4'd8) ?
                              {ev_type, cs, prev_issue_eip, mem_data, mem_be, mem_addr, pe, seq} :
                          ev_type == 4'd15 ? {ev_type, cs, insn_eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
@@ -275,6 +286,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
                               gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
+            if (DE_TRIGGER && DE_FREEZE_ATA_CMD && ata_odd_cmd) begin
+                if (DE_POST == 0) frozen <= 1'b1;
+                else post_active <= 1'b1;
+            end
             if (DE_TRIGGER && DE_FREEZE_ATA_ERR && ata_err) begin
                 if (DE_POST == 0) frozen <= 1'b1;
                 else post_active <= 1'b1;

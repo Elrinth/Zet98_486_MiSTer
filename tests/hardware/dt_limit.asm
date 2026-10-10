@@ -70,6 +70,22 @@ lidt [idtr]
 mov ax,18h
 lldt ax
 
+; case 15: same retry with a system-descriptor selector (18h, the LDT
+; descriptor), which faults on any 486 regardless of table limits.
+mov ebp,15
+mov dword [gp_count],0
+mov dword [retry],1
+sub esp,40h
+mov dword [esp+3ch],18h
+mov ds,[esp+3ch]
+add esp,40h
+mov ax,10h                      ; DS is null now: restore it before any access
+mov ds,ax
+mov dword [retry],0
+mov ecx,[gp_count]
+mov esi,[last_err]
+cmp dword [gp_count],1
+jne fail
 ; CASE n, selector, {load}: the load must #GP(selector & FFFCh) and be skipped
 %macro CASE 3
     mov ebp,%1
@@ -146,15 +162,72 @@ mov ax,10h
 mov gs,ax
 cmp dword [gp_count],1
 jne fail
+; case 13: Windows 95 VMM (C00013B7) reloads "mov ds,[esp+3Ch]"; its #GP
+; handler nulls the saved selector and returns to the same instruction, which
+; must then load the null selector without faulting again.
+mov ebp,13
+mov ax,18h
+lldt ax
+mov dword [gp_count],0
+mov dword [expect],30h
+mov dword [retry],1
+sub esp,40h
+mov dword [esp+3ch],30h
+mov ds,[esp+3ch]
+add esp,40h
+mov ax,10h                      ; DS is null now: restore it before any access
+mov ds,ax
+mov dword [retry],0
+mov ecx,[gp_count]
+mov esi,[last_err]
+cmp dword [gp_count],1
+jne fail
+; case 14: the same through a far pointer register pair (LDS) and ES.
+mov ebp,14
+mov dword [gp_count],0
+mov dword [expect],38h
+mov dword [retry],2
+sub esp,40h
+mov dword [esp+38h],38h
+mov es,[esp+38h]
+add esp,40h
+mov dword [retry],0
+mov ax,10h
+mov es,ax
+cmp dword [gp_count],1
+jne fail
 mov ax,600dh
 jmp report
 
 gp_handler:
+push eax
+mov ax,10h
+mov ds,ax
+pop eax
 inc dword [gp_count]
+cmp dword [gp_count],4
+ja fail                         ; a retry that keeps faulting
 mov ebx,[esp]                   ; error code
+mov [last_err],ebx
+cmp dword [retry],0
+jne .retry_mode
 cmp ebx,[expect]
 jne fail
 add esp,4
+jmp .skip
+.retry_mode:
+add esp,4
+; retry mode: null the saved selector (above the 12-byte frame) and return
+; to the faulting instruction, like the VMM handler
+mov ebx,[retry]
+cmp ebx,1
+jne .es_slot
+mov dword [esp+12+3ch],0
+iretd
+.es_slot:
+mov dword [esp+12+38h],0
+iretd
+.skip:
 mov eax,[resume]                ; skip the faulting load
 mov [esp],eax
 iretd
@@ -173,5 +246,7 @@ align 4
 gp_count dd 0
 expect dd 0
 resume dd 0
+retry dd 0
+last_err dd 0
 fptr dd 12345678h
 ptr_sel dw 0
