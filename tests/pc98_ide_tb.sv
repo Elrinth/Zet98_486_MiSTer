@@ -31,6 +31,8 @@ module pc98_ide_tb;
     wire [1:0] cd_activity;
     wire [91:0] cd_trace;
     pc98_ide dut(.*);
+    integer irq_edges=0;
+    always @(posedge irq) irq_edges=irq_edges+1;
     // The shared RAM port depends on mutually exclusive command ownership.
     always @(posedge clk) if(dut.cpu_buffer_write && dut.host_buffer_write)
         $fatal(1,"CPU and host attempted to write the buffer together");
@@ -262,6 +264,13 @@ module pc98_ide_tb;
         // Bank 1 holds the ATAPI CD: IDENTIFY DEVICE aborts with the packet
         // signature and an interrupt; reading status acknowledges it.
         outw('h64e,'hec,1); repeat(3) @(negedge clk); if(!irq) $fatal(1,"CD abort IRQ missing");
+        // Shared PIC input: a hard-disk completion while the CD request is
+        // still pending must still make a fresh rising edge.
+        old_reads=irq_edges;
+        outw('h432,0,1); taskfile(5,1); outw('h64e,'h20,1); await_status('h58);
+        if(irq_edges==old_reads) $fatal(1,"HDD completion made no IRQ edge while the CD request was pending");
+        for(i=0;i<256;i=i+1) inw('h640,value,3);
+        await_status('h50); inw('h64e,value,1); outw('h432,1,1);
         inw('h648,value,1); if(value[7:0]!='h14) $fatal(1,"CD signature missing");
         inw('h64e,value,1); if(value[7:0]!='h41) $fatal(1,"CD abort status");
         if(irq) $fatal(1,"CD IRQ not acknowledged");
@@ -287,7 +296,7 @@ module pc98_ide_tb;
         mount(1521,0); inw('h430,value,1); if(value!==16'hff01) $fatal(1,"image with partial tail rejected");
         outw('h64e,'hec,1); await_status('h58);
         for(int i=0;i<256;i++) begin inw('h640,value,3); if(i==60 && value!==2) $fatal(1,"partial tail capacity %0d",value); end
-        $display("PASS PC98 ATA: IDENTIFY, LBA/CHS, 256 sectors, writes, 0640h/0641h byte-pair writes and reads, IRQ, lanes, bounds, RO, reset drain (%0d reads/%0d writes)",reads,writes);
+        $display("PASS PC98 ATA: IDENTIFY, LBA/CHS, 256 sectors, writes, 0640h/0641h byte-pair writes and reads, IRQ, shared-IRQ edges, lanes, bounds, RO, reset drain (%0d reads/%0d writes)",reads,writes);
         $finish;
     end
     initial begin #50000000; $fatal(1,"IDE test watchdog"); end

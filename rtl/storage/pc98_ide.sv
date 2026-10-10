@@ -118,7 +118,19 @@ module pc98_ide #(parameter integer CLK_HZ = 90000000) (
             cd_read_word <= io_select == 2'b11; cd_read_alt <= io_address == 16'h074c;
         end else if (cd_read_done) cd_read_active <= 0;
     end
-    assign irq = hdd_irq || cd_irq;
+    // Both channels share one edge-triggered PIC input (slave IR1). A request
+    // that rises while the other channel's line is still high would make no
+    // edge and be lost (the driver then waits forever), so drop the shared
+    // line for two clocks whenever either channel raises a new request.
+    reg hdd_irq_d = 0, cd_irq_d = 0;
+    reg [1:0] irq_gap = 0;
+    always @(posedge clk) begin
+        hdd_irq_d <= hdd_irq;
+        cd_irq_d <= cd_irq;
+        if ((hdd_irq && !hdd_irq_d) || (cd_irq && !cd_irq_d)) irq_gap <= 2'd2;
+        else if (irq_gap != 0) irq_gap <= irq_gap - 1'b1;
+    end
+    assign irq = (hdd_irq || cd_irq) && irq_gap == 0;
 
     // Transport has independent lifetime: a CPU/SRST reset drains an accepted
     // HPS transaction before another request can reuse the sector buffer.
