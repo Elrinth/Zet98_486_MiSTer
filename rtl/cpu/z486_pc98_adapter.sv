@@ -238,10 +238,20 @@ module z486_pc98_adapter #(
 `else
     localparam [31:0] RECORDER_FREEZE_GATE = 32'h0;
 `endif
-`ifdef ZET98_RECORDER_FREEZE_PORT
-    localparam [16:0] RECORDER_FREEZE_PORT = `ZET98_RECORDER_FREEZE_PORT;
+`ifdef ZET98_RECORDER_IDE_ONLY
+    localparam integer RECORDER_IDE_ONLY = `ZET98_RECORDER_IDE_ONLY;
 `else
-    localparam [16:0] RECORDER_FREEZE_PORT = 17'h0;
+    localparam integer RECORDER_IDE_ONLY = 0;
+`endif
+`ifdef ZET98_RECORDER_FREEZE_ATA_ERR
+    localparam RECORDER_FREEZE_ATA_ERR = 1;
+`else
+    localparam RECORDER_FREEZE_ATA_ERR = 0;
+`endif
+`ifdef ZET98_RECORDER_FREEZE_PORT
+    localparam [18:0] RECORDER_FREEZE_PORT = `ZET98_RECORDER_FREEZE_PORT;
+`else
+    localparam [18:0] RECORDER_FREEZE_PORT = 19'h0;
 `endif
 `ifdef ZET98_RECORDER_ARM_SECONDS
     localparam integer RECORDER_ARM_SECONDS = `ZET98_RECORDER_ARM_SECONDS;
@@ -288,7 +298,7 @@ module z486_pc98_adapter #(
                           .DE_FREEZE_GATE(RECORDER_FREEZE_GATE),
                           .DE_FREEZE_GATE_EIP(RECORDER_FREEZE_GATE_EIP),
                           .ARM_SECONDS(RECORDER_ARM_SECONDS),
-                          .DE_FREEZE_PORT(RECORDER_FREEZE_PORT)) crash_recorder (
+                          .DE_FREEZE_PORT(RECORDER_FREEZE_PORT), .DE_IDE_ONLY(RECORDER_IDE_ONLY), .DE_FREEZE_ATA_ERR(RECORDER_FREEZE_ATA_ERR)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
@@ -307,7 +317,7 @@ module z486_pc98_adapter #(
 `endif
         .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
         .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),
-        .io_rdata(io_read_data), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .tx(crash_tx));
+        .io_rdata(io_read_data), .io_len(io_write_do ? io_write_length : io_read_length), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .tx(crash_tx));
 `else
     assign crash_tx = 1'b1;
 `endif

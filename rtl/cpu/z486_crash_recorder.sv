@@ -89,8 +89,18 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // window stores exactly this value (e.g. a handle into an ioreq).
                              parameter [31:0] DE_FREEZE_DATA = 32'h0,
                              // DE_FREEZE_PORT[16] set: freeze (after DE_POST more entries)
-                             // on the first logged I/O access to port DE_FREEZE_PORT[15:0].
-                             parameter [16:0] DE_FREEZE_PORT = 17'h0) (
+                             // on the first logged I/O access to port DE_FREEZE_PORT[15:0];
+                             // with [17] also set, only an access from protected mode
+                             // outside V86 (e.g. a VxD emulating a trapped port); with
+                             // [18] set, only a read.
+                             parameter [18:0] DE_FREEZE_PORT = 19'h0,
+                             // DE_IDE_ONLY (with DE_TRIGGER): log only IDE port accesses
+                             // (064xh, 074Ch/074Eh, 0430h/0432h), reads and writes;
+                             // 2 also skips the data port 0640h/0641h. DE_FREEZE_ATA_ERR:
+                             // freeze (after DE_POST entries) when a status read on the
+                             // hard disk bank (last 0432h write bit 0 clear) shows ERR.
+                             parameter integer DE_IDE_ONLY = 0,
+                             parameter DE_FREEZE_ATA_ERR = 0) (
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
@@ -113,6 +123,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     input wire io_wr, io_rd,         // one pulse per completed I/O access
     input wire [15:0] io_addr,
     input wire [31:0] io_wdata, io_rdata,
+    input wire [2:0] io_len,         // bytes in the I/O access (logged with I/O events)
     input wire insn_issue,           // ITRACE: one pulse per issued instruction
     input wire [31:0] insn_eip,
     output wire tx
@@ -152,6 +163,12 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                                                 mem_data[15:0] == DE_MATCH2 || mem_data[31:16] == DE_MATCH2);
     wire ide_port = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h0432;
     wire io_wr_ev = IO_MODE && io_wr && ide_port;
+    reg ide_bank = 0;
+    always @(posedge clk) if (io_wr && io_addr == 16'h0432 && !io_wdata[7]) ide_bank <= io_wdata[0];
+    wire ata_err = io_rd && !ide_bank && (io_addr == 16'h064e || io_addr == 16'h074c) &&
+                   io_rdata[7:0] != 8'hff && !io_rdata[7] && io_rdata[0];
+    wire ide_any = io_addr[15:4] == 12'h064 || io_addr == 16'h074c || io_addr == 16'h074e ||
+                   io_addr == 16'h0430 || io_addr == 16'h0432;
     wire io_rd_ev = IO_MODE && io_rd && (io_addr == 16'h0642 || io_addr == 16'h0644);
     wire de_busy = io_addr == 16'h005f || io_addr == 16'ha46c || (io_addr >= 16'h0188 && io_addr <= 16'h018e);
     wire de_io_wr = DE_TRIGGER && io_wr && !de_busy;
@@ -178,6 +195,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             if (io_wr_ev) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
             else if (io_rd_ev) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
+        end else if (DE_TRIGGER && DE_IDE_ONLY) begin
+            if (io_wr && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
+            else if (io_rd && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
+            else ev_valid = 1'b0;
         end else if (gate_read && !pe && DE_TRIGGER) begin ev_type = 4'd1; ev_payload = gate_addr; end
         else if (de_match) begin ev_type = 4'd13; ev_payload = mem_data; end
         else if (de_far) begin ev_type = 4'd12; ev_payload = {prev_cs, prev_ip}; end
@@ -201,7 +222,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                          ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
-                         (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, 3'd0, eip, vm, pe, seq} :
+                         (ev_type == 4'd10 || ev_type == 4'd11) ? {ev_type, io_addr, (io_wr_ev || de_io_wr) ? io_wdata : io_rdata, ev_payload, io_len, eip, vm, pe, seq} :
                          ev_type == 4'd7 ? {ev_type, 15'd0, a20, walk_pde, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type >= 4'd8 ? {ev_type, 12'd0, mem_be, mem_addr, ev_payload, pf_code, pf_addr, vm, pe, seq}
                                          : {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq};
@@ -254,7 +275,12 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
                               gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
-            if (DE_TRIGGER && DE_FREEZE_PORT[16] && (ev_type == 4'd10 || ev_type == 4'd11) && io_addr == DE_FREEZE_PORT[15:0]) begin
+            if (DE_TRIGGER && DE_FREEZE_ATA_ERR && ata_err) begin
+                if (DE_POST == 0) frozen <= 1'b1;
+                else post_active <= 1'b1;
+            end
+            if (DE_TRIGGER && DE_FREEZE_PORT[16] && ((ev_type == 4'd10 && !DE_FREEZE_PORT[18]) || ev_type == 4'd11) && io_addr == DE_FREEZE_PORT[15:0] &&
+                (!DE_FREEZE_PORT[17] || (pe && !vm))) begin
                 if (DE_POST == 0) frozen <= 1'b1;
                 else post_active <= 1'b1;
             end
