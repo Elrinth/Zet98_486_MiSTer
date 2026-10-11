@@ -243,6 +243,16 @@ module z486_pc98_adapter #(
 `else
     localparam integer RECORDER_IDE_ONLY = 0;
 `endif
+`ifdef ZET98_RECORDER_WIN_EIP
+    localparam [31:0] RECORDER_WIN_EIP = `ZET98_RECORDER_WIN_EIP;
+`else
+    localparam [31:0] RECORDER_WIN_EIP = 32'h0;
+`endif
+`ifdef ZET98_RECORDER_BAD_EIP
+    localparam [31:0] RECORDER_BAD_EIP = `ZET98_RECORDER_BAD_EIP;
+`else
+    localparam [31:0] RECORDER_BAD_EIP = 32'h0;
+`endif
 `ifdef ZET98_RECORDER_FREEZE_ATA_CMD
     localparam RECORDER_FREEZE_ATA_CMD = 1;
 `else
@@ -303,7 +313,7 @@ module z486_pc98_adapter #(
                           .DE_FREEZE_GATE(RECORDER_FREEZE_GATE),
                           .DE_FREEZE_GATE_EIP(RECORDER_FREEZE_GATE_EIP),
                           .ARM_SECONDS(RECORDER_ARM_SECONDS),
-                          .DE_FREEZE_PORT(RECORDER_FREEZE_PORT), .DE_IDE_ONLY(RECORDER_IDE_ONLY), .DE_FREEZE_ATA_ERR(RECORDER_FREEZE_ATA_ERR), .DE_FREEZE_ATA_CMD(RECORDER_FREEZE_ATA_CMD)) crash_recorder (
+                          .DE_FREEZE_PORT(RECORDER_FREEZE_PORT), .DE_IDE_ONLY(RECORDER_IDE_ONLY), .DE_FREEZE_ATA_ERR(RECORDER_FREEZE_ATA_ERR), .DE_FREEZE_ATA_CMD(RECORDER_FREEZE_ATA_CMD), .DE_WIN_EIP(RECORDER_WIN_EIP), .DE_BAD_EIP(RECORDER_BAD_EIP)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
