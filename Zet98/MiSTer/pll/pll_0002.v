@@ -32,6 +32,8 @@ module  pll_0002(
 		.output_clock_frequency1("100.000000 MHz"),
 `elsif ZET98_TURBO90
 		.output_clock_frequency1("90.000000 MHz"),
+`elsif ZET98_TURBO82
+		.output_clock_frequency1("81.818181 MHz"),  // 900 MHz VCO / 11
 `elsif ZET98_TURBO75
 		.output_clock_frequency1("75.000000 MHz"),
 `elsif ZET98_TURBO60

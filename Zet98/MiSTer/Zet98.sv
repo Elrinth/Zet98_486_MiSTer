@@ -245,6 +245,8 @@ wire pll_locked;
 localparam integer SYS_CLK_KHZ = 100000;
 `elsif ZET98_TURBO90
 localparam integer SYS_CLK_KHZ = 90000;
+`elsif ZET98_TURBO82
+localparam integer SYS_CLK_KHZ = 81818;  // 900 MHz VCO / 11
 `elsif ZET98_TURBO75
 localparam integer SYS_CLK_KHZ = 75000;
 `elsif ZET98_TURBO60
