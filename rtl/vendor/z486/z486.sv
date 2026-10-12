@@ -2151,7 +2151,12 @@ assign mem_op_eligible = core_live && !mem_servicing &&
 // A failed protection test redirects after its third architectural delay uop.
 // That uop may finish internal setup, but its protected bus operation must not
 // escape before the fault handler takes control (notably denied VM86 I/O).
-wire uc_data_busreq = !prot_redirect_prev &&
+// A descriptor read past the GDT/LDT limit must not reach memory either: the
+// selector test that faults it (#GP(selector), 85Dh) redirects only after this
+// read has issued, and a not-present page past the table (Windows 95 LDT) would
+// raise #PF first. A 486 checks the table limit before the read.
+wire dt_read_oob;  // assigned after the selector bound below
+wire uc_data_busreq = !prot_redirect_prev && !dt_read_oob &&
                       ((uc_is_mem_busop && !mem_is_io) ||
                        io_busop_rd || io_busop_wr);
 assign uc_busreq = uc_data_busreq || iack_busop;
@@ -2488,6 +2493,7 @@ wire [15:0] slctr_desc_end = {SLCTR[15:3], 3'b111};
 wire selector_oob_reg = SLCTR[2]
     ? ({12'h0, desc_cache[7].limit} < {4'h0, slctr_desc_end})
     : (gdt_limit[15:0] < slctr_desc_end);
+assign dt_read_oob = pe && (mem_seg_sel == SEG_GDT) && !uc_is_write && selector_oob_reg;
 
 wire [1:0]  prot_desc_dpl;
 wire        protun_write_low16_nonzero;
