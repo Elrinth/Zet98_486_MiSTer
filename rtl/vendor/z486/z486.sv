@@ -1000,9 +1000,13 @@ prefetch prefetch_inst (
     .pf_fault_addr(pf_fault_addr),
     // Decode may run ahead while an older instruction is still active.  A
     // retained fetch fault becomes precise once EX is empty or the older
-    // instruction reaches its non-stalled retirement boundary.
+    // instruction reaches its non-stalled retirement boundary.  An entry
+    // held in stall_d2 (its older instruction has retired) is itself the
+    // instruction waiting for the faulted bytes: a Jcc rel8 entered behind
+    // "test eax,eax" with its displacement on a not-present page waited for
+    // ever (Windows 95 KERNEL32 BFF94FFF, desktop never appeared).
     .fetch_blocked(decoder_fetch_blocked &&
-                   (!uc_active || (i_rni_delay && !stall))),
+                   (!uc_active || (i_rni_delay && !stall) || stall_d2)),
     .ifetch_fault(ifetch_page_fault),
     .ifetch_fault_code(ifetch_fault_code),
     .ifetch_fault_addr(ifetch_fault_addr),
