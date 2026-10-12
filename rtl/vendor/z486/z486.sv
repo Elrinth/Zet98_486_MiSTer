@@ -1005,7 +1005,11 @@ prefetch prefetch_inst (
     // instruction waiting for the faulted bytes: a Jcc rel8 entered behind
     // "test eax,eax" with its displacement on a not-present page waited for
     // ever (Windows 95 KERNEL32 BFF94FFF, desktop never appeared).
-    .fetch_blocked(decoder_fetch_blocked &&
+    // The older instruction's memory operation must also have drained: a
+    // fault redirect taken under a still-servicing store (push 43h before
+    // the split xor esi,esi in Explorer 00407FFD, slow memory) lost the
+    // page-fault microcode at 8ECh and the core idled with the fault spent.
+    .fetch_blocked(decoder_fetch_blocked && !mem_servicing &&
                    (!uc_active || (i_rni_delay && !stall) || stall_d2)),
     .ifetch_fault(ifetch_page_fault),
     .ifetch_fault_code(ifetch_fault_code),

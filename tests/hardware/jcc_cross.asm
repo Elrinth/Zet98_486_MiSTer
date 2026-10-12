@@ -10,8 +10,13 @@
 bits 16
 cpu 486
 org 1000h
+%ifdef HIGH
+X       equ 300fffh             ; extended memory (DDR path)
+N       equ 301000h
+%else
 X       equ 30fffh              ; branch opcode at the last byte of a page
 N       equ 31000h              ; next page
+%endif
 XPTE    equ 21000h + (N >> 12) * 4
 IDT     equ 22000h
 cli
@@ -189,6 +194,89 @@ RETCASE 0, 2, 2
 RETCASE 1, 1, 2
 %endif
 
+
+; Any instruction split at the page end, behind a short predecessor on the
+; same page (Explorer 00407FFD: push 43h / xor esi,esi with 00408000 paged
+; out). Each pattern runs warm and with the next page not present; after it
+; N+k holds "pop eax / ret" (eax = 43h pushed by the predecessor or a
+; marker). PUTB writes bytes from address %1.
+%macro PUTB 2-*
+    %assign a %1
+    %rotate 1
+    %rep %0-1
+        mov byte [a],%1
+        %assign a a+1
+        %rotate 1
+    %endrep
+%endmacro
+; SPLIT case-label, mode, predecessor bytes count, then the full byte list
+; starting at X-count; ESI/EAX/EBX results checked by the caller
+%macro SPLITRUN 1               ; mode
+    inc ebp
+    mov dword [faults],0
+%if %1 >= 1
+    invlpg [N]
+%endif
+%if %1 == 2
+    and dword [XPTE],0fffffffeh
+    invlpg [N]
+%endif
+    mov esi,-1
+    mov ebx,-1
+    mov dword [scratch],12345678h
+    push ebp
+    mov ebp,scratch+4
+    call [split_entry]
+    pop ebp
+    cmp dword [faults],(%1 == 2)
+    jne fail
+%endmacro
+%macro CHECK 2
+    cmp %1,%2
+    jne fail
+%endmacro
+
+%assign m 0
+%rep 3
+    ; push 43h / xor esi,esi (33 F6) / pop eax / ret
+    PUTB X-2, 6ah,43h,33h,0f6h,58h,0c3h
+    mov dword [split_entry],X-2
+    SPLITRUN m
+    CHECK eax,43h
+    CHECK esi,0
+    ; test eax,eax / xor esi,esi / push 43h / pop eax / ret
+    PUTB X-2, 85h,0c0h,33h,0f6h,6ah,43h,58h,0c3h
+    SPLITRUN m
+    CHECK esi,0
+    CHECK eax,43h
+    ; nop / mov ebx,[ebp-4] (8B 5D FC) / push 43h / pop eax / ret
+    PUTB X-1, 90h,8bh,5dh,0fch,6ah,43h,58h,0c3h
+    mov dword [split_entry],X-1
+    SPLITRUN m
+    CHECK ebx,12345678h
+    ; push esi / mov eax,43h (B8 imm32) / pop esi / ret   (the push/pop pair)
+    PUTB X-1, 56h,0b8h,43h,0,0,0,5eh,0c3h
+    SPLITRUN m
+    CHECK eax,43h
+    ; nop / movzx esi,al (0F B6 F0), 0F at the page end / ret
+    PUTB X-1, 90h,0fh,0b6h,0f0h,0c3h
+    mov eax,1234h
+    SPLITRUN m
+    CHECK esi,34h
+    ; Explorer 00407FF6 verbatim: push ebp / mov ebp,esp / sub esp,8 /
+    ; push esi / push 43h / xor esi,esi | pop eax / pop esi / leave / ret
+    PUTB X-9, 55h,8bh,0ech,83h,0ech,08h,56h,6ah,43h,33h,0f6h,58h,5eh,0c9h,0c3h
+    mov dword [split_entry],X-9
+    SPLITRUN m
+    CHECK eax,43h
+    CHECK esi,-1
+    mov dword [split_entry],X-1
+    ; nop / bswap-free 0F 8x: setz bl (0F 94 C3) / ret
+    PUTB X-1, 90h,0fh,94h,0c3h,0c3h
+    SPLITRUN m
+%assign m m+1
+%endrep
+
 %ifndef NORING3
 ; the same from ring 3 (#PF switches to the ring-0 stack)
 mov dword [r3case],0
@@ -221,6 +309,36 @@ mov dword [r3case],0
     jne fail
 %assign r r+1
 %endrep
+; Explorer's split prologue from ring 3
+PUTB X-9, 55h,8bh,0ech,83h,0ech,08h,56h,6ah,43h,33h,0f6h,58h,5eh,0c9h,0c3h
+mov dword [split_entry],X-9
+%assign r 0
+%rep 3
+    inc ebp
+    mov dword [faults],0
+%if r >= 1
+    invlpg [N]
+%endif
+%if r == 2
+    and dword [XPTE],0fffffffeh
+    invlpg [N]
+%endif
+    mov [r0esp],esp
+    mov dword [r3cont],.r3xback%[r]
+    push dword 2bh
+    push dword 7000h
+    push dword 3002h
+    push dword 23h
+    push dword r3split
+    iretd
+.r3xback%[r]:
+    mov esp,[r0esp]
+    cmp dword [r3al],43h
+    jne fail
+    cmp dword [faults],(r == 2)
+    jne fail
+%assign r r+1
+%endrep
 %endif
 mov ax,600dh
 jmp report
@@ -235,6 +353,14 @@ xor eax,eax
 ret
 r3done:
 mov [r3al],al
+int 1fh
+r3split:
+mov ax,2bh
+mov ds,ax
+mov es,ax
+mov esi,-1
+call [split_entry]
+mov [r3al],eax
 int 1fh                         ; back to ring 0 (gate DPL 3)
 r3gate:
 mov ax,10h
@@ -268,6 +394,8 @@ hlt
 jmp $
 align 4
 faults dd 0
+split_entry dd 0
+scratch dd 0
 r0esp dd 0
 r3cont dd 0
 r3al dd 0
