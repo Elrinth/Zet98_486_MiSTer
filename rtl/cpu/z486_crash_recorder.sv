@@ -242,6 +242,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                 if (watch_store || (ITRACE == 7 && win_open && win_log && mem_write)) begin
                     ev_type = 4'd8; ev_payload = mem_data;
                 end
+                // 7: page faults in the window: walked PTE, then the PDE/CR3 (pf_code, CR2 in both)
+                else if (ITRACE == 7 && win_open && pf_d1 && pe) begin ev_type = 4'd6; ev_payload = walk_pte; end
+                else if (ITRACE == 7 && win_open && pf_d2) begin ev_type = 4'd7; ev_payload = cr3; end
                 else if (win_open && insn_issue && !insn_sequential && win_log) begin
                     ev_type = 4'd15; ev_payload = prev_issue_eip;
                 end else ev_valid = 1'b0;
