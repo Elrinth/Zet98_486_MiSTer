@@ -166,7 +166,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg [31:0] prev_issue_eip = 0;   // ITRACE = 2: last issued EIP
     wire insn_sequential = insn_eip > prev_issue_eip && insn_eip <= prev_issue_eip + 32'd15;
     always @(posedge clk) if (insn_issue) prev_issue_eip <= insn_eip;
-    wire watch_store = ITRACE == 6 && mem_write && mem_addr[31:2] == DE_WATCH_ADDR[31:2];
+    wire watch_store = (ITRACE == 6 || ITRACE == 7) && mem_write && mem_addr[31:2] == DE_WATCH_ADDR[31:2];
     // Stores are attributed to the next issued instruction, a few bytes on.
     wire store_in_win = prev_issue_eip >= DE_WIN_EIP && prev_issue_eip < DE_WIN_EIP + 32'h20;
     wire store_in_bad = prev_issue_eip >= DE_BAD_EIP && prev_issue_eip < DE_BAD_EIP + 32'h4;
@@ -174,7 +174,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     always @(posedge clk) if (watch_store && !frozen) win_open <= store_in_win;
     // ITRACE = 6 with DE_POST: the first branch after the window opens must
     // land in V86 (the IRETD to the client); otherwise start the post count.
-    wire win_first_branch = ITRACE == 6 && win_first && insn_issue && !insn_sequential &&
+    wire win_first_branch = (ITRACE == 6 || ITRACE == 7) && win_first && insn_issue && !insn_sequential &&
         !(insn_eip >= DE_WIN_EIP && insn_eip < DE_WIN_EIP + 32'h20);   // skip the return path's own jumps
     always @(posedge clk) begin
         if (watch_store && !frozen) win_first <= store_in_win;
@@ -185,7 +185,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     // freeze on the bad store. The ring keeps the V86 tail and the entry.
     reg win_in_v86 = 0, win_entered = 0;
     reg [5:0] win_after = 0;
-    wire win_branch = ITRACE == 6 && win_open && insn_issue && !insn_sequential;
+    wire win_branch = (ITRACE == 6 || ITRACE == 7) && win_open && insn_issue && !insn_sequential;
     always @(posedge clk) begin
         if (watch_store && !frozen) begin
             win_in_v86 <= 1'b0; win_entered <= 1'b0; win_after <= 0;
@@ -200,7 +200,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg [6:0] win_cnt = 0;
     always @(posedge clk)
         if (watch_store && !frozen) win_cnt <= 0;
-        else if (win_branch && win_cnt != 7'd100) win_cnt <= win_cnt + 1'b1;
+        else if ((win_branch || (ITRACE == 7 && win_open && mem_write && !watch_store)) && win_cnt != 7'd100)
+            win_cnt <= win_cnt + 1'b1;
     wire win_log = win_cnt != 7'd100;
     reg post_active = 0;
     reg [7:0] post_count = 0;
@@ -236,8 +237,11 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                     : mem_addr[31:8] == DE_STACK &&
                       (mem_data[31:16] == DE_MATCH || mem_data[15:0] == DE_MATCH))) begin
                 ev_type = 4'd13; ev_payload = mem_data;
-            end else if (ITRACE == 6) begin
-                if (watch_store) begin ev_type = 4'd8; ev_payload = mem_data; end
+            end else if (ITRACE == 6 || ITRACE == 7) begin
+                // 7: also log every store while the window's first events are logged
+                if (watch_store || (ITRACE == 7 && win_open && win_log && mem_write)) begin
+                    ev_type = 4'd8; ev_payload = mem_data;
+                end
                 else if (win_open && insn_issue && !insn_sequential && win_log) begin
                     ev_type = 4'd15; ev_payload = prev_issue_eip;
                 end else ev_valid = 1'b0;
@@ -344,7 +348,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
                               gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
-            if (ITRACE == 6 && watch_store && win_open && store_in_bad && DE_POST == 0) frozen <= 1'b1;
+            if ((ITRACE == 6 || ITRACE == 7) && watch_store && win_open && store_in_bad && DE_POST == 0) frozen <= 1'b1;
             // The VM flag lags the first V86 branch; judge by the target instead:
             // a V86 IP is below 64K, VMM ring-0 code is at C0000000 and up.
             if (ITRACE == 6 && DE_POST != 0 && win_first_branch && insn_eip[31]) post_active <= 1'b1;
