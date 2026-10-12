@@ -109,7 +109,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // (DE_WATCH_ADDR, physical). A store to it from the 16-byte
                              // range DE_WIN_EIP..+1Fh opens the window (branches are
                              // logged while it is open); the next store to it closes it,
-                             // and freezes if it comes from DE_BAD_EIP..+3.
+                             // and freezes if it comes from DE_BAD_EIP..+0Fh.
                              parameter [31:0] DE_WIN_EIP = 32'h0,
                              parameter [31:0] DE_BAD_EIP = 32'h0) (
     input wire clk,
@@ -169,7 +169,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     wire watch_store = (ITRACE == 6 || ITRACE == 7) && mem_write && mem_addr[31:2] == DE_WATCH_ADDR[31:2];
     // Stores are attributed to the next issued instruction, a few bytes on.
     wire store_in_win = prev_issue_eip >= DE_WIN_EIP && prev_issue_eip < DE_WIN_EIP + 32'h20;
-    wire store_in_bad = prev_issue_eip >= DE_BAD_EIP && prev_issue_eip < DE_BAD_EIP + 32'h4;
+    wire store_in_bad = prev_issue_eip >= DE_BAD_EIP && prev_issue_eip < DE_BAD_EIP + 32'h10;
     reg win_open = 0, win_first = 0;
     always @(posedge clk) if (watch_store && !frozen) win_open <= store_in_win;
     // ITRACE = 6 with DE_POST: the first branch after the window opens must
