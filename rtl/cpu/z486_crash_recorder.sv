@@ -259,7 +259,13 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             else if (io_rd_ev) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
         end else if (DE_TRIGGER && DE_IDE_ONLY) begin
-            if (io_wr && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
+            if (DE_IDE_ONLY == 3) begin
+                // display mode/control writes: 60h-6Eh, 7Ch, A0h-AEh
+                if (io_wr && (io_addr[15:4] == 12'h006 || io_addr == 16'h007c || io_addr[15:4] == 12'h00a))
+                    begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
+                else ev_valid = 1'b0;
+            end
+            else if (io_wr && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
             else if (io_rd && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
         end else if (gate_read && !pe && DE_TRIGGER) begin ev_type = 4'd1; ev_payload = gate_addr; end
