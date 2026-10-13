@@ -8,7 +8,7 @@ param(
     [int]$BuildMemoryGB = 8,
     [ValidateRange(1, 3)]
     [int]$MaxConcurrentBuilds = 1,
-    [ValidateSet(20, 40, 50, 60, 75, 90, 100)]
+    [ValidateSet(20, 40, 50, 60, 75, 82, 90, 100)]
     [int]$SystemClockMHz = 20,
     [ValidateSet('Zet', 'ao486', 'z486')]
     [string]$Cpu = 'Zet',

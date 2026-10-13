@@ -16,17 +16,19 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
-B248 adds native PC-9821 ROM banks, shadow RAM, software-DIP readback and
-precise segment checks for the supplied Ce2 and unknown-model BIOS sets. Both
-boot DOS and pass ROM-integrity, bank and GDC diagnostics. The recommended
-build runs at **75 MHz** and retains PR2, IC32/DC8, packed graphics, MIDI and
-the native-DDR framebuffer path. Its exact bitstream passes DOS qualification
-and Linux fault-restart checks with 100 normal process exits. The separate
-**90 MHz image is experimental** because it faults in Linux. No performance
-increase is claimed. Use the paired [OpenBIOS 2026-10-08 rebuild](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-08),
-or follow the [original NEC BIOS setup instructions](docs/OFFICIAL_BIOS_SETUP.md)
-to pack your own ROM set and install it on MiSTer. Release qualification and
-clock-specific limitations are recorded in the [BIOS guide](docs/BIOS_GUIDE.md).
+B249 runs at **81.8 MHz** (the 900 MHz PLL divided by 11), reduced from 90 MHz
+for stability: every 90 MHz placement we tried either failed DOS qualification or
+crashed in Windows 95, while both 81.8 MHz seeds built pass QUALIFY and boot
+Windows 95. It is faster than B248's recommended 75 MHz build. Many CPU fixes
+let **Windows 95 boot to the desktop**: segment loads past the LDT limit now
+raise the expected #GP instead of a page fault, and two instruction-fetch page
+fault deadlocks are gone (a branch or instruction split across a not-present
+page hung the CPU with interrupts dead). The graphics GDC now draws hardware
+rectangles correctly, so **Totsugeki! Bakkon Street** (floppy) gets past its
+title screen. B249 is **OpenBIOS-only**: the PC-9821 BIOS hardware added in B248
+was removed to fit the faster clock. Use the paired
+[OpenBIOS 2026-10-08](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-08);
+NEC ROM users can stay on B248.
 
 B247 fixes floppy disk changes with matching
 [OpenBIOS 2026-10-07](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-10-07).
@@ -116,8 +118,8 @@ N88-BASIC title and story scenes run with keyboard input.
   save to their own disk (Revival Xanadu, for example) need D88: convert with the
   [online converter](https://pc98.thefirstboss.com/converter/). MiSTer Main
   treats `.fdi` files as Spectrum images; rename or convert them to `.hdm`/`.d88`.
-- **BIOS:** works with the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
-  (no NEC ROM needed) or a PC-9801VM-based `boot.rom`.
+- **BIOS:** the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
+  (no NEC ROM needed). Since B249 NEC/PC-9821 BIOS sets are not supported (use B248).
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),
   right analog stick as mouse.
 - **Video:** scaled HDMI (native aspect or integer), and the core's own 640x400
@@ -144,23 +146,20 @@ N88-BASIC title and story scenes run with keyboard input.
 ## Not supported
 
 - Sound Blaster 16 (and other PC-98 sound cards besides the PC-9801-86)
-- Faster CPU speeds (no Pentium-class performance beyond the 90 MHz 486)
+- Faster CPU speeds (no Pentium-class performance; B249 runs the 486 at 81.8 MHz)
 - More RAM than 64 MB
 
 ## Installing on MiSTer
 
-**OpenBIOS is recommended, not mandatory.** Use B248 with OpenBIOS 2026-10-08,
-or pack your own matching NEC ROM set. B248 adds the hardware behavior needed
-by the tested PC-9821Ce2 and unknown-model PC-9821 sets. See the
-[BIOS choice and ROM packing guide](docs/BIOS_GUIDE.md)
-for NEC compatibility tests, separate-ROM conversion and old Zet98 BIOS limits.
+**B249 requires OpenBIOS** (2026-10-08). NEC ROM sets, including the PC-9821
+sets supported by B248, need B248 or older; see the
+[BIOS choice and ROM packing guide](docs/BIOS_GUIDE.md) for those releases.
 
 - Copy the core `.rbf` to `/media/fat/_Computer/`.
 - Put `boot.rom` and your disk images in `/media/fat/games/PC98/` (builds after
   B165; earlier builds use `/games/Zet98/`). Settings are saved as `PC98.CFG`.
-- `boot.rom`: either the free **[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)**
-  (download its release zip; no NEC ROM needed), or a `boot.rom` built from
-  your own matching, tested NEC BIOS set (see [original BIOS instructions](docs/OFFICIAL_BIOS_SETUP.md)).
+- `boot.rom`: the free **[Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)**
+  (download its release zip; no NEC ROM needed).
 - `DEVICE=HIMEM.SYS` works without any extra driver since B165: the core's disk
   extension ROM publishes the extended RAM and clears the V30 flag that the
   PC-9801VM BIOS always sets. `Z98MEM.SYS`/`Z98FIX.SYS` are no longer needed.
