@@ -16,6 +16,13 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B250 lets **Windows 95 use its own 32-bit disk driver** (ESDI_506.PDR): renaming
+it is no longer needed. The core's IDE BIOS now lists the hard disk in the BIOS
+work area (05BAh/05BBh and 0457h, as NP2kai does); without that, ESDI_506 dropped
+the disk while still driving the controller and Windows stopped with a protection
+error. Same 81.8 MHz configuration as B249 (**41,405 ALMs**, worst slack
+**-6.707 ns**); passes QUALIFY and boots Windows 95 to the desktop on hardware.
+
 B249 runs at **81.8 MHz** (the 900 MHz PLL divided by 11), reduced from 90 MHz
 for stability: every 90 MHz placement we tried either failed DOS qualification or
 crashed in Windows 95, while both 81.8 MHz seeds built pass QUALIFY and boot

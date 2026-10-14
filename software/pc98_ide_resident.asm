@@ -223,6 +223,15 @@ initialize:
     mov word [es:1bh*4],bios_stack_int1b
     mov word [es:1bh*4+2],cs
     or word [es:055ch],0100h
+    ; Report unit 0 as a BIOS hard disk the way NP2kai bios.c does. Win95's
+    ; ESDI_506.PDR claims the disk only if the BIOS lists it: with the
+    ; PC-9821 ROM ID (F8E80h = 2198h) in the IDE connection bitmap 05BAh,
+    ; otherwise in the SASI/IDE unit types 0457h (111b = none). Without it,
+    ; ESDI_506 drops the disk yet keeps driving the controller while the
+    ; real-mode BIOS serves it too: Windows protection error.
+    mov byte [es:0457h],97h        ; unit 0 hard disk, bank 1 none
+    or byte [es:05bah],01h         ; unit 0 connected
+    or byte [es:05bbh],01h         ; unit 0 is a hard disk
     call set_cpu_id
     mov byte [state],1
     jmp .return
