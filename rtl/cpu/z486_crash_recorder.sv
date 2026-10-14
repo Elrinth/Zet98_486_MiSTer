@@ -94,9 +94,19 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // outside V86 (e.g. a VxD emulating a trapped port); with
                              // [18] set, only a read.
                              parameter [18:0] DE_FREEZE_PORT = 19'h0,
+                             // DE_FREEZE_PORT_DATA[8] set: the DE_FREEZE_PORT access must be a
+                             // write of byte DE_FREEZE_PORT_DATA[7:0] (e.g. one ATA command).
+                             parameter [8:0] DE_FREEZE_PORT_DATA = 9'h0,
+                             // DE_FREEZE_PORT_EIP != 0: the access's EIP[31:16] must equal
+                             // [31:16] and its EIP[15:0] must differ from [15:0] (e.g. a driver's
+                             // own command, not its I/O-trap handler replaying a V86 BIOS).
+                             parameter [31:0] DE_FREEZE_PORT_EIP = 32'h0,
+                             // DE_IDE_SKIP_EIP != 0 (IDE_ONLY): do not log I/O from this EIP (a
+                             // driver's I/O-trap handler replaying V86 BIOS accesses).
+                             parameter [31:0] DE_IDE_SKIP_EIP = 32'h0,
                              // DE_IDE_ONLY (with DE_TRIGGER): log only IDE port accesses
                              // (064xh, 074Ch/074Eh, 0430h/0432h), reads and writes;
-                             // 2 also skips the data port 0640h/0641h. DE_FREEZE_ATA_ERR:
+                             // 2 also skips the data port 0640h/0641h; 4 also skips status reads. DE_FREEZE_ATA_ERR:
                              // freeze (after DE_POST entries) when a status read on the
                              // hard disk bank (last 0432h write bit 0 clear) shows ERR.
                              parameter integer DE_IDE_ONLY = 0,
@@ -265,6 +275,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             if (io_wr_ev) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
             else if (io_rd_ev) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
+        end else if (DE_TRIGGER && DE_IDE_ONLY && DE_IDE_SKIP_EIP != 0 && eip == DE_IDE_SKIP_EIP) begin
+            ev_valid = 1'b0;
         end else if (DE_TRIGGER && DE_IDE_ONLY) begin
             if (DE_IDE_ONLY == 3) begin
                 // display mode/control writes: 60h-6Eh, 7Ch, A0h-AEh
@@ -272,8 +284,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                     begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
                 else ev_valid = 1'b0;
             end
-            else if (io_wr && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
-            else if (io_rd && ide_any && !(DE_IDE_ONLY == 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
+            else if (io_wr && ide_any && !(DE_IDE_ONLY >= 2 && io_addr[15:1] == 15'h0320)) begin ev_type = 4'd10; ev_payload = {cs, eip[15:0]}; end
+            else if (io_rd && ide_any && !(DE_IDE_ONLY >= 2 && io_addr[15:1] == 15'h0320) &&
+                     !(DE_IDE_ONLY == 4 && (io_addr == 16'h064e || io_addr == 16'h074c))) begin ev_type = 4'd11; ev_payload = {cs, eip[15:0]}; end
             else ev_valid = 1'b0;
         end else if (gate_read && !pe && DE_TRIGGER) begin ev_type = 4'd1; ev_payload = gate_addr; end
         else if (de_match) begin ev_type = 4'd13; ev_payload = mem_data; end
@@ -364,7 +377,9 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                 else post_active <= 1'b1;
             end
             if (DE_TRIGGER && DE_FREEZE_PORT[16] && ((ev_type == 4'd10 && !DE_FREEZE_PORT[18]) || ev_type == 4'd11) && io_addr == DE_FREEZE_PORT[15:0] &&
-                (!DE_FREEZE_PORT[17] || (pe && !vm))) begin
+                (!DE_FREEZE_PORT[17] || (pe && !vm)) &&
+                (!DE_FREEZE_PORT_DATA[8] || (ev_type == 4'd10 && io_wdata[7:0] == DE_FREEZE_PORT_DATA[7:0])) &&
+                (DE_FREEZE_PORT_EIP == 0 || (eip[31:16] == DE_FREEZE_PORT_EIP[31:16] && eip[15:0] != DE_FREEZE_PORT_EIP[15:0]))) begin
                 if (DE_POST == 0) frozen <= 1'b1;
                 else post_active <= 1'b1;
             end
