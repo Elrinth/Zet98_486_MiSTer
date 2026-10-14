@@ -24,6 +24,9 @@ module address_unit
     input  logic        branch_relative,     // EA is a relative branch target
     input  logic [31:0] branch_target_eip,   // D2-computed relative target
     input  logic [31:0] forwarded_esp,       // ESP including prior delay-slot write
+    output logic [31:0] push_esp,            // Post-push ESP of the last issued PUSH
+    input  logic        esp_from_push,       // The RNI PUSH commits SIGMA (post-push ESP) now
+    input  logic [31:0] push_esp_check,      // That SIGMA; simulation cross-check only
     input  logic        ss_stack32,
     input  logic [31:0] issue_seg_base,      // D2 segment base, independent of seg command feedback
     input  logic        issue_eff_mask,      // D2 address mask, independent of seg command feedback
@@ -302,6 +305,22 @@ always_comb begin
     endcase
 end
 
+// Post-push ESP of the last issued PUSH. A PUSH in its RNI cycle commits that
+// value from SIGMA; forwarded_esp takes it from here instead.
+logic [31:0] push_esp_r;
+assign push_esp = push_esp_r;
+wire [31:0] issue_esp = forwarded_esp;
+always_ff @(posedge clk)
+    if (instr_issue && instr.stack_op && !instr.stack_dir)
+        push_esp_r <= ss_stack32
+            ? issue_esp - (instr.data32 ? 32'd4 : 32'd2)
+            : {issue_esp[31:16], issue_esp[15:0] - (instr.data32 ? 16'd4 : 16'd2)};
+// synthesis translate_off
+always @(posedge clk)
+    if (reset_n && esp_from_push && push_esp_r !== push_esp_check)
+        $fatal(1, "PUSH-ESP FUSE MISMATCH: local=%08x sigma=%08x", push_esp_r, push_esp_check);
+// synthesis translate_on
+
 // synthesis translate_off
 // CSA FUSE: the folded sums must equal their two-chain reference expressions.
 always @(posedge clk)
@@ -317,11 +336,11 @@ always @(posedge clk)
 always @(posedge clk)
     if (reset_n && instr_issue && instr.stack_op && !instr.stack_dir &&
         ss_stack32 && issue_eff_mask &&
-        (relocate_stack_push(forwarded_esp,
+        (relocate_stack_push(issue_esp,
                             instr.data32 ? 32'd4 : 32'd2) !=
-         relocate_issue(forwarded_esp - (instr.data32 ? 32'd4 : 32'd2))))
+         relocate_issue(issue_esp - (instr.data32 ? 32'd4 : 32'd2))))
         $fatal(1, "STACK-CSA FUSE MISMATCH: esp=%08x d=%0d base=%08x",
-               forwarded_esp, instr.data32 ? 4 : 2, issue_seg_base);
+               issue_esp, instr.data32 ? 4 : 2, issue_seg_base);
 // synthesis translate_on
 
 // Execution owns a separate relocation register. Updating this shadow in a
@@ -415,18 +434,18 @@ end
 
 // D2 address of the issuing instruction, hoisted so the issue arms below and
 // `issue_linear_next` share one expression (the paging unit prereads with it).
-wire [31:0] issue_stack_offset_pop = ss_stack32 ? forwarded_esp
-                                                 : {16'd0, forwarded_esp[15:0]};
+wire [31:0] issue_stack_offset_pop = ss_stack32 ? issue_esp
+                                                 : {16'd0, issue_esp[15:0]};
 wire [31:0] issue_stack_offset_push = ss_stack32
-    ? forwarded_esp - (instr.data32 ? 32'd4 : 32'd2)
-    : {16'd0, forwarded_esp[15:0] - (instr.data32 ? 16'd4 : 16'd2)};
+    ? issue_esp - (instr.data32 ? 32'd4 : 32'd2)
+    : {16'd0, issue_esp[15:0] - (instr.data32 ? 16'd4 : 16'd2)};
 wire [31:0] issue_linear_arm =
       (instr.stack_op && instr.stack_dir)
         ? relocate_issue(issue_stack_offset_pop)
     : (instr.stack_op && !instr.stack_dir)
         // 32-bit-stack push sub-then-relocate is one folded chain.
         ? ((ss_stack32 && issue_eff_mask)
-              ? relocate_stack_push(forwarded_esp,
+              ? relocate_stack_push(issue_esp,
                                    instr.data32 ? 32'd4 : 32'd2)
               : relocate_issue(issue_stack_offset_push))
     : instr.has_moffs ? relocate_issue(instr.immediate)

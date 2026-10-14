@@ -16,6 +16,14 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B251 runs at **90 MHz** again. A CPU timing fix (a PUSH's new stack pointer is kept
+next to the address unit instead of crossing the chip from the ALU) and the removal
+of native HDM/FDI floppy support (about 690 ALMs; convert those images to D88)
+made a 90 MHz placement that passes QUALIFY, boots Windows 95 to the desktop with
+its 32-bit disk driver, completes the Doom timedemo and starts the 25-game test
+set. Worst slack is **-7.442 ns** (static timing is not closed; this build was
+qualified on hardware).
+
 B250 lets **Windows 95 use its own 32-bit disk driver** (ESDI_506.PDR): renaming
 it is no longer needed. The core's IDE BIOS now lists the hard disk in the BIOS
 work area (05BAh/05BBh and 0457h, as NP2kai does); without that, ESDI_506 dropped
@@ -121,10 +129,10 @@ N88-BASIC title and story scenes run with keyboard input.
   `.pcd` file). Policenauts plays with its CD music.
 - **Hard disk:** IDE with raw VHD/IMG/IMA and HDI images, bootable directly. Both
   512-byte and old 256-byte-sector (SASI) HDIs boot and can be written.
-- **Floppies:** two drives, D88 (read/write), HDM and FDI (read-only). Games that
-  save to their own disk (Revival Xanadu, for example) need D88: convert with the
-  [online converter](https://pc98.thefirstboss.com/converter/). MiSTer Main
-  treats `.fdi` files as Spectrum images; rename or convert them to `.hdm`/`.d88`.
+- **Floppies:** two drives, **D88 only** (read/write). Since B251 HDM, FDI and NFD
+  images are rejected at mount (removed to free FPGA area for 90 MHz): convert them
+  with the [online converter](https://pc98.thefirstboss.com/converter/) or
+  `python scripts/import_disk_image.py game.hdm game.d88`.
 - **BIOS:** the free [Open PC-98 BIOS](https://github.com/Elrinth/PC98_Open_BIOS)
   (no NEC ROM needed). Since B249 NEC/PC-9821 BIOS sets are not supported (use B248).
 - **Input:** keyboard, USB mouse, joysticks and original PlayStation pads (SNAC),

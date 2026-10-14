@@ -1749,12 +1749,18 @@ wire       vipt_esp_fwd = vipt_load_wb_valid_r &&
 wire [31:0] vipt_esp_value = (vipt_load_wb_size_r == 2'd1)
                            ? {ESP[31:16], vipt_load_wb_data[15:0]}
                            : vipt_load_wb_data;
-wire [31:0] forwarded_esp = recipe_esp_fwd ? SIGMA :
+// A PUSH in its RNI cycle commits SIGMA = post-push ESP. The address unit
+// computed that value when the PUSH issued (push_esp), so forward its register
+// instead of SIGMA: the data unit's SIGMA no longer reaches the next stack
+// address (worst 90 MHz path). Simulation checks push_esp == SIGMA.
+wire [31:0] push_esp;
+wire [31:0] forwarded_esp_nosigma =
                             dly_esp_fwd  ? dly_fwd_value :
                             shc_esp_fwd  ? (recipe_shift_write.size == 2'd1
                                             ? {ESP[31:16], recipe_shift_data[15:0]}
                                             : recipe_shift_data) :
                             vipt_esp_fwd ? vipt_esp_value : ESP;
+wire [31:0] forwarded_esp = recipe_esp_fwd ? push_esp : forwarded_esp_nosigma;
 
 // D1 supplies registered selectors to the Address Unit. Literal displacement
 // remains a D2 value and is consumed when the instruction fires.
@@ -3404,6 +3410,9 @@ address_unit #(.REGISTERED_EA(PC98_PIPELINE_REGS[1])) address_unit_inst (
     .branch_relative(i_bus.rel_branch_kind != REL_BRANCH_NONE),
     .branch_target_eip(spec_target_eip),
     .forwarded_esp(forwarded_esp),
+    .push_esp(push_esp),
+    .esp_from_push(recipe_esp_fwd),
+    .push_esp_check(SIGMA),
     .ss_stack32(desc_cache[SEG_SS].D_B),
     .issue_seg_base(issue_seg_base),
     .issue_eff_mask(issue_eff_mask),

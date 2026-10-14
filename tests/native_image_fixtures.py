@@ -1,5 +1,6 @@
 """Synthetic images and independent D88 oracle. No private assets.
-NFD support was removed to save FPGA area; NFD images must be rejected."""
+Floppy slots accept D88 only: HDM, FDI and NFD support was removed to save
+FPGA area, so those images must be rejected."""
 import pathlib,struct,sys
 out=pathlib.Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 def fixture(name,source,oracle,reject=False,direct=False):
@@ -14,10 +15,11 @@ def floppy(c,s,b):
    start=(t*s+r)*b;d.extend(h+raw[start:start+b])
  struct.pack_into('<I',d,28,len(d));return raw,bytes(d)
 for c,s,b in [(77,8,1024),(80,15,512),(80,18,512),(80,8,512),(80,9,512),(40,8,512)]:
- raw,d88=floppy(c,s,b);fixture(f'hdm-{c}-{s}',raw,d88)
+ raw,d88=floppy(c,s,b);fixture(f'hdm-{c}-{s}',raw,d88,reject=True)
+ fixture(f'd88-{c}-{s}',d88,d88,direct=True)
  if c==77:
   fixture('d88',d88,d88,direct=True)
-  for offset in (37,4096):fixture(f'fdi-{offset}',struct.pack('<8I',0,0x90,offset,len(raw),b,s,2,c)+bytes(offset-32)+raw,d88)
+  for offset in (37,4096):fixture(f'fdi-{offset}',struct.pack('<8I',0,0x90,offset,len(raw),b,s,2,c)+bytes(offset-32)+raw,d88,reject=True)
   nfd=bytearray(68112);nfd[:15]=b'T98FDDIMAGE.R0\0';struct.pack_into('<I',nfd,272,68112);nfd[277]=2
   for t in range(163):
    for r in range(26):

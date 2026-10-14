@@ -87,6 +87,12 @@ checks, not boot tests. Several sampled translation HDIs instead contain
 
 ## Native image containers (candidate, hardware validation pending)
 
+**B251: floppy slots accept D88 only.** The HDM/FDI-to-virtual-D88 converter
+described below was removed to free FPGA area for 90 MHz; `pc98_floppy_images.sv`
+now checks the D88 header at mount and passes D88 transfers through. HDM, FDI and
+NFD images are rejected; convert them with `scripts/import_disk_image.py`. The
+rest of this section describes the removed converter.
+
 The MiSTer image bridge now validates headers before announcing mounted media.
 FDD0/FDD1 accept D88, HDM and FDI. HDM supports standard 77x2x8x1024,
 80x2x15x512, 80x2x18x512, 80x2x8x512, 80x2x9x512 and 40x2x8x512 images.
