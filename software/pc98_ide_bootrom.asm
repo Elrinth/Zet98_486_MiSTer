@@ -53,6 +53,11 @@ initialize:
     xor ax,ax
     mov es,ax
     or byte [es:054dh],40h
+    ; CRT_BIOS 0597h bit 7 (31 kHz / 480-line modes) completes the PC-9821
+    ; MATE-A signature (045Ch bit 6 and 0597h bits 7 and 2) that 256-colour
+    ; drivers check, e.g. Blandia. OpenBIOS sets it only if port 09A8h is
+    ; decoded; the core shows PEGC 256 colours but has no 31 kHz output.
+    or byte [es:0597h],80h
     mov ax,0d800h
     mov es,ax
     xor di,di

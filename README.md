@@ -16,6 +16,15 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B253 runs **Blandia** with its PC-9821 MULTI/MATE A (256-colour) display setting.
+Its graphics driver requires the BIOS work-area signature 045Ch bit 6 and 0597h
+bits 7 and 2; OpenBIOS sets 0597h bit 7 (31 kHz / 480-line modes) only when port
+09A8h is decoded, which the core no longer does. The IDE boot ROM now sets it.
+The core has no 31 kHz output, so a program that asks the BIOS for a 480-line
+mode gets a wrong picture. Blandia's MATE-B setting needs the Cirrus window
+accelerator and hangs; choose MULTI/MATE A. Same 81.8 MHz placement as B252
+(seed 7, worst slack **-6.228 ns**); passes QUALIFY and boots Windows 95 twice.
+
 B252 runs **Doom, Doom II and Wolfenstein 3D under VEM486** (and other VCPI
 memory managers) without changing CONFIG.SYS. Two problems stood in the way.
 First, a CPU bug: PUSHF/PUSHFD in virtual-8086 mode stored EFLAGS with the VM bit
