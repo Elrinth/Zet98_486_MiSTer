@@ -10,6 +10,8 @@ entry:
     push ds
     push cs
     pop ds
+    and al, 3                       ; OSD RAM size from the boot ROM
+    mov [ram_cap], al
     call detect_memory
     pop ds
     retf

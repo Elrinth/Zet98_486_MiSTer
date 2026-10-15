@@ -73,6 +73,7 @@ module microsequencer
     output logic [8:0]  uc_mem_ctrl,
     output logic [8:0]  uc_ind_ctrl,
     output logic        uc_fpu_f8,
+    output logic        uc_pushf_mask,
     output logic        uc_force_word,
     output logic        uc_ctl_pref
 );
@@ -241,7 +242,8 @@ ucode_rom microcode_rom_inst (
     .q_dly_source(uc_dly_source),
     .q_mem_ctrl(uc_mem_ctrl),
     .q_ind_ctrl(uc_ind_ctrl),
-    .q_fpu_f8(uc_fpu_f8)
+    .q_fpu_f8(uc_fpu_f8),
+    .q_pushf_mask(uc_pushf_mask)
 );
 
 assign uc = rom_q;

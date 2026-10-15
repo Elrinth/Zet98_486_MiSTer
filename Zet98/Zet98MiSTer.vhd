@@ -115,6 +115,8 @@ port(
 -- DIP switch, Lamp ports
 	pDip1			: in std_logic_vector(1 downto 0);
 	pDip2			: in std_logic_vector(7 downto 0);
+-- OSD RAM size published by the boot ROM: 0 64 MB, 1 32 MB, 2 16 MB
+	pRamSize		: in std_logic_vector(1 downto 0) := "00";
 	pLed			: out std_logic;
 	pFloppyAccess : out std_logic_vector(1 downto 0);
 	pFloppyWriteGate : out std_logic;
@@ -140,6 +142,7 @@ end Zet98MiSTer;
 architecture rtl of Zet98MiSTer is
 component pc98_ide_bootrom
 port(clk:in std_logic; address:in std_logic_vector(11 downto 0);
+     ram_size:in std_logic_vector(1 downto 0);
      q:out std_logic_vector(15 downto 0));
 end component;
 
@@ -3086,7 +3089,7 @@ begin
 --		q			=>DBIO_ODAT
 --	);
     ide_boot_firmware: if USE_IDE_BOOTROM/=0 generate
-        firmware: pc98_ide_bootrom port map(cpuclk,DBIO_ADDR,DBIO_ODAT);
+        firmware: pc98_ide_bootrom port map(cpuclk,DBIO_ADDR,pRamSize,DBIO_ODAT);
     end generate;
     no_ide_boot_firmware: if USE_IDE_BOOTROM=0 generate
         DBIO_ODAT<=(others=>'1');

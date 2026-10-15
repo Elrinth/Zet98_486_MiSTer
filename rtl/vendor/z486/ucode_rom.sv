@@ -24,7 +24,8 @@ module ucode_rom
     output      [2:0]  q_dly_source,
     output      [8:0]  q_mem_ctrl,
     output      [8:0]  q_ind_ctrl,
-    output             q_fpu_f8
+    output             q_fpu_f8,
+    output             q_pushf_mask
 );
 
 `Z486_KEEP reg [5:0] q_shift_source_r;
@@ -39,6 +40,7 @@ reg [2:0] q_dly_source_r;
 `Z486_KEEP reg [8:0] q_mem_ctrl_r;
 reg [8:0] q_ind_ctrl_r;
 reg q_fpu_f8_r;
+reg q_pushf_mask_r;
 
 // ALU source 1e is the historical 0x800000f8 coprocessor command port. z486
 // also reuses that encoding for SIGMA in non-FPU words, so keep the distinction
@@ -60,6 +62,15 @@ function automatic logic fpu_f8_predecode(input [36:0] w);
              ((dest == DEST_TMPH) && (source == SRC_SIGMA) &&
               (aluop == ALUJMP_PASS2) && (buscode == 6'h0c)));
     end
+endfunction
+
+// Word 7F4 (PUSHF/PUSHFD) ANDs SIGMA with the flags mask that interrupt and
+// fault delivery share. Those frames must keep VM and RF; the PUSHF image
+// stores both as zero (a V86 PUSHFD otherwise saves VM=1, and DX386 later
+// IRETDs that image back into V86 mode). Only this word matches.
+function automatic logic pushf_mask_predecode(input [36:0] w);
+    pushf_mask_predecode = (w[36:31] == 6'h16) && (w[23:18] == 6'h1e) &&
+                           (w[17:11] == 7'h08) && (w[5:0] == 6'h3f);
 endfunction
 
 // Source class for architectural GPR writes in an RNI delay slot. The Intel
@@ -300,6 +311,7 @@ always_ff @(posedge clk) begin
         q_mem_ctrl_r <= mem_ctrl_predecode(q_mem[36:0]);
         q_ind_ctrl_r <= ind_ctrl_predecode(q_mem[36:0]);
         q_fpu_f8_r <= fpu_f8_predecode(q_mem[36:0]);
+        q_pushf_mask_r <= pushf_mask_predecode(q_mem[36:0]);
     end
 end
 
@@ -336,6 +348,7 @@ end
 	        q_mem_ctrl_r <= mem_ctrl_predecode(q_mem[36:0]);
 	        q_ind_ctrl_r <= ind_ctrl_predecode(q_mem[36:0]);
 	        q_fpu_f8_r <= fpu_f8_predecode(q_mem[36:0]);
+        q_pushf_mask_r <= pushf_mask_predecode(q_mem[36:0]);
 	    end
 	end
 
@@ -356,6 +369,7 @@ assign q_dly_source = q_dly_source_r;
 assign q_mem_ctrl = q_mem_ctrl_r;
 assign q_ind_ctrl = q_ind_ctrl_r;
 assign q_fpu_f8 = q_fpu_f8_r;
+assign q_pushf_mask = q_pushf_mask_r;
 
 // synthesis translate_off
 always_ff @(posedge clk)

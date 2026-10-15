@@ -823,6 +823,7 @@ wire [2:0]  uc_dly_source;
 wire [8:0]  uc_mem_ctrl;
 wire [8:0]  uc_ind_ctrl;
 wire        uc_fpu_f8;
+wire        uc_pushf_mask;
 wire        uc_force_word;
 wire        microcode_rom_ce;
 wire [2:0]  d2_kind;
@@ -2878,6 +2879,7 @@ microsequencer microsequencer_inst (
     .uc_mem_ctrl(uc_mem_ctrl),
     .uc_ind_ctrl(uc_ind_ctrl),
     .uc_fpu_f8(uc_fpu_f8),
+    .uc_pushf_mask(uc_pushf_mask),
     .uc_force_word(uc_force_word),
     .uc_ctl_pref(uc_ctl_pref)
 );
@@ -3536,6 +3538,7 @@ data_unit data_unit_inst (
     .alu_source(uc_alu_src_shift),
     .alu_source_live(uc_alu_src),
     .fpu_f8(uc_fpu_f8),
+    .pushf_mask(uc_pushf_mask),
     .shift_source_class(uc_shift_source_class),
     .shift2_source(uc_shift2_source),
     .shift_is_shift2(uc_is_shift2),

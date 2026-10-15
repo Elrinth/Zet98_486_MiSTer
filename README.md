@@ -16,6 +16,19 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B252 runs **Doom, Doom II and Wolfenstein 3D under VEM486** (and other VCPI
+memory managers) without changing CONFIG.SYS. Two problems stood in the way.
+First, a CPU bug: PUSHF/PUSHFD in virtual-8086 mode stored EFLAGS with the VM bit
+set (real 386/486 CPUs always store VM and RF as 0). The core has no FPU, so these
+games take DX386's no-FPU path, which saves EFLAGS that way and later IRETDs back
+into protected mode with it, landing in V86 mode instead (hang or reset). Second,
+DX386 1.20 fails with more than ~48 MB: a new OSD **RAM size** option (Boot &
+storage) offers **32 MB (default)**, 64 MB and 16 MB. B252 runs at **81.8 MHz**
+(as B249/B250): seven 90 MHz placements of this change passed QUALIFY but none
+booted Windows 95 reliably, while the 81.8 MHz build (seed 7, worst slack
+**-6.228 ns**) passes QUALIFY, boots Windows 95 to the desktop twice and runs
+Doom, Doom II and Wolfenstein 3D on a VEM486 hard disk image.
+
 B251 runs at **90 MHz** again. A CPU timing fix (a PUSH's new stack pointer is kept
 next to the address unit instead of crossing the chip from the ALU) and the removal
 of native HDM/FDI floppy support (about 690 ALMs; convert those images to D88)
@@ -117,7 +130,8 @@ Policenauts and Cyberblock Metal Orange music is smooth, and Hokuto no Ken's
 N88-BASIC title and story scenes run with keyboard input.
 
 - **CPU:** z486 (486-class), **75 MHz recommended / 90 MHz experimental**,
-  **64 MB RAM** (HIMEM/XMS and EMM386/EMS work).
+  **32 MB RAM by default** (OSD **RAM size**: 32, 64 or 16 MB; HIMEM/XMS,
+  EMM386/EMS and VEM486/VCPI work).
   An OSD **CPU speed** setting slows the CPU for older speed-sensitive games
   (see [game setup notes](#game-setup-notes)).
 - **Graphics:** 640x400 16 colours from 4096, GRCG and EGC, 256-colour PEGC,

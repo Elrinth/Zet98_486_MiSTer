@@ -37,6 +37,15 @@ initialize:
     mov si,memfix
     mov cx,memfix_end-memfix
     rep movsb
+    ; The core returns the OSD RAM size (0 32 MB, 1 64 MB, 2 16 MB) in the
+    ; last ROM word. 32 MB is the default: DX386 1.20 (Doom, Wolfenstein 3D)
+    ; fails with more than ~48 MB. Swap 0/1 into the initializer's encoding
+    ; (0 no cap, 1 32 MB, 2 16 MB); it publishes no more memory than that.
+    mov al,[ram_size_word]
+    cmp al,2
+    jae .ram_code
+    xor al,1
+.ram_code:
     call 0da00h:0
     ; The core has an EGC. The PC-9801VM BIOS never reports one, so set
     ; 054Dh bit 6 as an EGC-equipped BIOS does (NP2kai bios.c: grcg.chip>=3).
@@ -64,4 +73,6 @@ resident_end:
 memfix:
     incbin MEMFIX_BINARY
 memfix_end:
-    times 8192-($-$$) db 0ffh
+    times 8190-($-$$) db 0ffh
+ram_size_word:
+    dw 0ffffh                       ; replaced by the core's RAM size setting

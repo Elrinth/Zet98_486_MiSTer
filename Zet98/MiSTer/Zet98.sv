@@ -176,8 +176,8 @@ parameter CONF_STR = {
 	// Everyday controls first: disk swaps, reset, video; the rest lives in
 	// sub-pages. Reset stands apart between separators, never under the
 	// cursor when the menu opens.
-	"S0,D88HDMFDI,FDD0;",
-	"S1,D88HDMFDI,FDD1;",
+	"S0,D88,FDD0;",
+	"S1,D88,FDD1;",
 `ifdef ZET98_RAW_IDE
 	"S2,VHDIMGHDIIMA,IDE hard disk;",
 	"S4,ISOBINPCD,CD-ROM (ISO/BIN/PCD);",
@@ -210,6 +210,9 @@ parameter CONF_STR = {
 	"P3oDE,Pad to keyboard,Numpad,Cursor keys,Buttons only,Off;",
 	"P4,Boot & storage;",
 	"P4OR,Empty boot,Wait for disk,Start BIOS;",
+	// Some DOS extenders (DX386 1.20: Doom, Wolfenstein 3D) fail with more
+	// than ~48 MB. The boot ROM publishes at most this much to the BIOS.
+	"P4o9A,RAM size,32 MB,64 MB,16 MB;",
 	"P4R9,Eject FD0;",
 	"P4RA,Eject FD1;",
 	"P4S3,RAM,NVRAM;",
@@ -894,6 +897,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pFloppyWriteGate(floppy_write_gate),
 	.pDip1(pdip1),
 	.pDip2(pdip2),
+	.pRamSize(status[42:41]),
 	.pSramld(sramld),
 	.pSramst(sramst),
 

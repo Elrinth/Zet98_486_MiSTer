@@ -118,6 +118,18 @@ real_mode:
     cmp al, 48
     jne .done                       ; inconsistent/aliased map: advertise none
 .publish:
+    ; RAM size cap (ram_cap: 0 or 3 64 MB, 1 32 MB, 2 16 MB). DOS extenders
+    ; such as DX386 1.20 (Doom, Wolfenstein 3D) fail with more than ~48 MB.
+    cmp byte [ram_cap], 1
+    jne .cap16
+    cmp al, 16
+    jbe .cap16
+    mov al, 16
+.cap16:
+    cmp byte [ram_cap], 2
+    jne .capped
+    mov al, 0
+.capped:
     mov ah, 0
     xor dx, dx
     mov es, dx
@@ -164,4 +176,5 @@ old_a20: db 0
 low_ok: db 0
 high_ok: db 0
 detected: db 0
+ram_cap: db 0                         ; 0 64 MB (Z98MEM.SYS), 1 32 MB, 2 16 MB
 saved: times 62 dd 0

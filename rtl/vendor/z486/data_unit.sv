@@ -49,6 +49,7 @@ module data_unit
     input  logic [5:0]  alu_source,
     input  logic [5:0]  alu_source_live,          // Timing-selected live ALU source
     input  logic        fpu_f8,
+    input  logic        pushf_mask,       // PUSHF image: VM and RF read as zero
     input  logic [3:0]  shift_source_class,      // Predecoded shifter source class
     input  logic [1:0]  shift2_source,           // Predecoded SHIFT2 source
     input  logic        shift_is_shift2,         // Registered ROM SHIFT2 decode
@@ -487,7 +488,7 @@ function automatic logic [31:0] read_alu_source(input logic [5:0] field);
         ALUSRC_TMPH: read_alu_source = slctr;
         ALUSRC_PROTUN: read_alu_source = protun;
         ALUSRC_ALLONES: read_alu_source = 32'hffff_ffff;
-        ALUSRC_FLAGS_MASK: read_alu_source = 32'h0007_7fd7;
+        ALUSRC_FLAGS_MASK: read_alu_source = {14'h0001, {2{!pushf_mask}}, 16'h7fd7};
         ALUSRC_CONST_4000: read_alu_source = 32'h4000;
         ALUSRC_CONST_N200: read_alu_source = 32'hffff_fdff;
         ALUSRC_CONST_8: read_alu_source = 32'd8;
