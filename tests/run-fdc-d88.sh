@@ -15,7 +15,7 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 python3 tests/fdc_d88_fixtures.py "$out"
 
-build() { # workdir FDC.vhd FDemu.vhd diskemu_mister.vhd
+build() { # workdir FDC.vhd FDemu.vhd diskemu_mister.vhd [fdlink.vhd]
     local w=$1
     mkdir -p "$w"
     # GHDL 1.0 needs: an others arm in seekcont, no expressions in port maps.
@@ -26,7 +26,7 @@ build() { # workdir FDC.vhd FDemu.vhd diskemu_mister.vhd
     ghdl -a --std=08 -fsynopsys --workdir="$w" \
         LIB/CRCGENN.vhd LIB/sftgen.vhd LIB/sftdiv.vhd LIB/signext.vhd LIB/digifilter.vhd \
         FDC/FDC_timing.vhd FDC/FDC_sectinfo.vhd FDC/fmmod.vhd FDC/mfmmod.vhd FDC/fmdem.vhd \
-        FDC/mfmdem.vhd FDC/headseek.vhd "$w/seekcont.vhd" FDC/nrdet.vhd "$w/FDC.vhd" \
+        FDC/mfmdem.vhd "${5:-FDC/fdlink.vhd}" FDC/headseek.vhd "$w/seekcont.vhd" FDC/nrdet.vhd "$w/FDC.vhd" \
         Zet98/FDtiming.vhd tests/fdc_d88_models.vhd diskemu_mister/FECcont.vhd \
         diskemu_mister/tracktable.vhd diskemu_mister/mkgapsync.vhd "$w/FDemu.vhd" \
         diskemu_mister/wrotecont.vhd diskemu_mister/sasidev.vhd diskemu_mister/sramcont.vhd \
@@ -53,6 +53,8 @@ for rate in ${FDC_D88_RATES:-20000}; do
     for t in std fm loh; do
         run "$out/new" "$t" "$out/$t.d88" -gSYSFREQ="$rate" --assert-level=error
     done
+    run "$out/new" write "$out/std.d88" -gSYSFREQ="$rate" --assert-level=error
+    run "$out/new" writefm "$out/fm.d88" -gSYSFREQ="$rate" --assert-level=error
 done
 for image in ${FDC_D88_IMAGES:-}; do
     run "$out/new" scan "$image" -gLOAD_MS=20000 -gLIMIT_MS=2000 --assert-level=error
@@ -87,4 +89,14 @@ sed 's/motorn<=	"00" when fdc_ifmode=.1. else fdc_motorn;/motorn<=fdc_motorn;/' 
 build "$out/motor" FDC/FDC.vhd diskemu_mister/FDemu.vhd "$out/diskemu-motor.vhd"
 # Old logic: drive not ready, ST0=C8h after the 800 ms ready timeout.
 expect_fail "port 94h motor bit stopping the 1MB drive" "BIOS gives up\|status error" "$out/motor" fm "$out/fm.d88"
+# The byte link must reproduce the demodulators' address-mark detection.
+sed 's/if(MARK=.1. and DAT=x"a1")then/if(false)then/' FDC/fdlink.vhd > "$out/fdlink-noa1.vhd"
+! cmp -s FDC/fdlink.vhd "$out/fdlink-noa1.vhd"
+build "$out/noa1" FDC/FDC.vhd diskemu_mister/FDemu.vhd diskemu_mister/diskemu_mister.vhd "$out/fdlink-noa1.vhd"
+expect_fail "byte link without A1 marks" "READ ID result mismatch" "$out/noa1" std "$out/std.d88"
+# ... and refuse bytes at the wrong data rate (density detection).
+sed 's/rdstb_ok<=RDSTB when 2\*RDLEN>bitwidth and 2\*RDLEN<3\*bitwidth else .0.;/rdstb_ok<=RDSTB;/' FDC/FDC.vhd > "$out/FDC-anyrate.vhd"
+! cmp -s FDC/FDC.vhd "$out/FDC-anyrate.vhd"
+build "$out/anyrate" "$out/FDC-anyrate.vhd" diskemu_mister/FDemu.vhd diskemu_mister/diskemu_mister.vhd
+expect_fail "byte link at any data rate" "READ ID found\|did not fail\|mismatch\|error" "$out/anyrate" std "$out/std.d88"
 echo "PASS: fdc-d88"

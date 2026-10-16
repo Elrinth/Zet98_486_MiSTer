@@ -8,22 +8,21 @@ entity kbconv_padkeys_tb is end;
 architecture test of kbconv_padkeys_tb is
  signal clk:std_logic:='0';signal rstn:std_logic:='0';
  signal cs,addr,rd,wr:std_logic:='0';signal data:std_logic_vector(7 downto 0);
- signal oe,irq,kco,kdo,emurx:std_logic;
- signal kci,kdi:std_logic:='1';signal unused1,unused2:std_logic_vector(7 downto 0);
+ signal oe,irq,emurx:std_logic;
+ signal key:std_logic_vector(10 downto 0):=(others=>'0');signal unused1,unused2:std_logic_vector(7 downto 0);
  signal pad:std_logic_vector(15 downto 0):=(others=>'0');
 begin
  clk<=not clk after 25 ns;
  dut:entity work.KBCONV generic map(CLKCYC=>20000,SFTCYC=>400,RPSET=>0)
  port map(CS=>cs,ADDR=>addr,RD=>rd,WR=>wr,RDAT=>data,WDAT=>x"00",OE=>oe,INT=>irq,
- KBCLKIN=>kci,KBCLKOUT=>kco,KBDATIN=>kdi,KBDATOUT=>kdo,emuen=>'0',emurx=>emurx,
+ KEYIN=>key,LEDOUT=>open,emuen=>'0',emurx=>emurx,
  emurxdat=>unused1,padkeys=>pad,monout=>unused2,clk=>clk,rstn=>rstn);
  process
   type codes is array(1 to 3) of std_logic_vector(7 downto 0);
   procedure cycles(n:natural) is begin for i in 1 to n loop wait until rising_edge(clk);end loop;wait for 1 ns;end;
   procedure send_byte(b:std_logic_vector(7 downto 0)) is
   begin
-   for i in 0 to 7 loop kdi<=b(i);kci<='1';cycles(3);kci<='0';cycles(3);end loop;
-   kci<='1';cycles(3200);
+   key<=not key(10) & "00" & b;cycles(3200);
   end;
   procedure read_byte(got:out std_logic_vector(7 downto 0)) is
   begin

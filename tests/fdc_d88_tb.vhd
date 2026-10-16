@@ -186,6 +186,19 @@ architecture test of fdc_d88_tb is
     signal dma_count : natural := 0;
     signal dma_len : natural := 0;
     signal dma_go : boolean := false;
+    -- DMA direction: false device->memory (READ), true memory->device (WRITE);
+    -- a WRITE sends wbuf() through DACK + WRn.
+    signal dma_wr : boolean := false;
+    -- FDC data-rate select (FDtiming); the drive stays a 2HD drive
+    signal fdt_hd : std_logic := FDC_H_Dn;
+    signal fdl_wdat, fdl_rdat : std_logic_vector(7 downto 0);
+    signal fdl_wmark, fdl_wmfm, fdl_wstb, fdl_rmark, fdl_rmfm, fdl_rstb : std_logic;
+    signal fdl_rlen, fdl_wlen : integer range 0 to 16383;
+    signal wbuf : buf_t := (others=>0);
+    signal dma_wrn : std_logic := '1';
+    signal dma_wdat : std_logic_vector(7 downto 0) := (others=>'0');
+    signal fdc_wrn : std_logic;
+    signal fdc_wdat : std_logic_vector(7 downto 0);
 
     -- SDRAM behavioural model state (sdramc accept/busy protocol)
     signal fde_busy, fec_busy : std_logic := '0';
@@ -300,11 +313,13 @@ begin
     -------------------------------------------------------------------------
     FDT : entity work.FDtiming generic map(SYSFREQ) port map(
         drv0sel=>'0', drv1sel=>'0', drv0sele=>'0', drv1sele=>'0',
-        drv0hd=>FDC_H_Dn, drv0hdi=>'1', drv1hd=>FDC_H_Dn, drv1hdi=>'1',
+        drv0hd=>fdt_hd, drv0hdi=>'1', drv1hd=>fdt_hd, drv1hdi=>'1',
         drv0hds=>open, drv1hds=>open, drv0int=>FDC_int, drv1int=>open,
         hmssft=>FDC_hmssft, clk=>clk, rstn=>rstn);
 
     fdc_rdn <= cpu_rdn and dma_rdn;
+    fdc_wrn <= cpu_wrn and dma_wrn;
+    fdc_wdat <= dma_wdat when dma_dackn='0' else cpu_wdat;
     fdc_ready_in <= FDE_READYn and not FDC_FREADY;
     fdc_motorn <= (not FDC_MOTOR) & (not FDC_MOTOR);
     fdc_tc <= dma_tc;
@@ -312,10 +327,11 @@ begin
         maxtrack=>85, maxbwidth=>(BR_300_D*SYSFREQ/1000000), rdytout=>800,
         preseek=>'0', sysclk=>SYSFREQ/1000)
     port map(
-        RDn=>fdc_rdn, WRn=>cpu_wrn, CSn=>cpu_csn, A0=>cpu_a0, WDAT=>cpu_wdat,
+        RDn=>fdc_rdn, WRn=>fdc_wrn, CSn=>cpu_csn, A0=>cpu_a0, WDAT=>fdc_wdat,
         RDAT=>FDC_ODAT, DATOE=>FDC_DOE, DACKn=>dma_dackn, DRQ=>FDC_DRQ,
         TC=>fdc_tc, INTn=>FDC_INTn, WAITIN=>'0',
-        WREN=>FDE_WRENn, WRBIT=>FDE_WRBITn, RDBIT=>FDE_RDBITn, STEP=>FDE_STEPn,
+        WREN=>FDE_WRENn, WRDAT=>fdl_wdat, WRMARK=>fdl_wmark, WRMFM=>fdl_wmfm, WRSTB=>fdl_wstb,
+        RDDAT=>fdl_rdat, RDMARK=>fdl_rmark, RDMFM=>fdl_rmfm, RDSTB=>fdl_rstb, RDLEN=>fdl_rlen, WRLEN=>fdl_wlen, STEP=>FDE_STEPn,
         SDIR=>FDE_SDIRn, WPRT=>FDE_WPROTn, track0=>FDE_TRACK0n, index=>FDE_INDEXn,
         side=>FDE_SIDEn, usel=>FDC_USEL,
         READY=>fdc_ready_in,
@@ -332,8 +348,9 @@ begin
         sasi_req=>open, sasi_ack=>'0', sasi_io=>open, sasi_cd=>open, sasi_msg=>open,
         sasi_rst=>'0',
         fdc_useln=>FDC_USELbn(1 downto 0), fdc_motorn=>fdc_motorn,
-        fdc_readyn=>FDE_READYn, fdc_wrenn=>FDE_WRENn, fdc_wrbitn=>FDE_WRBITn,
-        fdc_rdbitn=>FDE_RDBITn, fdc_stepn=>FDE_STEPn, fdc_sdirn=>FDE_SDIRn,
+        fdc_readyn=>FDE_READYn, fdc_wrenn=>FDE_WRENn, fdc_wrdat=>fdl_wdat, fdc_wrmark=>fdl_wmark,
+        fdc_wrmfm=>fdl_wmfm, fdc_wrstb=>fdl_wstb, fdc_rddat=>fdl_rdat, fdc_rdmark=>fdl_rmark,
+        fdc_rdmfm=>fdl_rmfm, fdc_rdstb=>fdl_rstb, fdc_rdlen=>fdl_rlen, fdc_wrlen=>fdl_wlen, fdc_stepn=>FDE_STEPn, fdc_sdirn=>FDE_SDIRn,
         fdc_track0n=>FDE_TRACK0n, fdc_indexn=>FDE_INDEXn, fdc_siden=>FDE_SIDEn,
         fdc_wprotn=>FDE_WPROTn, fdc_eject=>"00", fdc_indisk=>fdc_indisk,
         fdc_trackwid=>'1', fdc_dencity=>FDC_H_Dn, fdc_rpm=>'0', fdc_mfm=>FDE_MFM,
@@ -373,13 +390,19 @@ begin
         end if;
         if FDC_DRQ='1' and n < dma_len then
             dma_dackn <= '0';
-            dma_rdn <= '0';
+            if dma_wr then
+                dma_wdat <= std_logic_vector(to_unsigned(wbuf(n), 8));
+                dma_wrn <= '0';
+            else
+                dma_rdn <= '0';
+            end if;
             if n = dma_len-1 then dma_tc <= '1'; end if;
             for i in 1 to 3 loop wait until rising_edge(clk); end loop;
-            dmabuf(n) <= to_integer(unsigned(FDC_ODAT));
+            if not dma_wr then dmabuf(n) <= to_integer(unsigned(FDC_ODAT)); end if;
             n := n + 1;
             dma_count <= n;
             dma_rdn <= '1';
+            dma_wrn <= '1';
             dma_dackn <= '1';
             dma_tc <= '0';
             wait until rising_edge(clk);
@@ -583,6 +606,60 @@ begin
 
         -- MT READ DATA from head 0 sector r; count sectors, continuing on head 1
         -- R=1 after EOT (standard R=1..EOT geometry).
+        -- WRITE DATA count sectors of pattern seed, then READ DATA them back
+        -- and check the next sector still holds the D88 data.
+        procedure write_verify(mf, track, hd, c, h, r, n, eot, count, seed : natural) is
+            variable ms : real;
+            variable size, total, bad : natural;
+        begin
+            size := 128 * 2**n;
+            total := size * count;
+            for i in 0 to total-1 loop wbuf(i) <= (i*7 + seed*13 + i/size) mod 256; end loop;
+            dma_wr <= true;
+            dma_len <= total;
+            dma_go <= not dma_go;
+            wait until rising_edge(clk);
+            put(16#05# + mf*64); put(hd*4); put(c); put(h); put(r); put(n);
+            put(eot); put(16#1B#); put(16#FF#);
+            wait_int("WRITE DATA", 3 sec, ms);
+            for i in 0 to 6 loop get(res(i)); end loop;
+            show("WRITE DATA MF=" & integer'image(mf) & " R=" & integer'image(r) & " x" & integer'image(count), 7);
+            dma_wr <= false;
+            if not (res(0) = hd*4 and res(1) = 0 and res(2) = 0) or dma_count /= total then
+                report "WRITE DATA status error or short transfer " & integer'image(dma_count) severity error;
+                failures := failures + 1;
+            end if;
+            -- read the written sectors back
+            dma_len <= total;
+            dma_go <= not dma_go;
+            wait until rising_edge(clk);
+            put(16#06# + mf*64); put(hd*4); put(c); put(h); put(r); put(n);
+            put(eot); put(16#1B#); put(16#FF#);
+            wait_int("READ DATA (verify)", 3 sec, ms);
+            for i in 0 to 6 loop get(res(i)); end loop;
+            show("READ back", 7);
+            if not (res(0) = hd*4 and res(1) = 0 and res(2) = 0) or dma_count /= total then
+                report "READ back status error or short transfer " & integer'image(dma_count) severity error;
+                failures := failures + 1;
+            end if;
+            bad := 0;
+            for i in 0 to total-1 loop
+                if dmabuf(i) /= wbuf(i) then
+                    if bad < 4 then
+                        report "written byte " & integer'image(i) & ": got " & integer'image(dmabuf(i)) &
+                            " expected " & integer'image(wbuf(i)) severity error;
+                    end if;
+                    bad := bad + 1;
+                end if;
+            end loop;
+            if bad /= 0 then
+                report integer'image(bad) & " written bytes read back wrong" severity error;
+                failures := failures + 1;
+            end if;
+            -- the following sector is untouched (gap and ID of the next sector intact)
+            read_data(mf, track, hd, c, h, r+count, n, eot, 1);
+        end procedure;
+
         procedure read_data_mt(mf, t0track, c, hd, r, n, eot, count : natural) is
             variable ms : real;
             variable size, total, off, bad, rr, hh : natural;
@@ -731,6 +808,14 @@ begin
             -- the BIOS boot probes FM first: must fail within the timeout
             seek(0, 0);
             read_id_missing(0, 0);
+            -- density detection: at the 2DD data rate a 2HD track has no
+            -- readable IDs (the demodulator would not lock at 2x the cell)
+            fdt_hd <= '0';
+            clocks(100);
+            read_id_missing(1, 0);
+            fdt_hd <= FDC_H_Dn;
+            clocks(100);
+            read_id(1, 0, 0, 0, -1, 3);
         elsif TEST = "fm" then
             -- a single-density track must still turn at 360 rpm
             index_period(0);
@@ -763,6 +848,14 @@ begin
             read_data(1, 1, 1, 0, 1, 48, 3, 8, 4);
             seek(1, 1);
             read_data(1, 3, 1, 1, 1, 53, 3, 8, 3);
+        elsif TEST = "write" then
+            -- MFM 2HD (std image): sectors 2-3 of track 0, then track 3 R=5
+            write_verify(1, 0, 0, 0, 0, 2, 3, 8, 2, 1);
+            seek(1, 1);
+            write_verify(1, 3, 1, 1, 1, 5, 3, 8, 1, 2);
+        elsif TEST = "writefm" then
+            -- FM 26x128 (fm image) track 0: R=3..4
+            write_verify(0, 0, 0, 0, 0, 3, 0, 26, 2, 3);
         elsif TEST = "scan" then
             for cyl in CYL_FIRST to CYL_LAST loop
                 if (cyl - CYL_FIRST) mod CYL_STEP = 0 and img.nsec(2*cyl) /= 0 then

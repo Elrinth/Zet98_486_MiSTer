@@ -162,8 +162,8 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     input pBootHold,
     output [1:0] pFloppyPresent,
     output [127:0] pCPUDebug,
-    input pPs2Clkin, pPs2Datin, pPmsClkin, pPmsDatin,
-    output pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout,
+    input [10:0] pKbKey, input [24:0] pMsPkt,
+    output [2:0] pKbLed,
     input [7:0] pMsExtDX, pMsExtDY, input pMsExtStb, input [1:0] pMsExtBtn,
     input [5:0] pJoyA, pJoyB,
     input [15:0] pPadKeys,
@@ -185,6 +185,7 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     input [15:0] pIDEReadData,
     input pIDEOE, pIDEIRQ,
     input [1:0] pCPUSpeed,
+    input [1:0] pRamSize,
     input [7:0] pMPUReadData,
     input pMPUOE, pMPUIRQ,
     output pLed, output reg [1:0] pFloppyAccess=0, output reg pFloppyWriteGate=0,
@@ -204,5 +205,5 @@ module Zet98MiSTer #(parameter SYSFREQ = 20000, CPU486 = 0, EXT_RAM_MB = 0, LOWM
     assign pFloppyPresent = 0;
     assign pCPUDebug = 0;
     assign {pVideoR, pVideoG, pVideoB, pVideoHS, pVideoVS, pVideoEN, pVideoClk} = 0;
-    assign {pPs2Clkout, pPs2Datout, pPmsClkout, pPmsDatout} = 4'b1111;
+    assign pKbLed = 3'b000;
 endmodule

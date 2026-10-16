@@ -28,8 +28,17 @@ port(
 	WAITIN	:in std_logic	:='0';
 
 	WREN	:out std_logic;		--pin24
-	WRBIT	:out std_logic;		--pin22
-	RDBIT	:in std_logic;		--pin30
+	-- Byte-level data link (FDC/fdlink.vhd) in place of the WRBIT/RDBIT cells
+	WRDAT	:out std_logic_vector(7 downto 0);
+	WRMARK	:out std_logic;
+	WRMFM	:out std_logic;
+	WRSTB	:out std_logic;
+	RDDAT	:in std_logic_vector(7 downto 0);
+	RDMARK	:in std_logic;
+	RDMFM	:in std_logic;
+	RDSTB	:in std_logic;
+	RDLEN	:in integer range 0 to 16383	:=0;	-- emulator FM cell width (clocks)
+	WRLEN	:out integer range 0 to 16383;		-- FDC FM cell width (clocks)
 	STEP	:out std_logic;		--pin20
 	SDIR	:out std_logic;		--pin18
 	WPRT	:in std_logic;		--pin28
@@ -301,6 +310,10 @@ signal	mfmrxed		:std_logic;
 signal	mfmma1det	:std_logic;
 signal	mfmmc2det	:std_logic;
 signal	mfmcurwid	:integer range 0 to maxbwidth;
+signal	linkrxdat	:std_logic_vector(7 downto 0);
+signal	rdstb_ok	:std_logic;
+signal	linktxdat	:std_logic_vector(7 downto 0);
+signal	linktxwr,linktxmark,linktxmfm,linktxemp,linktxend,linkwren	:std_logic;
 
 signal	txdat		:std_logic_vector(7 downto 0);
 signal	fmtxwr		:std_logic;
@@ -4639,51 +4652,35 @@ begin
 		rstn	=>rstn
 	);
 	
-	FMD	:fmdem generic map(
-	bwidth	=>maxbwidth
-)
-port map(
-	bitlen	=>bitwidth,
-	
-	datin	=>RDBIT,
-	
-	init	=>deminit,
-	break	=>dembreak,
-	
-	RXDAT	=>fmrxdat,
-	RXED	=>fmrxed,
-	DetMF8	=>fmmf8det,
-	DetMFB	=>fmmfbdet,
-	DetMFC	=>fmmfcdet,
-	DetMFE	=>fmmfedet,
-	
-	curlen	=>fmcurwid,
-	
-	clk		=>clk,
-	rstn	=>rstn
-);
-
-	MFMD:mfmdem generic map(
-	bwidth	=>maxbwidth/2
-)
-port map(
-	bitlen	=>bitwidth/2,
-	
-	datin	=>RDBIT,
-	
-	init	=>deminit,
-	break	=>dembreak,
-	
-	RXDAT	=>mfmrxdat,
-	RXED	=>mfmrxed,
-	DetMA1	=>mfmma1det,
-	DetMC2	=>mfmmc2det,
-	
-	curlen	=>mfmcurwid,
-	
-	clk		=>clk,
-	rstn	=>rstn
-);
+	-- Byte link receiver: the fmdem/mfmdem outputs for the emulator's bytes.
+	LRX	:entity work.fdlinkrx port map(
+		DAT		=>RDDAT,
+		MARK	=>RDMARK,
+		MFM		=>RDMFM,
+		STB		=>rdstb_ok,
+		fminit	=>deminit,
+		fmbreak	=>dembreak,
+		mfminit	=>deminit,
+		mfmbreak=>dembreak,
+		RXDAT	=>linkrxdat,
+		FMRXED	=>fmrxed,
+		DetMF8	=>fmmf8det,
+		DetMFB	=>fmmfbdet,
+		DetMFC	=>fmmfcdet,
+		DetMFE	=>fmmfedet,
+		MFMRXED	=>mfmrxed,
+		DetMA1	=>mfmma1det,
+		DetMC2	=>mfmmc2det,
+		clk		=>clk,
+		rstn	=>rstn
+	);
+	fmrxdat<=linkrxdat;
+	mfmrxdat<=linkrxdat;
+	-- Like the bit demodulators, which lock only to cells within 0.5x..1.5x
+	-- of the expected width, the link delivers bytes only at a matching data
+	-- rate: software finds a disk's density by failing reads in the wrong mode.
+	rdstb_ok<=RDSTB when 2*RDLEN>bitwidth and 2*RDLEN<3*bitwidth else '0';
+	WRLEN<=bitwidth;
 
 	sftwidth<= bitwidth when MF='0' else bitwidth/2;
 	
@@ -4695,45 +4692,39 @@ port map(
 		rstn	=>rstn
 	);
 
-	FMM	:fmmod
-port map(
-	txdat	=>txdat,
-	txwr	=>fmtxwr,
-	txmf8	=>fmmf8wr,
-	txmfb	=>fmmfbwr,
-	txmfc	=>fmmfcwr,
-	txmfe	=>fmmfewr,
-	break	=>modbreak,
-	
-	txemp	=>fmtxemp,
-	txend	=>fmtxend,
-	
-	bitout	=>fmwrbit,
-	writeen	=>fmwren,
-	
-	sft		=>modsft,
-	clk		=>clk,
-	rstn	=>rstn
-);
-
-	MFMM :mfmmod
-port map(
-	txdat	=>txdat,
-	txwr	=>mfmtxwr,
-	txma1	=>mfmma1wr,
-	txmc2	=>mfmmc2wr,
-	break	=>modbreak,
-	
-	txemp	=>mfmtxemp,
-	txend	=>mfmtxend,
-	
-	bitout	=>mfmwrbit,
-	writeen	=>mfmwren,
-	
-	sft		=>modsft,
-	clk		=>clk,
-	rstn	=>rstn
-);
+	-- Byte link transmitter: the fmmod/mfmmod handshake, one byte per strobe.
+	-- Marks are sent as their byte value with MARK set.
+	linktxwr<=fmtxwr or fmmf8wr or fmmfbwr or fmmfcwr or fmmfewr or mfmtxwr or mfmma1wr or mfmmc2wr;
+	linktxmark<=fmmf8wr or fmmfbwr or fmmfcwr or fmmfewr or mfmma1wr or mfmmc2wr;
+	linktxmfm<=mfmtxwr or mfmma1wr or mfmmc2wr;
+	linktxdat<=	x"a1" when mfmma1wr='1' else
+				x"c2" when mfmmc2wr='1' else
+				x"f8" when fmmf8wr='1' else
+				x"fb" when fmmfbwr='1' else
+				x"fc" when fmmfcwr='1' else
+				x"fe" when fmmfewr='1' else
+				txdat;
+	LTX	:entity work.fdlinktx port map(
+		txdat	=>linktxdat,
+		txwr	=>linktxwr,
+		txmark	=>linktxmark,
+		txmfm	=>linktxmfm,
+		break	=>modbreak,
+		txemp	=>linktxemp,
+		txend	=>linktxend,
+		writeen	=>linkwren,
+		DAT		=>WRDAT,
+		MARK	=>WRMARK,
+		MFM		=>WRMFM,
+		STB		=>WRSTB,
+		sftfm	=>modsft,
+		sftmfm	=>modsft,
+		clk		=>clk,
+		rstn	=>rstn
+	);
+	fmtxemp<=linktxemp; mfmtxemp<=linktxemp;
+	fmtxend<=linktxend; mfmtxend<=linktxend;
+	fmwren<=linkwren; mfmwren<=linkwren;
 
 	RDET	:NRDET generic map(rdytout*2) port map(
 		start	=>NRDSTART,
@@ -4749,11 +4740,9 @@ port map(
 	wrbits<=fmwrbit when MF='0' else mfmwrbit;
 	wrens<=fmwren when MF='0' else mfmwren;
 	
-	wbext	:signext generic map(extcount) port map(extcount,wrbits,wrbitex,clk,rstn);
 	weext	:signext generic map(extcount) port map(extcount,wrens,wrenex,clk,rstn);
 	
 	WREN<=not wrenex;
-	WRBIT<=not wrbitex;
 	
 	busy<=	'1' when seek_busy='1' else
 			'1' when datnum/=0 else

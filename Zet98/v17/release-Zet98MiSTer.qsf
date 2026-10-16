@@ -393,6 +393,7 @@ set_global_assignment -name VHDL_FILE ../../FDC/seekcont.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/nrdet.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/mfmmod.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/mfmdem.vhd
+set_global_assignment -name VHDL_FILE ../../FDC/fdlink.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/headseek.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/fmmod.vhd
 set_global_assignment -name VHDL_FILE ../../FDC/fmdem.vhd
@@ -537,10 +538,9 @@ set_global_assignment -name VHDL_FILE ../GDC/gdc.vhd
 set_global_assignment -name QIP_FILE ../GDC/gdcfifo.qip
 set_global_assignment -name VECTOR_WAVEFORM_FILE ../GDC/gdc.vwf
 set_global_assignment -name VHDL_FILE ../itfsw.vhd
-set_global_assignment -name VHDL_FILE ../../PS2IF/PS2IF.vhd
+set_global_assignment -name VHDL_FILE ../../PS2IF/PS2DIRECT.vhd
 set_global_assignment -name VHDL_FILE ../MOUSE/mouseint.vhd
 set_global_assignment -name VHDL_FILE ../MOUSE/MOUSECONV.vhd
-set_global_assignment -name VHDL_FILE ../../PS2IF/KBIF.vhd
 set_global_assignment -name QIP_FILE ../KBIF/ktbln.qip
 set_global_assignment -name VHDL_FILE ../KBIF/ktbln.vhd
 set_global_assignment -name HEX_FILE ../KBIF/ktbln.hex

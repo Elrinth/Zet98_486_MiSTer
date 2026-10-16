@@ -16,6 +16,20 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B255 is the same machine in less logic, with nothing removed. Keyboard and
+mouse now reach the core as MiSTer's key and mouse events instead of a
+simulated PS/2 cable in both directions (`PS2IF/PS2DIRECT.vhd`); keyboard LEDs
+and gamepad keys work as before and the keyboard queue holds 64 bytes (was 16).
+The floppy controller and the drive emulator exchange bytes (data, address
+mark, density, data rate) instead of FM/MFM bit cells (`FDC/fdlink.vhd`), with
+the same byte timing; reads at the wrong data rate fail as on real hardware, so
+software that detects a disk's density by trying (Black Onyx) still works.
+Together about 300 ALMs of logic and 860 registers less, which gives the
+fitter room and lets future features fit. 81.8 MHz (seed 8); passes QUALIFY,
+boots Windows 95 twice, and was tested with Black Onyx (including saving a
+character), Hokuto, Asteka, Totsugeki!, Madou Monogatari, MS-DOS boot, file
+writes and FORMAT on floppy.
+
 B254 runs **Windows 95 in 640x480 with 256 colours** and the Win95 CD game
 **Magical Chase**. The PEGC now decodes port 09A8h (bit 0 = 480-line mode), and
 the raster switches to 480 visible lines between frames. Windows 95 uses it with

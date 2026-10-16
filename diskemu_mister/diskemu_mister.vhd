@@ -27,8 +27,16 @@ port(
 	fdc_motorn	:in std_logic_vector(1 downto 0)	:=(others=>'1');
 	fdc_readyn	:out std_logic;
 	fdc_wrenn	:in std_logic						:='1';
-	fdc_wrbitn	:in std_logic						:='1';
-	fdc_rdbitn	:out std_logic;
+	fdc_wrdat	:in std_logic_vector(7 downto 0)	:=(others=>'0');
+	fdc_wrmark	:in std_logic						:='0';
+	fdc_wrmfm	:in std_logic						:='0';
+	fdc_wrstb	:in std_logic						:='0';
+	fdc_rddat	:out std_logic_vector(7 downto 0);
+	fdc_rdmark	:out std_logic;
+	fdc_rdmfm	:out std_logic;
+	fdc_rdstb	:out std_logic;
+	fdc_rdlen	:out integer range 0 to 16383;
+	fdc_wrlen	:in integer range 0 to 16383	:=0;
 	fdc_stepn	:in std_logic						:='1';
 	fdc_sdirn	:in std_logic						:='1';
 	fdc_track0n	:out std_logic;
@@ -265,7 +273,7 @@ signal	fbwr		:std_logic;
 
 signal	fde_track0n	:std_logic;
 signal	fde_indexn	:std_logic;
-signal	fde_rdbitn	:std_logic;
+signal	fde_rdstb	:std_logic;
 
 signal	fde_ramaddrw	:std_logic_vector(23 downto 0);
 signal	fdc_usel		:std_logic_vector(1 downto 0);
@@ -415,10 +423,18 @@ port(
 	MOTOR	:in std_logic;
 	READY	:out std_logic;
 	WRENn	:in std_logic;		--pin24
-	WRBITn	:in std_logic;		--pin22
+	WRDAT	:in std_logic_vector(7 downto 0);
+	WRMARK	:in std_logic;
+	WRLMFM	:in std_logic;
+	WRSTB	:in std_logic;
 	WRFDMODE:in std_logic_vector(1 downto 0);
 	WRMFM	:in std_logic;
-	RDBITn	:out std_logic;		--pin30
+	RDDAT	:out std_logic_vector(7 downto 0);
+	RDMARK	:out std_logic;
+	RDLMFM	:out std_logic;
+	RDSTB	:out std_logic;
+	RDLEN	:out integer range 0 to 16383;
+	WRLEN	:in integer range 0 to 16383	:=0;
 	STEPn	:in std_logic;		--pin20
 	SDIRn	:in std_logic;		--pin18
 	track0n	:out std_logic;		--pin26
@@ -1987,10 +2003,18 @@ begin
 		MOTOR			=>fdc_motoren,
 		READY			=>open,
 		WRENn			=>fdc_wrenn,
-		WRBITn		=>fdc_wrbitn,
+		WRDAT		=>fdc_wrdat,
+		WRMARK		=>fdc_wrmark,
+		WRLMFM		=>fdc_wrmfm,
+		WRSTB		=>fdc_wrstb,
 		WRFDMODE		=>fdc_dencity & fdc_trackwid,
 		WRMFM			=>fdc_mfm,
-		RDBITn		=>fde_rdbitn,
+		RDDAT		=>fdc_rddat,
+		RDMARK		=>fdc_rdmark,
+		RDLMFM		=>fdc_rdmfm,
+		RDSTB		=>fde_rdstb,
+		RDLEN		=>fdc_rdlen,
+		WRLEN		=>fdc_wrlen,
 		STEPn			=>fdc_stepn,
 		SDIRn			=>fdc_sdirn,
 		track0n		=>fde_track0n,
@@ -2006,9 +2030,7 @@ begin
 	fdc_indexn<=	fde_indexn	when fdc_useln="10" else
 						fde_indexn	when fdc_useln="01" else
 						'1';
-	fdc_rdbitn<=	fde_rdbitn	when fdc_useln="10" else
-						fde_rdbitn	when fdc_useln="01" else
-						'1';
+	fdc_rdstb<=	fde_rdstb	when fdc_useln="10" or fdc_useln="01" else '0';
 	
 	fdc_readyn<=motorn(0) when fdc_indiskb(0)='1' and fdc_useln(0)='0' else
 					motorn(1) when fdc_indiskb(1)='1' and fdc_useln(1)='0' else

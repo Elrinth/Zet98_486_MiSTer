@@ -57,15 +57,11 @@ port(
     pBootHold   :in std_logic := '0';
     pFloppyPresent :out std_logic_vector(1 downto 0);
 
-	-- PS/2 keyboard ports
-	pPs2Clkin	: in std_logic;
-	pPs2Clkout	: out std_logic;
-	pPs2Datin	: in std_logic;
-	pPs2Datout	: out std_logic;
-	pPmsClkin	: in std_logic;
-	pPmsClkout	: out std_logic;
-	pPmsDatin	: in std_logic;
-	pPmsDatout	: out std_logic;
+	-- Keyboard and mouse as MiSTer hps_io events (ps2_key, ps2_mouse) and
+	-- the keyboard LED mask for hps_io (bit 0 scroll, 1 num, 2 caps)
+	pKbKey		: in std_logic_vector(10 downto 0);
+	pKbLed		: out std_logic_vector(2 downto 0);
+	pMsPkt		: in std_logic_vector(24 downto 0);
 	-- Analog-stick mouse movement and buttons (see rtl/stick_mouse.sv)
 	pMsExtDX	: in std_logic_vector(7 downto 0) := (others=>'0');
 	pMsExtDY	: in std_logic_vector(7 downto 0) := (others=>'0');
@@ -666,10 +662,8 @@ port(
 	OE		:out std_logic;
 	INT		:out std_logic;
 
-	KBCLKIN	:in std_logic;
-	KBCLKOUT:out std_logic;
-	KBDATIN	:in std_logic;
-	KBDATOUT:out std_logic;
+	KEYIN	:in std_logic_vector(10 downto 0);
+	LEDOUT	:out std_logic_vector(2 downto 0);
 	
 	emuen		:in std_logic;
 	emurx		:out std_logic;
@@ -800,8 +794,16 @@ port(
 	WAITIN	:in std_logic	:='0';
 
 	WREN	:out std_logic;		--pin24
-	WRBIT	:out std_logic;		--pin22
-	RDBIT	:in std_logic;		--pin30
+	WRDAT	:out std_logic_vector(7 downto 0);
+	WRMARK	:out std_logic;
+	WRMFM	:out std_logic;
+	WRSTB	:out std_logic;
+	RDDAT	:in std_logic_vector(7 downto 0);
+	RDMARK	:in std_logic;
+	RDMFM	:in std_logic;
+	RDSTB	:in std_logic;
+	RDLEN	:in integer range 0 to 16383	:=0;
+	WRLEN	:out integer range 0 to 16383;
 	STEP	:out std_logic;		--pin20
 	SDIR	:out std_logic;		--pin18
 	WPRT	:in std_logic;		--pin28
@@ -1713,8 +1715,16 @@ port(
 	fdc_motorn	:in std_logic_vector(1 downto 0)	:=(others=>'1');
 	fdc_readyn	:out std_logic;
 	fdc_wrenn	:in std_logic						:='1';
-	fdc_wrbitn	:in std_logic						:='1';
-	fdc_rdbitn	:out std_logic;
+	fdc_wrdat	:in std_logic_vector(7 downto 0)	:=(others=>'0');
+	fdc_wrmark	:in std_logic						:='0';
+	fdc_wrmfm	:in std_logic						:='0';
+	fdc_wrstb	:in std_logic						:='0';
+	fdc_rddat	:out std_logic_vector(7 downto 0);
+	fdc_rdmark	:out std_logic;
+	fdc_rdmfm	:out std_logic;
+	fdc_rdstb	:out std_logic;
+	fdc_rdlen	:out integer range 0 to 16383;
+	fdc_wrlen	:in integer range 0 to 16383	:=0;
 	fdc_stepn	:in std_logic						:='1';
 	fdc_sdirn	:in std_logic						:='1';
 	fdc_track0n	:out std_logic;
@@ -1824,10 +1834,7 @@ port(
 
 	MOUSDAT	:out std_logic_vector(7 downto 0);
 
-	MCLKIN	:in std_logic;
-	MCLKOUT:out std_logic;
-	MDATIN	:in std_logic;
-	MDATOUT:out std_logic;
+	MPKT	:in std_logic_vector(24 downto 0);
 
 	EXTDX	:in std_logic_vector(7 downto 0) := (others=>'0');
 	EXTDY	:in std_logic_vector(7 downto 0) := (others=>'0');
@@ -2238,10 +2245,6 @@ signal	ITFswcs		:std_logic;
 signal	ITFen		:std_logic;
 
 --PS/2 keyboard
-signal	KBCLKIN		:std_logic;
-signal	KBCLKOUT	:std_logic;
-signal	KBDATIN		:std_logic;
-signal	KBDATOUT	:std_logic;
 signal	KBCS		:std_logic;
 signal	KBod		:std_logic_vector(7 downto 0);
 signal	KBoe		:std_logic;
@@ -2434,8 +2437,10 @@ signal	FDE_USEL		:std_logic_vector(1 downto 0);
 signal	FDC_USELbn	:std_logic_vector(3 downto 0);
 signal	FDE_READYn	:std_logic;
 signal	FDE_WRENn	:std_logic;
-signal	FDE_WRBITn	:std_logic;
-signal	FDE_RDBITn	:std_logic;
+-- Floppy byte link (FDC/fdlink.vhd): FDC to emulator (W), emulator to FDC (R)
+signal	FDL_WDAT,FDL_RDAT	:std_logic_vector(7 downto 0);
+signal	FDL_WMARK,FDL_WMFM,FDL_WSTB,FDL_RMARK,FDL_RMFM,FDL_RSTB	:std_logic;
+signal	FDL_RLEN,FDL_WLEN	:integer range 0 to 16383;
 signal	FDE_STEPn	:std_logic;
 signal	FDE_SDIRn	:std_logic;
 signal	FDE_TRACK0n	:std_logic;
@@ -3863,18 +3868,6 @@ begin
 	NVR_DOE<=NVR_CS and MRD;
 	
 	
-	process(cpuclk,vrstn)begin
-		if(vrstn='0')then
-			KBCLKIN<='1';
-			KBDATIN<='1';
-		elsif(cpuclk' event and cpuclk='1')then
-			KBCLKIN<=pPs2Clkin;
-			KBDATIN<=pPs2Datin;
-		end if;
-	end process;
-
-	pPs2Clkout<=KBCLKOUT;
-	pPs2Datout<=KBDATOUT;
 
 	KBCS<='1' when ioaddr_odd(15 downto 2)="00000000010000" and ioaddr_odd(0)='1' else '0';
 
@@ -3888,10 +3881,8 @@ begin
 		OE		=>KBoe,
 		INT		=>KBINT,
 
-		KBCLKIN	=>KBCLKIN,
-		KBCLKOUT=>KBCLKOUT,
-		KBDATIN	=>KBDATIN,
-		KBDATOUT=>KBDATOUT,
+		KEYIN	=>pKbKey,
+		LEDOUT	=>pKbLed,
 
 		emuen		=>EMUEN,
 		emurx		=>EMU_KBRX,
@@ -4058,8 +4049,16 @@ begin
 		WAITIN	=>FDC_WAIT,
 
 		WREN	=>FDE_WRENn,
-		WRBIT	=>FDE_WRBITn,
-		RDBIT	=>FDE_RDBITn,
+		WRDAT	=>FDL_WDAT,
+		WRMARK	=>FDL_WMARK,
+		WRMFM	=>FDL_WMFM,
+		WRSTB	=>FDL_WSTB,
+		RDDAT	=>FDL_RDAT,
+		RDMARK	=>FDL_RMARK,
+		RDMFM	=>FDL_RMFM,
+		RDSTB	=>FDL_RSTB,
+		RDLEN	=>FDL_RLEN,
+		WRLEN	=>FDL_WLEN,
 		STEP	=>FDE_STEPn,
 		SDIR	=>FDE_SDIRn,
 		WPRT	=>FDE_WPROTn,
@@ -4134,8 +4133,16 @@ begin
 		fdc_motorn	=>not FDC_MOTOR & not FDC_MOTOR,
 		fdc_readyn	=>FDE_READYn,
 		fdc_wrenn	=>FDE_WRENn,
-		fdc_wrbitn	=>FDE_WRBITn,
-		fdc_rdbitn	=>FDE_RDBITn,
+		fdc_wrdat	=>FDL_WDAT,
+		fdc_wrmark	=>FDL_WMARK,
+		fdc_wrmfm	=>FDL_WMFM,
+		fdc_wrstb	=>FDL_WSTB,
+		fdc_rddat	=>FDL_RDAT,
+		fdc_rdmark	=>FDL_RMARK,
+		fdc_rdmfm	=>FDL_RMFM,
+		fdc_rdstb	=>FDL_RSTB,
+		fdc_rdlen	=>FDL_RLEN,
+		fdc_wrlen	=>FDL_WLEN,
 		fdc_stepn	=>FDE_STEPn,
 		fdc_sdirn	=>FDE_SDIRn,
 		fdc_track0n	=>FDE_TRACK0n,
@@ -4514,10 +4521,7 @@ begin
 
 		MOUSDAT	=>MOUS_PAIN,
 
-		MCLKIN	=>pPmsClkin,
-		MCLKOUT	=>pPmsClkout,
-		MDATIN	=>pPmsDatin,
-		MDATOUT	=>pPmsDatout,
+		MPKT	=>pMsPkt,
 
 		EXTDX	=>pMsExtDX,
 		EXTDY	=>pMsExtDY,

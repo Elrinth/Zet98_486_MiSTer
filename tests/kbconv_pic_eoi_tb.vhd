@@ -9,7 +9,7 @@ architecture test of kbconv_pic_eoi_tb is
  signal clk:std_logic:='0';signal rstn:std_logic:='0';
  signal kcs,kaddr,krd:std_logic:='0';
  signal data:std_logic_vector(7 downto 0);
- signal kirq,kco,kdo:std_logic;signal kci,kdi:std_logic:='1';
+ signal kirq:std_logic;signal key:std_logic_vector(10 downto 0):=(others=>'0');
  signal pcs,pa,pwr,inta:std_logic:='0';
  signal pdin,pdout:std_logic_vector(7 downto 0):=x"00";
  signal irq:std_logic;
@@ -17,7 +17,7 @@ begin
  clk<=not clk after 25 ns;
  kb:entity work.KBCONV generic map(CLKCYC=>20000,SFTCYC=>400,RPSET=>0)
  port map(CS=>kcs,ADDR=>kaddr,RD=>krd,WR=>'0',RDAT=>data,WDAT=>x"00",OE=>open,INT=>kirq,
- KBCLKIN=>kci,KBCLKOUT=>kco,KBDATIN=>kdi,KBDATOUT=>kdo,emuen=>'0',emurx=>open,
+ KEYIN=>key,LEDOUT=>open,emuen=>'0',emurx=>open,
  emurxdat=>open,monout=>open,clk=>clk,rstn=>rstn);
  pic:entity work.z8259 port map(CS=>pcs,ADDR=>pa,DIN=>pdin,DOUT=>pdout,DOE=>open,RD=>'1',WR=>pwr,
  IR0=>'0',IR1=>kirq,IR2=>'0',IR3=>'0',IR4=>'0',IR5=>'0',IR6=>'0',IR7=>'0',
@@ -28,8 +28,7 @@ begin
    pcs<='1';pa<=a;pdin<=b;pwr<='1';cycles(3);pwr<='0';pcs<='0';cycles(8);
   end;
   procedure send_byte(b:std_logic_vector(7 downto 0)) is begin
-   for i in 0 to 7 loop kdi<=b(i);kci<='1';cycles(3);kci<='0';cycles(3);end loop;
-   kci<='1';cycles(3200);
+   key<=not key(10) & "00" & b;cycles(3200);
   end;
   procedure service(expected:std_logic_vector(7 downto 0);delay_eoi:natural) is begin
    for i in 1 to 100 loop exit when irq='1';cycles(1);end loop;

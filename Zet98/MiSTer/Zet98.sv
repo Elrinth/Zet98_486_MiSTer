@@ -418,14 +418,10 @@ wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
 
-wire        ps2_kbd_clk_out;
-wire        ps2_kbd_data_out;
-wire        ps2_kbd_clk_in;
-wire        ps2_kbd_data_in;
-wire        ps2_mouse_clk_out;
-wire        ps2_mouse_data_out;
-wire        ps2_mouse_clk_in;
-wire        ps2_mouse_data_in;
+// Keyboard and mouse reach the core as hps_io events (no PS/2 serialisers):
+// see PS2IF/PS2DIRECT.vhd. The core reports the keyboard LED mask back.
+wire [24:0] ps2_mouse;
+wire  [2:0] kbd_leds;
 
 wire  [31:0] sd_lba;
 wire   [3:0] sd_rd;
@@ -653,10 +649,10 @@ assign UART_TXD=1'b1;
 `endif
 `endif
 
-wire [65:0] ps2_key;
+wire [10:0] ps2_key;
 wire [64:0] sysrtc;
 
-hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .VDNUM(5)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(5)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -687,16 +683,10 @@ hps_io #(.CONF_STR(CONF_STR), .PS2DIV(2400 * SYS_CLK_KHZ / 20000), .PS2WE(1), .V
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(ldr_wr),
 
-	.ps2_kbd_clk_out(ps2_kbd_clk_out),
-	.ps2_kbd_data_out(ps2_kbd_data_out),
-	.ps2_kbd_clk_in(ps2_kbd_clk_in),
-	.ps2_kbd_data_in(ps2_kbd_data_in),
-	.ps2_mouse_clk_out(ps2_mouse_clk_out),
-	.ps2_mouse_data_out(ps2_mouse_data_out),
-	.ps2_mouse_clk_in(ps2_mouse_clk_in),
-	.ps2_mouse_data_in(ps2_mouse_data_in),
-
+	.ps2_kbd_led_status(kbd_leds),
+	.ps2_kbd_led_use(3'b111),
 	.ps2_key(ps2_key),
+	.ps2_mouse(ps2_mouse),
 	
 	.RTC(sysrtc),
 
@@ -862,15 +852,9 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.LDR_DONE(ldr_done),
     .pBootHold(boot_hold), .pFloppyPresent(floppy_present),
 
-	.pPs2Clkin(ps2_kbd_clk_out),
-	.pPs2Clkout(ps2_kbd_clk_in),
-	.pPs2Datin(ps2_kbd_data_out),
-	.pPs2Datout(ps2_kbd_data_in),
-
-	.pPmsClkin(ps2_mouse_clk_out),
-	.pPmsClkout(ps2_mouse_clk_in),
-	.pPmsDatin(ps2_mouse_data_out),
-	.pPmsDatout(ps2_mouse_data_in),
+	.pKbKey(ps2_key),
+	.pKbLed(kbd_leds),
+	.pMsPkt(ps2_mouse),
 	.pMsExtDX(stick_dx), .pMsExtDY(stick_dy), .pMsExtStb(stick_stb), .pMsExtBtn(stick_buttons),
 
 	.pJoyA(joyA),

@@ -7,23 +7,6 @@ ghdl -a --std=08 -fsynopsys -fexplicit --workdir="$out" Zet98/KBIF/KBCONV.vhd te
 ghdl -e --std=08 -fsynopsys -fexplicit --workdir="$out" kbconv_backpressure_tb
 ghdl -r --std=08 -fsynopsys -fexplicit --workdir="$out" kbconv_backpressure_tb --assert-level=error --ieee-asserts=disable-at-0
 ghdl -r --std=08 -fsynopsys -fexplicit --workdir="$out" kbconv_backpressure_tb -gDELAYED_READ=true --assert-level=error --ieee-asserts=disable-at-0
-# Rebind the converter's component to the actual wire receiver, then exercise
-# the same checks using complete start/data/parity/stop frames and host replies.
-# Existing KBIF decrements its bounded TIMECNT at zero while simultaneously
-# leaving ST_WRSTART1. The value is dead until overwritten, but GHDL rejects
-# the assignment (hardware simply truncates it). Suppress ONLY that dead
-# decrement in the test copy; leave the production source unchanged.
-python3 - "$out/KBIF.vhd" <<'PY'
-import pathlib, sys
-s=pathlib.Path('PS2IF/KBIF.vhd').read_text()
-old="elsif(STATE=ST_WRSTART1)then\n\t\t\t\tif(SFT='1')then\n\t\t\t\t\tTIMECNT<=TIMECNT-1;"
-assert s.count(old)==1
-s=s.replace(old,old[:-len('TIMECNT<=TIMECNT-1;')]+"if TIMECNT>0 then TIMECNT<=TIMECNT-1;end if;")
-pathlib.Path(sys.argv[1]).write_text(s)
-PY
-ghdl -a --std=08 -fsynopsys -fexplicit --workdir="$out" LIB/PARGEN.vhd "$out/KBIF.vhd"
-ghdl -e --std=08 -fsynopsys -fexplicit --workdir="$out" kbconv_backpressure_tb
-ghdl -r --std=08 -fsynopsys -fexplicit --workdir="$out" kbconv_backpressure_tb -gWIRE_INPUT=true -gDELAYED_READ=true --assert-level=error --ieee-asserts=disable-at-0
 # Independent negatives: restoring direct-byte consumption must lose a break;
 # removing the publication guard must overwrite the typematic make event.
 python3 - "$out" <<'PY'

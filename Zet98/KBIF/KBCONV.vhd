@@ -18,10 +18,10 @@ port(
 	OE		:out std_logic;
 	INT		:out std_logic;
 
-	KBCLKIN	:in std_logic;
-	KBCLKOUT:out std_logic;
-	KBDATIN	:in std_logic;
-	KBDATOUT:out std_logic;
+	-- MiSTer hps_io ps2_key {toggle, pressed, extended, code} and the
+	-- keyboard LED mask the converter sets (bit 0 scroll, 2 caps).
+	KEYIN	:in std_logic_vector(10 downto 0);
+	LEDOUT	:out std_logic_vector(2 downto 0);
 	
 	emuen		:in std_logic;
 	emurx		:out std_logic;
@@ -37,11 +37,9 @@ end KBCONV;
 
 architecture MAIN of KBCONV is
 
-component KBIF
+component PS2DIRECT
 generic(
-	SFTCYC	:integer	:=400;		--kHz
-	STCLK	:integer	:=150;		--usec
-	TOUT	:integer	:=150		--usec
+	MOUSE	:boolean	:=false
 );
 port(
 	DATIN	:in std_logic_vector(7 downto 0);
@@ -49,16 +47,9 @@ port(
 	WRn		:in std_logic;
 	BUSY	:out std_logic;
 	RXED	:out std_logic;
-	RESET	:in std_logic;
-	COL		:out std_logic;
-	PERR	:out std_logic;
-	
-	KBCLKIN	:in	std_logic;
-	KBCLKOUT :out std_logic;
-	KBDATIN	:in std_logic;
-	KBDATOUT :out std_logic;
-	
-	SFT		:in std_logic;
+	EVT		:in std_logic_vector(24 downto 0);
+	HOLD	:in std_logic	:='0';
+	LED		:out std_logic_vector(2 downto 0);
 	clk		:in std_logic;
 	rstn	:in std_logic
 );
@@ -183,14 +174,15 @@ signal	cmdnum		:integer range 0 to 3;
 
 -- Keep complete PS/2 bytes while the guest still owns the previous 8251 byte.
 -- Prefixes and releases must not be discarded in KS_WINT/KS_REP. This queue
--- stays in clk; the existing pin synchronizers/KBIF remain the CDC boundary.
-type KB_BYTE_QUEUE_T is array (0 to 15) of std_logic_vector(7 downto 0);
+-- stays in clk (hps_io events arrive in clk too). 64 bytes in its M10K: the
+-- byte source (PS2DIRECT) buffers only one event while held.
+type KB_BYTE_QUEUE_T is array (0 to 63) of std_logic_vector(7 downto 0);
 signal kb_queue : KB_BYTE_QUEUE_T;
-signal kb_qread, kb_qwrite : integer range 0 to 15;
-signal kb_qcount : integer range 0 to 16;
+signal kb_qread, kb_qwrite : integer range 0 to 63;
+signal kb_qcount : integer range 0 to 64;
 signal kb_qpop, kb_qactive, kb_qoverflow : std_logic;
 signal kb_qdata : std_logic_vector(7 downto 0);
-signal kb_clock_release : std_logic;
+signal kb_hold : std_logic;
 
 -- Gamepad keys enter as PC-98 codes between keyboard sequences and go
 -- through the same make/break/typematic handling as table results.
@@ -252,29 +244,23 @@ begin
 	
 	KBSFT	:sftclk generic map(CLKCYC,SFTCYC,1) port map("1",SFT,clk,rstn);
 	
-	KB	:KBIF port map(
+	-- Byte-level keyboard (MiSTer ps2_key) in place of the PS/2 wire receiver.
+	KB	:PS2DIRECT generic map(false) port map(
 	DATIN	=>KB_TXDAT,
 	DATOUT	=>KB_RXDAT,
 	WRn		=>KB_WRn,
 	BUSY	=>KB_BUSY,
 	RXED	=>KB_RXED,
-	RESET	=>KB_RESET,
-	COL		=>KB_COL,
-	PERR	=>KB_PERR,
-	
-	KBCLKIN	=>KBCLKIN,
-	KBCLKOUT=>kb_clock_release,
-	KBDATIN	=>KBDATIN,
-	KBDATOUT=>KBDATOUT,
-	
-	SFT		=>SFT,
+	EVT		=>"00000000000000" & KEYIN,
+	HOLD	=>kb_hold,
+	LED		=>LEDOUT,
 	clk		=>clk,
 	rstn	=>rstn
 	);
 
 -- Stop the keyboard before the queue fills. Two slots remain for a byte
--- already in flight and pin/receiver latency. Low means clock inhibit.
-	KBCLKOUT<=kb_clock_release when kb_qcount<14 else '0';
+-- already in flight (as with the PS/2 clock inhibit this replaces).
+	kb_hold<='0' when kb_qcount<62 else '1';
 	kb_qactive<='1' when KBSTATE=KS_IDLE or KBSTATE=KS_RDTBL or
 		KBSTATE=KS_REP or KBSTATE=KS_WINT else '0';
 	kb_qpop<='1' when KBSTATE=KS_IDLE and WAITCNT=0 and WAITSFT=0 and
@@ -291,16 +277,16 @@ begin
 			else
 				pop:=kb_qpop='1';
 				push:=KB_RXED='1' and kb_qactive='1';
-				if push and kb_qcount=16 and not pop then
+				if push and kb_qcount=64 and not pop then
 					-- Defensive status for a device that ignores clock inhibition.
 					kb_qoverflow<='1';push:=false;
 				end if;
 				if push then
 					kb_queue(kb_qwrite)<=KB_RXDAT;
-					if kb_qwrite=15 then kb_qwrite<=0;else kb_qwrite<=kb_qwrite+1;end if;
+					if kb_qwrite=63 then kb_qwrite<=0;else kb_qwrite<=kb_qwrite+1;end if;
 				end if;
 				if pop then
-					if kb_qread=15 then kb_qread<=0;else kb_qread<=kb_qread+1;end if;
+					if kb_qread=63 then kb_qread<=0;else kb_qread<=kb_qread+1;end if;
 				end if;
 				if push and not pop then kb_qcount<=kb_qcount+1;
 				elsif pop and not push then kb_qcount<=kb_qcount-1;end if;

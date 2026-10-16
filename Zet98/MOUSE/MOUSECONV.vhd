@@ -14,10 +14,8 @@ port(
 
 	MOUSDAT	:out std_logic_vector(7 downto 0);
 
-	MCLKIN	:in std_logic;
-	MCLKOUT:out std_logic;
-	MDATIN	:in std_logic;
-	MDATOUT:out std_logic;
+	-- MiSTer hps_io ps2_mouse {toggle, Y, X, flags} (a PS/2 3-byte packet).
+	MPKT	:in std_logic_vector(24 downto 0);
 
 	-- Extra movement (PS/2 convention: +X right, +Y up) and buttons, e.g.
 	-- from analog sticks; added to the PS/2 mouse. EXTBTN = {right, left}.
@@ -33,11 +31,9 @@ end MOUSECONV;
 
 architecture rtl of MOUSECONV is
 
-component PS2IF
+component PS2DIRECT
 generic(
-	SFTCYC	:integer	:=400;		--kHz
-	STCLK	:integer	:=150;		--usec
-	TOUT	:integer	:=150		--usec
+	MOUSE	:boolean	:=false
 );
 port(
 	DATIN	:in std_logic_vector(7 downto 0);
@@ -45,17 +41,9 @@ port(
 	WRn		:in std_logic;
 	BUSY	:out std_logic;
 	RXED	:out std_logic;
-	RESET	:in std_logic;
-	COL		:out std_logic;
-	PERR	:out std_logic;
-	TWAIT	:in std_logic;
-	
-	KBCLKIN	:in	std_logic;
-	KBCLKOUT :out std_logic;
-	KBDATIN	:in std_logic;
-	KBDATOUT :out std_logic;
-	
-	SFT		:in std_logic;
+	EVT		:in std_logic_vector(24 downto 0);
+	HOLD	:in std_logic	:='0';
+	LED		:out std_logic_vector(2 downto 0);
 	clk		:in std_logic;
 	rstn	:in std_logic
 );
@@ -121,23 +109,16 @@ begin
 	
 	MSFT	:sftclk generic map(CLKCYC,SFTCYC,1) port map("1",SFT,clk,rstn);
 	
-	MOUSE	:PS2IF port map(
+	-- Byte-level mouse (MiSTer ps2_mouse) in place of the PS/2 wire interface.
+	MOUSE	:PS2DIRECT generic map(true) port map(
 	DATIN	=>M_TXDAT,
 	DATOUT	=>M_RXDAT,
 	WRn		=>M_WRn,
 	BUSY	=>M_BUSY,
 	RXED	=>M_RXED,
-	RESET	=>M_RESET,
-	COL		=>M_COL,
-	PERR	=>M_PERR,
-	TWAIT	=>'0',
-	
-	KBCLKIN	=>MCLKIN,
-	KBCLKOUT=>MCLKOUT,
-	KBDATIN	=>MDATIN,
-	KBDATOUT=>MDATOUT,
-	
-	SFT		=>SFT,
+	EVT		=>MPKT,
+	HOLD	=>'0',
+	LED		=>open,
 	clk		=>clk,
 	rstn	=>rstn
 	);

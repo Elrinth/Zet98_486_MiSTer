@@ -27,10 +27,20 @@ port(
 	MOTOR	:in std_logic;
 	READY	:out std_logic;
 	WRENn	:in std_logic;		--pin24
-	WRBITn	:in std_logic;		--pin22
+	-- Byte-level data link (FDC/fdlink.vhd) in place of the WRBIT cells
+	WRDAT	:in std_logic_vector(7 downto 0);
+	WRMARK	:in std_logic;
+	WRLMFM	:in std_logic;
+	WRSTB	:in std_logic;
 	WRFDMODE:in std_logic_vector(1 downto 0);
 	WRMFM	:in std_logic;
-	RDBITn	:out std_logic;		--pin30
+	-- ... and of the RDBIT cells
+	RDDAT	:out std_logic_vector(7 downto 0);
+	RDMARK	:out std_logic;
+	RDLMFM	:out std_logic;
+	RDSTB	:out std_logic;
+	RDLEN	:out integer range 0 to 16383;		-- FM cell width of the bytes sent (clocks)
+	WRLEN	:in integer range 0 to 16383	:=0;	-- FM cell width of the bytes written
 	STEPn	:in std_logic;		--pin20
 	SDIRn	:in std_logic;		--pin18
 	track0n	:out std_logic;		--pin26
@@ -43,6 +53,8 @@ port(
 end FDemu;
 
 architecture rtl of FDemu is
+signal	linkrxdat	:std_logic_vector(7 downto 0);
+signal	linkwrstb	:std_logic;
 constant 	maxbwidth	:integer	:=4000*sysclk/1000000;
 signal	TRAMRDDAT		:std_logic_vector(8 downto 0);
 signal	RDMFM		:std_logic;
@@ -432,51 +444,30 @@ begin
 	wsftfm	:sftgen generic map(maxbwidth) port map(bitlenr,modsftfm,clk,rstn);
 	wsftmfm	:sftgen generic map(maxbwidth/2) port map(bitlenr/2,modsftmfm,clk,rstn);
 	
-	fmtx	:fmmod port map(
+	-- Track bytes go to the FDC as bytes, paced like the FM/MFM modulators.
+	LTX	:entity work.fdlinktx port map(
 		txdat	=>txdat,
-		txwr	=>fmtxwr,
-		txmf8	=>fmmf8wr,
-		txmfb	=>fmmfbwr,
-		txmfc	=>fmmfcwr,
-		txmfe	=>fmmfewr,
+		txwr	=>txwr,
+		txmark	=>mcrdat,
+		txmfm	=>RDMFM,
 		break	=>'0',
-		
-		txemp	=>fmtxemp,
-		txend	=>fmtxend,
-		
-		bitout	=>fmwrbit,
+		txemp	=>txemp,
+		txend	=>open,
 		writeen	=>open,
-		
-		sft		=>modsftfm,
+		DAT		=>RDDAT,
+		MARK	=>RDMARK,
+		MFM		=>RDLMFM,
+		STB		=>RDSTB,
+		sftfm	=>modsftfm,
+		sftmfm	=>modsftmfm,
 		clk		=>clk,
 		rstn	=>rstn
 	);
 	
-	mfmtx	:mfmmod port map(
-		txdat	=>txdat,
-		txwr	=>mfmtxwr,
-		txma1	=>mfmma1wr,
-		txmc2	=>mfmmc2wr,
-		break	=>'0',
-		
-		txemp	=>mfmtxemp,
-		txend	=>mfmtxend,
-		
-		bitout	=>mfmwrbit,
-		writeen	=>open,
-		
-		sft		=>modsftmfm,
-		clk		=>clk,
-		rstn	=>rstn
-	);
-	txemp<=fmtxemp and mfmtxemp;
-	txwrbit<=fmwrbit or mfmwrbit;
-	wdatext	:signext generic map(extcount) port map(extcount,txwrbit,txwrbitex,clk,rstn);
-	
-	RDBITn<=not txwrbitex;
-	
-	fmrxbit<=not WRBITn when WRMFM='0' and WRENn='0' else '0';
-	mfmrxbit<=not WRBITn when WRMFM='1' and WRENn='0' else '0';
+	-- Written bytes count only while the write gate is on and in the write
+	-- density, as the gated FM/MFM cell inputs did.
+	linkwrstb<=WRSTB when WRENn='0' and WRLMFM=WRMFM and 2*WRLEN>bitlenw and 2*WRLEN<3*bitlenw else '0';
+	RDLEN<=bitlenr;
 	
 	process(clk,rstn)
 	variable lREADY	:std_logic;
@@ -499,46 +490,30 @@ begin
 		end if;
 	end process;
 	
-	fmrx	:fmdem generic map(maxbwidth) port map(
-		bitlen	=>bitlenw,
-		
-		datin	=>fmrxbit,
-		
-		init	=>fmdeminit,
-		break	=>WRENn,
-		
-		RXDAT	=>fmrxdat,
-		RXED	=>fmrxed,
+	LRX	:entity work.fdlinkrx port map(
+		DAT		=>WRDAT,
+		MARK	=>WRMARK,
+		MFM		=>WRLMFM,
+		STB		=>linkwrstb,
+		fminit	=>fmdeminit,
+		fmbreak	=>WRENn,
+		mfminit	=>mfmdeminit,
+		mfmbreak=>WRENn,
+		RXDAT	=>linkrxdat,
+		FMRXED	=>fmrxed,
 		DetMF8	=>fmmf8det,
 		DetMFB	=>fmmfbdet,
 		DetMFC	=>fmmfcdet,
 		DetMFE	=>fmmfedet,
-		
-		curlen	=>open,
-		
-		clk		=>clk,
-		rstn	=>rstn
-	);
-
-	mfmrx	:mfmdem generic map(maxbwidth/2)port map(
-		bitlen	=>bitlenw/2,
-		
-		datin	=>mfmrxbit,
-		
-		init	=>mfmdeminit,
-		break	=>WRENn,
-		
-		RXDAT	=>mfmrxdat,
-		RXED	=>mfmrxed,
+		MFMRXED	=>mfmrxed,
 		DetMA1	=>mfmma1det,
 		DetMC2	=>mfmmc2det,
-		
-		curlen	=>open,
-		
 		clk		=>clk,
 		rstn	=>rstn
 	);
-	
+	fmrxdat<=linkrxdat;
+	mfmrxdat<=linkrxdat;
+
 	GAPS<=	4 when WRMFM='0' else 8;
 	SYNCS<=	6 when WRMFM='0' else 12;
 	GAPDAT<=x"ff" when WRMFM='0' else x"4e";
