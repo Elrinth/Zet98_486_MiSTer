@@ -136,7 +136,11 @@ wire [31:0] ea_simple_b = ea_simple_two_regs ? ea_term_b_live : displacement;
 // PC98 mode stages every memory ModR/M EA. The constant selection removes
 // load forwarding and GPR selection from the relocation/TLB input path.
 wire [31:0] ea_add_a = (REGISTERED_EA || split_ea_use) ? ea_partial_r : ea_simple_a;
-wire [31:0] ea_add_b = (REGISTERED_EA || split_ea_use) ? displacement : ea_simple_b;
+// The displacement is registered with the partial sum: the decoder's literal
+// extraction no longer feeds the EA adder, the segment-limit checks and VIPT
+// admission in the issue cycle (worst 90 MHz path class).
+logic [31:0] ea_disp_r;
+wire [31:0] ea_add_b = (REGISTERED_EA || split_ea_use) ? ea_disp_r : ea_simple_b;
 wire [31:0] ea_offset_full = ea_add_a + ea_add_b;
 wire [31:0] effective_addr = ea_is_16bit_r
                            ? {16'd0, ea_offset_full[15:0]} : ea_offset_full;
@@ -162,6 +166,14 @@ always_ff @(posedge clk) begin
     else if (split_ea_prepare)
         ea_partial_r <= ea_term_a_live + ea_term_b_live + split_ea_adjust;
 end
+always_ff @(posedge clk)
+    if (split_ea_prepare)
+        ea_disp_r <= displacement;
+// synthesis translate_off
+always @(posedge clk)
+    if (reset_n && instr_issue && split_ea_use && ea_disp_r !== displacement)
+        $fatal(1, "EA-DISP FUSE MISMATCH: registered=%08x live=%08x", ea_disp_r, displacement);
+// synthesis translate_on
 
 always_ff @(posedge clk) begin
     if (d2_start) begin

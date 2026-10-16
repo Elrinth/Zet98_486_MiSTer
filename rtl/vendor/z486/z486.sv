@@ -3530,6 +3530,7 @@ data_unit data_unit_inst (
     .recipe_commit_cancel(gp_fault_trigger || data_page_fault || div_overflow),
     .load_wb_valid(vipt_load_wb_valid_r),
     .load_wb_dst(vipt_load_wb_dst_r),
+    .load_wb_dst_onehot(vipt_load_wb_dst_onehot_r),
     .load_wb_size(vipt_load_wb_size_r),
     .load_wb_data(vipt_load_wb_data),
     .load_wb_is_alu(vipt_load_wb_is_alu_r),

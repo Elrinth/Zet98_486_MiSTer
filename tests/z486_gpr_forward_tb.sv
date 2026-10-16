@@ -9,8 +9,10 @@ module z486_gpr_forward_tb;
     integer cases = 0;
     // No clocks: explore arbitrary registered states of the combinational
     // read network, independently of which instructions produce those states.
+    // The core registers this one-hot with the WB token (z486.sv).
+    wire [7:0] load_wb_dst_onehot = 8'h01 << ((load_wb_size == 2'd0) ? {1'b0, load_wb_dst[1:0]} : load_wb_dst);
     data_unit dut (.clk(1'b0), .reset_n(1'b0), .load_wb_valid,
-        .load_wb_is_alu, .load_wb_dst, .load_wb_size, .opr_r);
+        .load_wb_is_alu, .load_wb_dst, .load_wb_dst_onehot, .load_wb_size, .opr_r);
 
     function automatic [31:0] random_word();
         random_state = random_state ^ (random_state << 13);

@@ -16,6 +16,15 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B256 runs at **90 MHz** (B252-B255: 81.8 MHz). Two z486 timing fixes from the
+B251 work shorten the CPU's worst paths: load write-back forwarding uses the
+registered destination one-hot, and the EA adder takes a registered
+displacement instead of the decoder's live literal. Same features as B255
+(seed 8, worst slack -6.875 ns); passes QUALIFY, boots Windows 95 to the
+desktop twice, runs Magical Chase, Black Onyx from floppy and 6 minutes of the
+Doom demo loop. 486 BSWAP now has its own test (`tests/run-z486-bswap.sh`);
+CMPXCHG and XADD have been supported since B233.
+
 B255 is the same machine in less logic, with nothing removed. Keyboard and
 mouse now reach the core as MiSTer's key and mouse events instead of a
 simulated PS/2 cable in both directions (`PS2IF/PS2DIRECT.vhd`); keyboard LEDs

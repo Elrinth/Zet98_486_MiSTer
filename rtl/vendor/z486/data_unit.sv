@@ -29,6 +29,7 @@ module data_unit
     input  logic        recipe_commit_cancel,     // Cancel deferred recipe commit
     input  logic        load_wb_valid,             // Registered VIPT load WB
     input  logic [2:0]  load_wb_dst,
+    input  logic [7:0]  load_wb_dst_onehot,     // Registered one-hot of load_wb_widx
     input  logic [1:0]  load_wb_size,
     input  logic [31:0] load_wb_data,
     input  logic        load_wb_is_alu,          // Registered memory operand feeds shared ALU
@@ -297,8 +298,10 @@ genvar gpr_index;
 generate
 for (gpr_index = 0; gpr_index < 8; gpr_index = gpr_index + 1) begin : gpr_forward_bank
     wire [31:0] architectural = read_gpr_value(3'(gpr_index), 2'd2);
+    // Registered one-hot destination: no size/compare logic (or the
+    // high-fanout load_wb_widx) ahead of the forwarding mux.
     wire [31:0] loaded = load_wb_valid && !load_wb_is_alu &&
-                         (load_wb_widx == 3'(gpr_index))
+                         load_wb_dst_onehot[gpr_index]
                          ? load_wb_forward_data : architectural;
     wire memory_hit = recipe_memory_write.valid && !recipe_memory_killed &&
                       recipe_memory_dst_onehot[gpr_index];
