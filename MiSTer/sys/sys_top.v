@@ -1141,6 +1141,11 @@ wire        hdmi_de_mask, hdmi_vs_mask, hdmi_hs_mask;
 reg [15:0] shadowmask_data;
 reg        shadowmask_wr = 0;
 
+`ifdef MISTER_DISABLE_SHADOWMASK
+// Shadow masks removed for area: HDMI data passes through unchanged.
+assign hdmi_data_mask = dis_output ? 24'd0 : hdmi_data;
+assign {hdmi_hs_mask, hdmi_vs_mask, hdmi_de_mask} = {hdmi_hs, hdmi_vs, hdmi_de};
+`else
 shadowmask HDMI_shadowmask
 (
 	.clk(clk_hdmi),
@@ -1161,6 +1166,7 @@ shadowmask HDMI_shadowmask
 	.vs_out(hdmi_vs_mask),
 	.de_out(hdmi_de_mask)
 );
+`endif
 
 wire [23:0] hdmi_data_osd;
 wire        hdmi_de_osd, hdmi_vs_osd, hdmi_hs_osd;

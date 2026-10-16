@@ -64,7 +64,7 @@ module pc98_ao486 #(
     input  wire        ddr_busy, ddr_readdatavalid,
     input  wire [63:0] ddr_readdata,
     input wire pegc_analog16, pegc_display_enable, pegc_gdc_5mhz,
-    output wire pegc_mode256, pegc_single_page,
+    output wire pegc_mode256, pegc_single_page, pegc_line480,
     input wire pegc_pixel_clk,
     input wire [7:0] pegc_palette_index,
     output wire [23:0] pegc_palette_rgb,
@@ -248,7 +248,7 @@ module pc98_ao486 #(
             .write(bus_write),.io(bus_io),.strobe(physical_strobe),.legacy_ack(legacy_ack),
             .analog16(pegc_analog16),.display_enable(pegc_display_enable),.gdc_5mhz(pegc_gdc_5mhz),
             .claimed(pegc_claimed),.ack(pegc_ack),.readdata(pegc_readdata),
-            .mode256(pegc_mode256),.single_page(pegc_single_page),.linear_enable(pegc_linear_enable),
+            .mode256(pegc_mode256),.single_page(pegc_single_page),.linear_enable(pegc_linear_enable),.line480(pegc_line480),
             .ddr_address(fb_address),.ddr_writedata(fb_writedata),.ddr_byteenable(fb_byteenable),
             .ddr_read(fb_read),.ddr_write(fb_write),.ddr_busy(fb_busy),
             .ddr_readdatavalid(fb_valid),.ddr_readdata(ddr_readdata),
@@ -270,7 +270,7 @@ module pc98_ao486 #(
     end else begin : no_pegc
         assign pegc_linear_enable=0;
         assign {fb_command_read,fb_command_busy,fb_response_valid}=0;
-        assign {pegc_claimed,pegc_ack,pegc_readdata,pegc_mode256,pegc_single_page,pegc_palette_rgb}=0;
+        assign {pegc_claimed,pegc_ack,pegc_readdata,pegc_mode256,pegc_single_page,pegc_line480,pegc_palette_rgb}=0;
         assign pegc_video_busy=1;
         assign {pegc_video_readdatavalid,pegc_video_readdata}=0;
         assign ddr_address=ram_ddr_address;

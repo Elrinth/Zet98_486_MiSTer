@@ -96,7 +96,9 @@ port(
     PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
     PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
     PC_X :out std_logic_vector(9 downto 0);
-    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
+    -- Port 09A8h bit 0: 480-line (31 kHz class) display, 520-line frame.
+    LINE480 :in std_logic := '0'
 );
 end CRTC98;
 
@@ -128,7 +130,8 @@ port(
 	
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    pixel_rstn :in std_logic := '0'
+    pixel_rstn :in std_logic := '0';
+	MODE480	:in std_logic := '0'
 );
 end component;
 
@@ -301,6 +304,7 @@ signal VISIBLE	:std_logic;
 signal ACTIVE	:std_logic;
 signal dispaw_video, dispaw_pixel_source :std_logic_vector(7 downto 0);
 signal dispal_video, dispal_pixel_source :std_logic_vector(9 downto 0);
+signal line480_video, line480_pixel_source :std_logic;
 signal act_words :integer range 0 to 127;
 signal act_lines :integer range 0 to 1023;
 signal GRPHR		:std_logic_vector(3 downto 0);
@@ -418,6 +422,7 @@ begin
 			lowbl_video <= LOWBL;
 			dispaw_video <= DISPAW;
 			dispal_video <= DISPAL;
+			line480_video <= LINE480;
 		end if;
 	end process;
 
@@ -452,13 +457,14 @@ begin
             lowbl_pixel_source <= lowbl_video;
             dispaw_pixel_source <= dispaw_video;
             dispal_pixel_source <= dispal_video;
+            line480_pixel_source <= line480_video;
         end if;
     end process;
 
     -- Active display rectangle from the text GDC (NP2kai dispsync): width
     -- AW+2 words, AL lines (0 means 1024), shown from the top-left corner and
     -- black beyond it. Values outside 16..80 words / 100..400 lines keep the
-    -- full 640x400 window.
+    -- full 640x400 window (640x480 in 480-line mode).
     process(clk3) begin
         if rising_edge(clk3) then
             if conv_integer(dispaw_pixel_source)+2>=16 and conv_integer(dispaw_pixel_source)+2<=80 then
@@ -466,10 +472,10 @@ begin
             else
                 act_words<=80;
             end if;
-            if conv_integer(dispal_pixel_source)>=100 and conv_integer(dispal_pixel_source)<=400 then
+            if conv_integer(dispal_pixel_source)>=100 and conv_integer(dispal_pixel_source)<=VVIS then
                 act_lines<=conv_integer(dispal_pixel_source);
             else
-                act_lines<=400;
+                if line480_pixel_source='1' then act_lines<=480; else act_lines<=400; end if;
             end if;
         end if;
     end process;
@@ -521,7 +527,7 @@ begin
 	VFP		=>VFP,
 	VSY		=>VSY,
     EXTERNAL_PIXEL_RESET=>true
-	) port map(VCOUNT,HUCOUNT,UCOUNT,HCOMP,VCOMP,clk2,clk3,clk,rstn,pixel_rstn);
+	) port map(VCOUNT,HUCOUNT,UCOUNT,HCOMP,VCOMP,clk2,clk3,clk,rstn,pixel_rstn,line480_pixel_source);
 	
 	KNJSEL	<=KNJFNT_SEL when EMUMODE='0' else "00";
 	KNJADR	<=KNJFNT_ADDR when EMUMODE='0' else ('0' & x"0800")+EFNT_ADDR;

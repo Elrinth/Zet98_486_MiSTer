@@ -16,6 +16,22 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B254 runs **Windows 95 in 640x480 with 256 colours** and the Win95 CD game
+**Magical Chase**. The PEGC now decodes port 09A8h (bit 0 = 480-line mode), and
+the raster switches to 480 visible lines between frames. Windows 95 uses it with
+the PC-98 `pegcv8.drv` display driver (`display.drv=pegcv8.drv` in SYSTEM.INI).
+The 480-line raster keeps the 24.80 kHz line rate (520-line frame, 47.7 Hz) rather
+than real 31 kHz: HDMI scales it as usual, and on the analog output a multisync
+monitor must accept 47.7 Hz. Magical Chase also exposed two z486 bugs that could
+hit any Windows 95 program: when the next code page had to be loaded from disk
+(an instruction-fetch page fault), the fault entry discarded the result of the
+load just before it (`tests/run-z486-fetch-pf-load.sh`). New OSD option
+**Monochrome LCD** (Audio & Video) shows the picture in the 15 grey levels of
+the PC-98 notebook LCD, as NP2kai does; YU-NO's "Monochrome version" is drawn
+for it. The HDMI CRT shadow-mask overlay was removed to make room. Runs at
+81.8 MHz (seed 8, worst slack **-7.084 ns**); passes QUALIFY and boots
+Windows 95 to the desktop twice.
+
 B253 runs **Blandia** with its PC-9821 MULTI/MATE A (256-colour) display setting.
 Its graphics driver requires the BIOS work-area signature 045Ch bit 6 and 0597h
 bits 7 and 2; OpenBIOS sets 0597h bit 7 (31 kHz / 480-line modes) only when port

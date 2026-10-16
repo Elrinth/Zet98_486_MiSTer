@@ -115,6 +115,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              // command the controller does not implement (not 08h/10h/20h/
                              // 21h/30h/31h/40h/41h/70h/A0h/A1h/E7h/ECh).
                              parameter DE_FREEZE_ATA_CMD = 0,
+                             // ITRACE = 8: every issued instruction (type 15: payload = EAX,
+                             // CR2 field = ESI at issue) and the first memory write of each
+                             // (type 8); freezes when an instruction in the DE_FREEZE_CS/IP/
+                             // EIP_HI window issues with EAX == DE_FREEZE_DATA.
                              // ITRACE = 6: windowed branch trace around a watched dword
                              // (DE_WATCH_ADDR, physical). A store to it from the 16-byte
                              // range DE_WIN_EIP..+1Fh opens the window (branches are
@@ -147,6 +151,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     input wire [2:0] io_len,         // bytes in the I/O access (logged with I/O events)
     input wire insn_issue,           // ITRACE: one pulse per issued instruction
     input wire [31:0] insn_eip,
+    input wire [31:0] reg_a, reg_b,  // ITRACE = 8: EAX, ESI
+    input wire [31:0] fault_state,   // ITRACE = 8: z486 state latched at the last fault (gate CR2 field)
     output wire tx
 );
     // ---- capture -----------------------------------------------------------
@@ -174,8 +180,10 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                                                   : eip[31:16] == DE_FREEZE_EIP_HI && eip[15:4] == DE_FREEZE_IP[15:4]);
     reg [7:0] quiet = 0;
     reg [31:0] prev_issue_eip = 0;   // ITRACE = 2: last issued EIP
+    reg wr_logged = 0;               // ITRACE = 8: this instruction's first write is logged
     wire insn_sequential = insn_eip > prev_issue_eip && insn_eip <= prev_issue_eip + 32'd15;
     always @(posedge clk) if (insn_issue) prev_issue_eip <= insn_eip;
+    always @(posedge clk) if (insn_issue) wr_logged <= 1'b0; else if (mem_write) wr_logged <= 1'b1;
     wire watch_store = (ITRACE == 6 || ITRACE == 7) && mem_write && mem_addr[31:2] == DE_WATCH_ADDR[31:2];
     // Stores are attributed to the next issued instruction, a few bytes on.
     wire store_in_win = prev_issue_eip >= DE_WIN_EIP && prev_issue_eip < DE_WIN_EIP + 32'h20;
@@ -258,6 +266,11 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                 else if (win_open && insn_issue && !insn_sequential && win_log) begin
                     ev_type = 4'd15; ev_payload = prev_issue_eip;
                 end else ev_valid = 1'b0;
+            end else if (ITRACE == 8) begin
+                if (mem_write && !wr_logged && cs[1:0] != 2'b00) begin ev_type = 4'd8; ev_payload = mem_data; end
+                else if (insn_issue && cs[1:0] != 2'b00) begin ev_type = 4'd15; ev_payload = reg_a; end  // ring 0 skipped
+                else if (gate_read && pe) begin ev_type = 4'd1; ev_payload = gate_addr; end
+                else ev_valid = 1'b0;
             end else if (ITRACE >= 3) begin
                 // 3: stores of exactly DE_LOG_DATA; 4: every store; 5: every store
                 // to the dword at DE_WATCH_ADDR (physical), any data.
@@ -307,7 +320,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     end
     wire [127:0] entry = (ITRACE >= 3 && ev_type == 4'd8) ?
                              {ev_type, cs, prev_issue_eip, mem_data, mem_be, mem_addr, pe, seq} :
-                         ev_type == 4'd15 ? {ev_type, cs, insn_eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
+                         ev_type == 4'd15 ? {ev_type, cs, insn_eip, ev_payload, pf_code, ITRACE == 8 ? reg_b : pf_addr, vm, pe, seq} :
+                         (ITRACE == 8 && ev_type == 4'd1) ? {ev_type, cs, eip, ev_payload, pf_code, fault_state, vm, pe, seq} :
                          ev_type == 4'd14 ? {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type == 4'd12 ? {ev_type, cs, eip[15:0], sp, ev_payload, 3'd0, 32'd0, vm, pe, seq} :
                          ev_type == 4'd13 ? {ev_type, cs, eip[15:0], sp, ev_payload, mem_be, mem_addr, pe, seq} :
@@ -340,7 +354,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             newest <= entry;
             wp <= wp + 1'b1;
             seq <= seq + 1'b1;
-            if (ITRACE && DE_FREEZE_DATA == 0 && ev_type == 4'd15 && DE_FREEZE_IP[16] && cs == DE_FREEZE_CS &&
+            if (ITRACE && (ITRACE == 8 ? reg_a == DE_FREEZE_DATA : DE_FREEZE_DATA == 0) && ev_type == 4'd15 &&
+                DE_FREEZE_IP[16] && cs == DE_FREEZE_CS &&
                 insn_eip[31:16] == DE_FREEZE_EIP_HI && insn_eip[15:4] == DE_FREEZE_IP[15:4]) begin
                 if (DE_POST == 0) frozen <= 1'b1;
                 else post_active <= 1'b1;
@@ -394,7 +409,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             (DE_FREEZE_GATE_EIP == 0 || eip == DE_FREEZE_GATE_EIP))
             frozen <= 1'b1;
         // The watched store may complete in a cycle with no logged event.
-        if (ITRACE && ITRACE != 3 && DE_FREEZE_DATA != 0 && armed && !pause && mem_write &&
+        if (ITRACE && ITRACE != 3 && ITRACE != 8 && DE_FREEZE_DATA != 0 && armed && !pause && mem_write &&
             mem_data == DE_FREEZE_DATA &&
             prev_issue_eip[31:16] == DE_FREEZE_EIP_HI && prev_issue_eip[15:4] == DE_FREEZE_IP[15:4])
             frozen <= 1'b1;

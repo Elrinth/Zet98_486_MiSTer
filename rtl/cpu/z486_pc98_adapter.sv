@@ -56,6 +56,7 @@ module z486_pc98_adapter #(
     wire [31:0] dbg_walk_pde, dbg_walk_pte, dbg_cr3;
     wire dbg_issue;
     wire [31:0] dbg_issue_eip;
+    wire [31:0] dbg_eax, dbg_esi, dbg_fault_state;
     wire real_mode = !protected_mode;
     reg second_inta;
     reg write_accepted;
@@ -169,7 +170,7 @@ module z486_pc98_adapter #(
         .dbg_gate_read(dbg_gate_read), .dbg_gate_addr(dbg_gate_addr), .dbg_pf_code(dbg_pf_code),
         .dbg_pf_addr(dbg_pf_addr), .dbg_eflags(dbg_eflags), .dbg_page_fault(dbg_page_fault),
         .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3), .dbg_SP(dbg_sp),
-        .dbg_issue(dbg_issue), .dbg_issue_eip(dbg_issue_eip),
+        .dbg_issue(dbg_issue), .dbg_issue_eip(dbg_issue_eip), .dbg_EAX(dbg_eax), .dbg_ESI(dbg_esi), .dbg_fault_state(dbg_fault_state),
         .triple_fault_reset(triple_fault)
     );
 `ifdef ZET98_Z486_DEBUG
@@ -347,7 +348,7 @@ module z486_pc98_adapter #(
 `endif
         .io_wr(io_write_do && io_write_done), .io_rd(io_read_do && io_read_done),
         .io_addr(io_write_do ? io_write_address : io_read_address), .io_wdata(io_write_data),
-        .io_rdata(io_read_data), .io_len(io_write_do ? io_write_length : io_read_length), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .tx(crash_tx));
+        .io_rdata(io_read_data), .io_len(io_write_do ? io_write_length : io_read_length), .insn_issue(dbg_issue), .insn_eip(dbg_issue_eip), .reg_a(dbg_eax), .reg_b(dbg_esi), .fault_state(dbg_fault_state), .tx(crash_tx));
 `else
     assign crash_tx = 1'b1;
 `endif

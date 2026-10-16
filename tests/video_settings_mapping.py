@@ -31,7 +31,7 @@ def check(source):
         assert hi >= lo
         coverage.extend(range(lo, hi+1))
     assert sorted(coverage) == list(range(total)), 'Missing or overlapping GDC snapshot bits'
-    block = source.split('VID\t:CRTC98 port map(', 1)[1].split('\n\t);', 1)[0]
+    block = re.split(r'VID\t:CRTC98[^\n]*port map\(', source, 1)[1].split('\n\t);', 1)[0]  # generic map allowed
     outputs = {}
     for name, width, expression in fields:
         port = re.search(r'^\s*'+name+r'\s*=>\s*(.*),\s*$', block, re.M).group(1)

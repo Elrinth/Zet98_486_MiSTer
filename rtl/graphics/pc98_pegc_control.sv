@@ -35,7 +35,9 @@ module pc98_pegc_control (
     // and the unused third window. Not a framebuffer request.
     output wire vram_unhandled,
     output reg mode256, single_page,
-    output reg packed_mode, linear_enable
+    output reg packed_mode, linear_enable,
+    // Port 09A8h bit 0: 31 kHz / 480-line display (NP2kai gdc_o9a8/i9a8).
+    output reg line480
 );
     wire [15:0] port_address = {io_address,1'b0};
     wire [31:0] byte_address = {mem_address,1'b0};
@@ -49,9 +51,12 @@ module pc98_pegc_control (
                            port_address[2:1] != 0 && !reset;
     assign palette_component = port_address[2:1];
     assign palette_data = io_writedata[7:0];
-    assign io_read_selected = io_read && io_select[0] && port_address == 16'h09a0;
+    assign io_read_selected = io_read && io_select[0] &&
+                              (port_address == 16'h09a0 || port_address == 16'h09a8);
     always @* begin
         io_readdata = {6'b0,gdc_5mhz,1'b0};
+        if (port_address == 16'h09a8) io_readdata = {7'b0,line480};
+        else
         case (status_index)
             8'h03: io_readdata[0] = display_enable;
             8'h04: io_readdata[0] = analog16;
@@ -90,7 +95,7 @@ module pc98_pegc_control (
 
     always @(posedge clk) begin
         if (reset) begin
-            ext_unlocked <= 0; mode256 <= 0; single_page <= 0;
+            ext_unlocked <= 0; mode256 <= 0; single_page <= 0; line480 <= 0;
             packed_mode <= 1; linear_enable <= 0;
             bank0 <= 0; bank1 <= 0; status_index <= 0; palette_index <= 0;
         end else begin
@@ -107,6 +112,7 @@ module pc98_pegc_control (
                     endcase
                 end
                 if (port_address == 16'h09a0) status_index <= io_writedata[7:0];
+                if (port_address == 16'h09a8) line480 <= io_writedata[0];
                 if (palette_selected && port_address[2:1] == 0)
                     palette_index <= io_writedata[7:0];
             end

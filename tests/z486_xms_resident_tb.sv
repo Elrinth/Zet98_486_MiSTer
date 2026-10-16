@@ -75,7 +75,7 @@ module z486_xms_resident_tb;
     end
     pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE),.LOWMEM_CACHE(LOWMEM_CACHE),.PEGC_ENABLE(PEGC_ENABLE),.EARLY_WRITE_COMPLETE(EARLY_WRITE_COMPLETE),.EXT_RAM_EARLY_READ_HIT(EARLY_READ_HIT),.EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT),.REGISTERED_MEMORY_READY(REGISTERED_MEMORY_READY),.EXT_RAM_DWORD_READ(EXT_RAM_DWORD_READ)) dut(
         .cpu_speed_sel(tb_cpu_speed),.pegc_analog16(1'b1),.pegc_display_enable(1'b1),.pegc_gdc_5mhz(1'b1),
-        .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_pixel_clk(clk),
+        .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_line480(),.pegc_pixel_clk(clk),
         .pegc_palette_index(8'b0),.pegc_palette_rgb(),.pegc_video_address(16'b0),
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0),.pegc_video_busy(),
         .pegc_video_readdatavalid(),.pegc_video_readdata(),.cache_window_write(),.cache_window_ab(),.*);
@@ -93,12 +93,14 @@ module z486_xms_resident_tb;
     reg [7:0] irq_mask=8'hff;
     integer irq_accepted=0,irq_eoi=0;
     integer irq_window=0,irq_window_start=0;  // clocks with IRQ0 unmasked
+    integer irq_period=10000;                 // +irq_period=N: PIT_PM_TEST IRQ0 every N clocks
+    initial void'($value$plusargs("irq_period=%d",irq_period));
     always @(posedge clk) if(PIT_PM_TEST) begin
         if(reset || irq_mask[0]) interrupt_do<=0;
         else if(interrupt_done) begin
             interrupt_do<=0;
             irq_accepted<=irq_accepted+1;
-        end else if(ticks%10000==0) interrupt_do<=1;
+        end else if(ticks%irq_period==0) interrupt_do<=1;
     end
     function automatic [63:0] pattern_word(input [28:0] address);
         reg [31:0] byte_addr;

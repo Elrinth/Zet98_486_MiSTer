@@ -125,6 +125,9 @@ module z486
     output     [15:0]  dbg_SP,          // PC98 crash recorder: stack pointer (low word)
     output             dbg_issue,       // PC98 crash recorder: instruction issue pulse
     output     [31:0]  dbg_issue_eip,   // and the issued instruction's EIP
+    output     [31:0]  dbg_EAX,         // PC98 crash recorder ITRACE 8: EAX and ESI
+    output     [31:0]  dbg_ESI,
+    output reg [31:0]  dbg_fault_state, // ITRACE 8: pipeline state latched as a fault fires
 
     // A fault while delivering #DF shuts down the 386 and requests reset.
     output reg          triple_fault_reset
@@ -1010,7 +1013,11 @@ prefetch prefetch_inst (
     // fault redirect taken under a still-servicing store (push 43h before
     // the split xor esi,esi in Explorer 00407FFD, slow memory) lost the
     // page-fault microcode at 8ECh and the core idled with the fault spent.
-    .fetch_blocked(decoder_fetch_blocked && !mem_servicing &&
+    // Older hardwired loads must have written back too: the fault entry
+    // clears the VIPT load pipeline, so "rep movsd / mov eax,[ebp+18h] /
+    // lea edi,[ebx+560h]" ending a code page before a not-present one kept
+    // the old EAX (Windows 95 MSVFW32 7D4B5FF7, Magical Chase).
+    .fetch_blocked(decoder_fetch_blocked && !mem_servicing && !vipt_load_busy &&
                    (!uc_active || (i_rni_delay && !stall) || stall_d2)),
     .ifetch_fault(ifetch_page_fault),
     .ifetch_fault_code(ifetch_fault_code),
@@ -3516,7 +3523,11 @@ data_unit data_unit_inst (
     .recipe_rni(recipe_rni),
     .recipe_state(recipe_state),
     .hardwired_off(hardwired_off),
-    .recipe_commit_cancel(any_fault),
+    // Only the executing instruction's own fault cancels deferred commits. An
+    // instruction-fetch #PF is raised at an older instruction's RNI delay
+    // slot, after it retired; cancelling dropped its load token (Windows 95
+    // MSVFW32 7D4B5FF7 "mov eax,[ebp+18h]" before a not-present code page).
+    .recipe_commit_cancel(gp_fault_trigger || data_page_fault || div_overflow),
     .load_wb_valid(vipt_load_wb_valid_r),
     .load_wb_dst(vipt_load_wb_dst_r),
     .load_wb_size(vipt_load_wb_size_r),
@@ -3729,6 +3740,15 @@ assign dbg_eflags    = EFLAGS;
 assign dbg_page_fault = page_fault;
 assign dbg_cr3       = CR3;
 assign dbg_issue     = i_issue;
+assign dbg_EAX       = EAX;
+assign dbg_ESI       = ESI;
+always @(posedge clk)
+    if (any_fault && !any_fault_r)
+        dbg_fault_state <= {vipt_load_ex_r.valid, vipt_load_replay_r.valid, vipt_load_slow_req_r,
+                            vipt_load_slow_wait_r, vipt_load_wb_valid_r, recipe_mem_write.valid,
+                            recipe_shift_write.valid, uc_active, mem_servicing, i_rni_delay, stall,
+                            stall_d2, d2_valid, decoder_fetch_blocked, data_page_fault,
+                            ifetch_page_fault, gp_fault_trigger, div_overflow, 2'b00, uaddr};
 assign dbg_issue_eip = (uc_exec && recipe_rni && (uc_dest == DEST_eIP))
     ? (is_dword ? eip_source_value : {16'h0, eip_source_value[15:0]}) : EIP;
 

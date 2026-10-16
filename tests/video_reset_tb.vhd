@@ -54,7 +54,7 @@ begin
         wait until rising_edge(pixel_clk);
         if pixel_rstn='0' then
             wait for 1 ps;
-            assert u=0 and hu=0 and v=VWIDTH-1 and hcomp='0' and vcomp='0'
+            assert u=0 and hu=0 and v=VWIDTH400-1 and hcomp='0' and vcomp='0'
                 report "Raster counters ran before pixel reset released" severity failure;
         end if;
     end process;

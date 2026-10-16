@@ -158,5 +158,10 @@
     "DISPAL",
     10,
     "tGDC_DISPAL"
+  ],
+  [
+    "LINE480",
+    1,
+    "pc_line480"
   ]
 ]

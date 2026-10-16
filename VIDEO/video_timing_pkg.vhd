@@ -12,10 +12,13 @@ package VIDEO_TIMING_pkg is
 	constant DOTPU	:integer	:=8;
 	constant HWIDTH	:integer	:=864;
 	constant HUWIDTH :integer	:=HWIDTH/DOTPU;
-	constant VWIDTH	:integer	:=440;
+	-- 480-line mode (port 09A8h bit 0) lengthens the frame to 520 lines with the
+	-- same porches; 400-line mode wraps at VWIDTH400. Counters cover VWIDTH.
+	constant VWIDTH	:integer	:=520;
+	constant VWIDTH400 :integer	:=440;
 	constant HVIS	:integer	:=640;
 	constant HUVIS	:integer	:=HVIS/DOTPU;
-	constant VVIS	:integer	:=400;
+	constant VVIS	:integer	:=480;
 	constant VVIS2	:integer	:=480;
 	constant CPD	:integer	:=3;
 	constant HFP	:integer	:=10;

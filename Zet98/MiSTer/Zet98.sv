@@ -197,7 +197,10 @@ parameter CONF_STR = {
 	"P1O3,Video test,Off,Color bars;",
 	"P1O4,Startup mute,10s,Off;",
 	"P1o2,Audio filter,On,Off;",
+	"P1oI,Monochrome LCD,Off,On;",
+`ifdef ZET98_DISK_ACTIVITY
 	"P1oH,Disk activity,On,Off;",
+`endif
 `ifdef ZET98_MPU_UART
 	"P1OQ,MPU MIDI,Off,UART;",
 	"P1o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
@@ -753,6 +756,13 @@ boot_media_control #(.RAW_IDE(RAW_IDE)) boot_control (
 );
 // (native_ce/hs/vs/de are declared above, with the trace wires)
 wire [7:0] native_r, native_g, native_b;
+wire [7:0] native_r_raw, native_g_raw, native_b_raw;
+// Monochrome LCD/plasma display option (NP2kai LCD mode grey levels).
+lcd_mono lcd_mono (
+    .enable(status[50]),
+    .in_r(native_r_raw), .in_g(native_g_raw), .in_b(native_b_raw),
+    .out_r(native_r), .out_g(native_g), .out_b(native_b)
+);
 wire output_ce, output_hs, output_vs, output_de;
 wire [7:0] output_r, output_g, output_b;
 
@@ -765,6 +775,7 @@ video_output video_out (
 	.hs(output_hs), .vs(output_vs), .de(output_de)
 );
 wire [11:0] raster_x, raster_y, raster_width, raster_height;
+`ifdef ZET98_DISK_ACTIVITY
 storage_activity disk_activity (
     .clk(clk_vid), .reset(!pll_locked), .enabled(!status[49]),
     .floppy_read(floppy_access | sd_rd[1:0]), .floppy_write(floppy_write | sd_wr[1:0]),
@@ -777,6 +788,11 @@ storage_activity disk_activity (
     .out_ce(CE_PIXEL), .out_hs(VGA_HS), .out_vs(VGA_VS), .out_de(VGA_DE),
     .out_r(VGA_R), .out_g(VGA_G), .out_b(VGA_B)
 );
+`else
+// Without the disk activity badge (area) the picture passes straight through.
+assign {CE_PIXEL, VGA_HS, VGA_VS, VGA_DE} = {output_ce, output_hs, output_vs, output_de};
+assign {VGA_R, VGA_G, VGA_B} = {output_r, output_g, output_b};
+`endif
 
 // Report native pixel aspect by default. Optional crop is HDMI-only.
 pc98_video_scale hdmi_scale (
@@ -901,9 +917,9 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pSramld(sramld),
 	.pSramst(sramst),
 
-	.pVideoR(native_r),
-	.pVideoG(native_g),
-	.pVideoB(native_b),
+	.pVideoR(native_r_raw),
+	.pVideoG(native_g_raw),
+	.pVideoB(native_b_raw),
 	.pVideoHS(native_hs),
 	.pVideoVS(native_vs),
 	.pVideoEN(native_de),

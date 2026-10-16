@@ -6,9 +6,10 @@ entity VTIMING is
 generic(
 	DOTPU	:integer	:=8;
 	HWIDTH	:integer	:=864;
-	VWIDTH	:integer	:=440;
+	VWIDTH	:integer	:=520;
+	VWIDTH400 :integer	:=440;
 	HVIS	:integer	:=640;
-	VVIS	:integer	:=400;
+	VVIS	:integer	:=480;
 	CPD		:integer	:=3;		--clocks per dot
 	HFP		:integer	:=10;
 	HSY		:integer	:=8;
@@ -29,7 +30,9 @@ port(
 	
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    pixel_rstn :in std_logic := '0'
+    pixel_rstn :in std_logic := '0';
+	-- 1: 480 visible lines (VWIDTH per frame), 0: 400 lines (VWIDTH400).
+	MODE480	:in std_logic := '0'
 );
 end VTIMING;
 architecture MAIN of VTIMING is
@@ -49,6 +52,7 @@ signal	clk2sft	:std_logic_vector(1 downto 0);
 signal	clk3sft	:std_logic_vector(2 downto 0);
 signal	clk3b	:std_logic;
 signal raster_rstn :std_logic;
+signal mode480_frame :std_logic;
 
 begin
 
@@ -68,7 +72,8 @@ begin
     raster_rstn <= pixel_rstn when EXTERNAL_PIXEL_RESET else rstn;
 	process(clk3b,raster_rstn)begin
 		if(raster_rstn='0')then
-			vcounter<=VWIDTH-1;
+			vcounter<=VWIDTH400-1;
+			mode480_frame<='0';
 			hucounter<=0;
 			ucounter<=0;
 			hcompb<='0';
@@ -81,9 +86,10 @@ begin
 				if(hucounter=((HWIDTH/DOTPU)-1))then
 					hucounter<=0;
 					hcompb<='1';
-					if(vcounter=VWIDTH-1)then
+					if((mode480_frame='1' and vcounter=VWIDTH-1) or (mode480_frame='0' and vcounter>=VWIDTH400-1))then
 						vcounter<=0;
 						vcompb<='1';
+						mode480_frame<=MODE480;	-- change length only between frames
 					else 
 						vcounter<=vcounter+1;
 					end if;

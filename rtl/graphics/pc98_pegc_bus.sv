@@ -16,7 +16,7 @@ module pc98_pegc_bus (
     input wire analog16, display_enable, gdc_5mhz,
     output wire claimed, ack,
     output reg [15:0] readdata,
-    output wire mode256, single_page,
+    output wire mode256, single_page, line480,
     output wire linear_enable,
     output wire [28:0] ddr_address,
     output wire [63:0] ddr_writedata,
@@ -62,7 +62,7 @@ module pc98_pegc_bus (
         .mem_address(address),.mem_select(select),.mem_write(accepted && !io && write),
         .mem_writedata(writedata),.mmio_selected(mmio_selected),.mmio_readdata(mmio_data),
         .vram_selected(vram_selected),.vram_word_address(vram_address),.vram_unhandled(vram_unhandled),
-        .mode256(mode256),.single_page(single_page),.packed_mode(),.linear_enable(linear_enable)
+        .mode256(mode256),.single_page(single_page),.packed_mode(),.linear_enable(linear_enable),.line480(line480)
     );
     pc98_pegc_palette palette (
         .cpu_clk(clk),.cpu_index(palette_index),.cpu_write(palette_write),

@@ -8,7 +8,7 @@ module pc98_pegc_bus_tb;
     reg [1:0] select=0;
     reg [15:0] writedata=0;
     reg write=0,io=0,strobe=0,legacy_ack=0;
-    wire claimed,ack,mode256,single_page;
+    wire claimed,ack,mode256,single_page,line480;
     wire [15:0] readdata;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;

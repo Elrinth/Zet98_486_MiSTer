@@ -213,7 +213,7 @@ port(
     ddr_busy, ddr_readdatavalid :in std_logic;
     ddr_readdata :in std_logic_vector(63 downto 0);
     pegc_analog16, pegc_display_enable, pegc_gdc_5mhz :in std_logic;
-    pegc_mode256, pegc_single_page :out std_logic;
+    pegc_mode256, pegc_single_page, pegc_line480 :out std_logic;
     pegc_pixel_clk :in std_logic;
     pegc_palette_index :in std_logic_vector(7 downto 0);
     pegc_palette_rgb :out std_logic_vector(23 downto 0);
@@ -348,7 +348,8 @@ port(
     PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
     PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
     PC_X :out std_logic_vector(9 downto 0);
-    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
+    LINE480 :in std_logic := '0'
 );
 end component;
 
@@ -1914,7 +1915,7 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
-signal video_settings_source,video_settings_received : std_logic_vector(193 downto 0);
+signal video_settings_source,video_settings_received : std_logic_vector(194 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -2121,7 +2122,7 @@ signal	VRTC		:std_logic;
 signal	HRTC		:std_logic;
 signal VRTC_video, HRTC_video : std_logic;
 signal	GLOWBLK		:std_logic;
-signal pc_mode,pc_single,pc_fast,pc_clk1,pc_clk2,pc_display:std_logic;
+signal pc_mode,pc_single,pc_fast,pc_clk1,pc_clk2,pc_display,pc_line480:std_logic;
 signal pc_line_start,pc_line_enable,pc_active,pc_page_wrap,pc_rstn:std_logic;
 signal pc_line_address,pc_ddr_address:std_logic_vector(18 downto 3);
 signal pc_x:std_logic_vector(9 downto 0);
@@ -2650,7 +2651,7 @@ begin
 
     zet_debug: if CPU486=0 generate
         pCPUDebug <= (others=>'0');
-        pc_mode<='0';pc_single<='0';pc_rgb<=(others=>'0');pc_ddr_busy<='1';pc_ddr_valid<='0';pc_ddr_data<=(others=>'0');
+        pc_mode<='0';pc_single<='0';pc_line480<='0';pc_rgb<=(others=>'0');pc_ddr_busy<='1';pc_ddr_valid<='0';pc_ddr_data<=(others=>'0');
     end generate;
 
     ao486_cpu: if CPU486/=0 generate
@@ -2668,7 +2669,7 @@ begin
             ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
             ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData,
             pegc_analog16=>tGDC_COLORMODE, pegc_display_enable=>pc_display, pegc_gdc_5mhz=>pc_clk2,
-            pegc_mode256=>pc_mode, pegc_single_page=>pc_single, pegc_pixel_clk=>grpclk,
+            pegc_mode256=>pc_mode, pegc_single_page=>pc_single, pegc_line480=>pc_line480, pegc_pixel_clk=>grpclk,
             pegc_palette_index=>pc_index, pegc_palette_rgb=>pc_rgb,
             pegc_video_address=>pc_ddr_address, pegc_video_burstcount=>pc_ddr_count,
             pegc_video_read=>pc_ddr_read, pegc_video_busy=>pc_ddr_busy, pegc_video_readdatavalid=>pc_ddr_valid,
@@ -3408,8 +3409,10 @@ begin
     -- Text GDC active display (The Return of Ishtar: 72 words x 384 lines).
     video_settings_source(183 downto 176) <= tGDC_DISPAW;
     video_settings_source(193 downto 184) <= tGDC_DISPAL;
+    -- Port 09A8h 480-line mode (PEGC control).
+    video_settings_source(194) <= pc_line480;
     gdc_settings : entity work.video_settings_transfer
-        generic map(WIDTH=>194)
+        generic map(WIDTH=>195)
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
     pVideoDebug <= '0' & video_settings_source(127 downto 57);
@@ -3467,6 +3470,7 @@ begin
         PC_LINE_ENABLE=>pc_line_enable,PC_ACTIVE=>pc_active,PC_PAGE_WRAP=>pc_page_wrap,
         PC_RSTN=>pc_rstn,PC_LINE_ADDRESS=>pc_line_address,PC_X=>pc_x,
         ROUT8=>pVideoR,GOUT8=>pVideoG,BOUT8=>pVideoB,
+        LINE480=>video_settings_received(194),
 		GCOLOR		=>'0',
 		MONOSEL		=>(others=>'0'),
 		TXTEN		=>video_settings_received(119),

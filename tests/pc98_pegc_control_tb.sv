@@ -9,7 +9,7 @@ module pc98_pegc_control_tb;
     reg [15:0] id=0, md=0;
     reg [31:1] ma=0;
     reg analog16=0, display_enable=0, gdc_5mhz=0;
-    wire irs, ps, pw, mm, vs, unhandled, mode256, single_page, packed_mode, linear_enable;
+    wire irs, ps, pw, mm, vs, unhandled, mode256, single_page, packed_mode, linear_enable, line480;
     wire [7:0] ird, pi, pd;
     wire [1:0] pc;
     wire [15:0] mr;
@@ -22,7 +22,7 @@ module pc98_pegc_control_tb;
         .palette_component(pc),.palette_data(pd),.mem_address(ma),.mem_select(msel),
         .mem_write(mw),.mem_writedata(md),.mmio_selected(mm),.mmio_readdata(mr),
         .vram_selected(vs),.vram_word_address(va),.vram_unhandled(unhandled),
-        .mode256(mode256),.single_page(single_page),.packed_mode(packed_mode),.linear_enable(linear_enable));
+        .mode256(mode256),.single_page(single_page),.packed_mode(packed_mode),.linear_enable(linear_enable),.line480(line480));
     task check(input bit good,input string msg);
         begin checks=checks+1; if(!good) $fatal(1,"PEGC: %s",msg); end
     endtask
@@ -91,6 +91,13 @@ module pc98_pegc_control_tb;
         end
         check(palette_beats==768,"missing palette writes");
         outb('hab,'hff);outb('haf,'hff);check(palette_beats==768,"odd port palette writes");
+        // Port 09A8h: 480-line display select and readback (NP2kai gdc_o9a8/i9a8).
+        check(!line480,"480-line mode after reset");
+        outb('h9a8,'h01);check(line480,"09A8h write did not select 480 lines");
+        ir=1;#1;check(irs && ird===8'h01,"09A8h readback");ir=0;
+        outb('h9a8,'hfe);check(!line480,"09A8h bit 0 clear");
+        ir=1;#1;check(irs && ird===8'h00,"09A8h readback after clear");ir=0;
+        outb('h9a9,'h01);check(!line480,"odd port 09A9h changed 480-line mode");
         outb('h6a,'h20);check(!mode256,"return to legacy");
         outb('haa,'hff);check(palette_beats==768 && !ps,"legacy palette intercepted");
         ma='he0100>>1;#1;check(!mm,"legacy E plane intercepted");
