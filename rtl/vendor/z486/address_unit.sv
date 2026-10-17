@@ -16,6 +16,9 @@ module address_unit
     input  logic        split_ea_prepare,     // Capture base + scaled index
     input  logic        split_ea_use,         // Finish a three-term EA in D2b
     input  logic [2:0]  split_ea_adjust,      // Post-POP ESP correction in D2a
+    input  logic        early_ea_prepare,     // Capture partial + disp at D2 start
+    input  logic [31:0] early_ea_partial,
+    input  logic [31:0] early_ea_disp,
     input  logic [31:0] displacement,
     output gpr_ref_t    ea_base,             // GPR read request to data unit
     output gpr_ref_t    ea_index,            // Second GPR read request to data unit
@@ -163,11 +166,15 @@ assign issue_linear_low = issue_linear_low_sum[1:0];
 always_ff @(posedge clk) begin
     if (!reset_n)
         ea_partial_r <= 32'd0;
+    else if (early_ea_prepare)
+        ea_partial_r <= early_ea_partial;
     else if (split_ea_prepare)
         ea_partial_r <= ea_term_a_live + ea_term_b_live + split_ea_adjust;
 end
 always_ff @(posedge clk)
-    if (split_ea_prepare)
+    if (early_ea_prepare)
+        ea_disp_r <= early_ea_disp;
+    else if (split_ea_prepare)
         ea_disp_r <= displacement;
 // synthesis translate_off
 always @(posedge clk)

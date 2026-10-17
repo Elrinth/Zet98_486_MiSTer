@@ -28,6 +28,7 @@ module data_unit
     input  logic        hardwired_off,
     input  logic        recipe_commit_cancel,     // Cancel deferred recipe commit
     input  logic        load_wb_valid,             // Registered VIPT load WB
+    input  logic        load_wb_older,             // WB older than a #GP in EX
     input  logic [2:0]  load_wb_dst,
     input  logic [7:0]  load_wb_dst_onehot,     // Registered one-hot of load_wb_widx
     input  logic [1:0]  load_wb_size,
@@ -151,6 +152,8 @@ logic [31:0] load_wb_commit_data;
 // EA-invalidation logic still see .valid; only commit and forwarding stop.
 logic        recipe_memory_killed;
 logic        recipe_shift_killed;
+// A fault cancels only its own instruction's load writeback.
+wire         load_wb_cancel = recipe_commit_cancel && !load_wb_older;
 logic        load_wb_alu_exec;
 logic        load_wb_alu_commit;
 logic [31:0] load_wb_alu_result;
@@ -899,10 +902,10 @@ always_ff @(posedge clk) begin
         recipe_memory_killed <= 1'b0;
         recipe_shift_killed <= 1'b0;
     end else if (!pipeline_advance) begin
-        if ((load_wb_valid && !recipe_commit_cancel &&
+        if ((load_wb_valid && !load_wb_cancel &&
              recipe_memory_dst_onehot[load_wb_widx]) || opr_fast_commit)
             recipe_memory_killed <= 1'b1;
-        if (load_wb_valid && !recipe_commit_cancel &&
+        if (load_wb_valid && !load_wb_cancel &&
             (recipe_shift_widx == load_wb_widx))
             recipe_shift_killed <= 1'b1;
     end else begin
@@ -972,7 +975,7 @@ always_ff @(posedge clk) begin
                       recipe_memory_write.size);
 
         // Assigned after the token above so it wins the bytes it writes.
-        if (load_wb_valid && !recipe_commit_cancel)
+        if (load_wb_valid && !load_wb_cancel)
             write_gpr(load_wb_dst, load_wb_commit_data, load_wb_size);
 
         // A younger VIPT candidate can shadow the ROM writeback slot of a
@@ -987,7 +990,7 @@ always_ff @(posedge clk) begin
         // hardwired-load commit above. The memory token also stays valid
         // through stalled cycles, rewriting OPR_R until pipeline_advance.
         // Commit WB last: "mov eax,[m]; add eax,[m]" must keep the ADD.
-        if (load_wb_valid && !recipe_commit_cancel)
+        if (load_wb_valid && !load_wb_cancel)
             write_gpr(load_wb_dst, load_wb_commit_data, load_wb_size);
 
         if (exec) begin
@@ -1472,7 +1475,7 @@ end
 // the divide-overflow cone onto every load result.  Faults gate commit below;
 // they need not gate this side-effect-free calculation.
 assign load_wb_alu_exec = load_wb_valid && load_wb_is_alu;
-assign load_wb_alu_commit = load_wb_alu_exec && !recipe_commit_cancel;
+assign load_wb_alu_commit = load_wb_alu_exec && !load_wb_cancel;
 
 wire [31:0] load_wb_alu_dst = (load_wb_size == 2'd0)
     ? (load_wb_dst[2] ? {24'd0, load_wb_dst_base_r[15:8]}

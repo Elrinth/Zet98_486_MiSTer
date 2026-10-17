@@ -23,8 +23,8 @@ for wait in ${RANDOM_WAITS:-0 6}; do
   fi
   echo "PASS: RANDOM_WAIT=$wait load before a code-fetch #PF (MSVFW32 DrawDibBegin)"
 done
-tr -d '' < rtl/vendor/z486/z486.sv | sed 's/!mem_servicing \&\& !vipt_load_busy \&\&/!mem_servicing \&\&/' > "$out/old_z486.sv"
-[ "$(grep -c '!mem_servicing && !vipt_load_busy' "$out/old_z486.sv")" = 0 ]
+tr -d '' < rtl/vendor/z486/z486.sv | sed 's/!mem_servicing \&\& !vipt_load_busy \&\& !i_issue \&\&/!mem_servicing \&\&/' > "$out/old_z486.sv"
+[ "$(grep -c '!mem_servicing && !vipt_load_busy && !i_issue' "$out/old_z486.sv")" = 0 ]
 build "$out/old_z486.sv" 0
 if (cd "$out"; "$out/obj/Vz486_xms_resident_tb" "+program=$out/t.bin") > "$out/neg.log" 2>&1; then
   echo 'FAIL: negative control passed'; exit 1

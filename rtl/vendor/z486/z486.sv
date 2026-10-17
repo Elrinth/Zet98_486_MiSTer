@@ -543,6 +543,13 @@ wire       vipt_load_slow_busy = vipt_load_slow_req_r || vipt_load_slow_wait_r;
 wire       vipt_load_busy = vipt_load_ex_r.valid || vipt_load_replay_r.valid ||
                             vipt_load_slow_busy || vipt_load_wb_valid_r;
 wire       vipt_load_retire;
+// A younger instruction has issued since this load token's own issue. Its
+// segment #GP must not cancel the older load's writeback (precise
+// exceptions): "mov edx,[m]; mov ebx,[fs:esi]" with the second #GP keeps EDX.
+// A #PF may belong to an older deferred store and restarts there, so page
+// faults (and divide overflow) still cancel every writeback: committing on
+// #PF crashed Windows 95 in KERNEL32.
+reg        vipt_ex_succ_r, vipt_replay_succ_r, vipt_slow_succ_r, vipt_wb_succ_r;
 
 reg        rd_fast_valid_r;             // Issued overlay awaiting VIPT finalize
 reg        rd_fast_probed_r;            // D2 preread was accepted
@@ -1017,7 +1024,9 @@ prefetch prefetch_inst (
     // clears the VIPT load pipeline, so "rep movsd / mov eax,[ebp+18h] /
     // lea edi,[ebx+560h]" ending a code page before a not-present one kept
     // the old EAX (Windows 95 MSVFW32 7D4B5FF7, Magical Chase).
-    .fetch_blocked(decoder_fetch_blocked && !mem_servicing && !vipt_load_busy &&
+    // That load may also be issuing now: the fault is raised next cycle, after
+    // the load already entered the VIPT pipe (seen once D2 skips its EA cycle).
+    .fetch_blocked(decoder_fetch_blocked && !mem_servicing && !vipt_load_busy && !i_issue &&
                    (!uc_active || (i_rni_delay && !stall) || stall_d2)),
     .ifetch_fault(ifetch_page_fault),
     .ifetch_fault_code(ifetch_fault_code),
@@ -1263,6 +1272,8 @@ always_ff @(posedge clk) begin
 
         if (q_flush || any_fault)
             d2_ea_split_done_r <= 1'b0;
+        else if (d2_ea_early)
+            d2_ea_split_done_r <= 1'b1;
         else if (d2_ea_split_wait)
             d2_ea_split_done_r <= 1'b1;
         else if (d2_start || i_issue)
@@ -1396,6 +1407,37 @@ assign vipt_load_retire = vipt_load_wb_valid_r && !vipt_load_overlap_r &&
 wire vipt_slow_owns_next = vipt_load_ex_r.valid && vipt_load_ex_probed_r &&
                            !vipt_load_ex_hit && !any_fault &&
                            !q_flush && !interrupt_entry;
+
+// Ownership bits follow vipt_load_*_r through the same transfers.
+always_ff @(posedge clk) begin
+    if (!reset_n) begin
+        vipt_ex_succ_r <= 1'b0;
+        vipt_replay_succ_r <= 1'b0;
+        vipt_slow_succ_r <= 1'b0;
+        vipt_wb_succ_r <= 1'b0;
+    end else begin
+        vipt_replay_succ_r <= vipt_replay_succ_r || i_issue;
+        vipt_slow_succ_r <= vipt_slow_succ_r || i_issue;
+        if (vipt_replay_try && dcache_vipt_probe_direct_accepted)
+            vipt_ex_succ_r <= vipt_replay_succ_r || i_issue;
+        if (vipt_load_ex_r.valid) begin
+            if (!vipt_load_ex_probed_r)
+                vipt_replay_succ_r <= vipt_ex_succ_r || i_issue;
+            else if (vipt_load_ex_hit)
+                vipt_wb_succ_r <= vipt_ex_succ_r || i_issue;
+            else
+                vipt_slow_succ_r <= vipt_ex_succ_r || i_issue;
+        end
+        if (vipt_issue_load) begin
+            if (vipt_load_ex_r.valid && !vipt_load_ex_hit)
+                vipt_replay_succ_r <= 1'b0;
+            else
+                vipt_ex_succ_r <= 1'b0;
+        end
+        if (vipt_load_slow_wait_r && !mem_servicing)
+            vipt_wb_succ_r <= vipt_slow_succ_r || i_issue;
+    end
+end
 
 always_ff @(posedge clk) begin
     if (!reset_n) begin
@@ -1876,6 +1918,22 @@ wire d2_ea_split_refresh = d2_ea_split_done_r &&
       d2_split_commit_mask) != 8'h00);
 assign d2_ea_split_wait = d2_ea_needs_split &&
                           (!d2_ea_split_done_r || d2_ea_split_refresh);
+// Early split capture. A launch of the completed queue-head payload forms the
+// partial sum from architectural GPRs in the D2-start cycle, so a staged
+// memory operand can issue on its first resident cycle. A write to its
+// base/index on the start edge falls back to the resident D2a cycle; a write
+// on the issue edge is caught by d2_ea_split_refresh as before. A skid
+// successor has no literals yet and always takes the D2a cycle, which keeps
+// the chain select out of the adder: every early launch uses ea_dec_cur.
+wire [7:0] d2_ea_early_sel = ea_dec_cur.base_sel | ea_dec_cur.index_sel;
+wire       d2_ea_early = PC98_PIPELINE_REGS[1] && d2_start && (!d2_valid || i_issue) &&
+                         d2_push && !(chain_start && chain_from_next) &&
+                         !i_bus.ea_uses_post_pop_esp && !ea_inval_all &&
+                         (((ea_inval_gpr | d2_split_commit_mask) & d2_ea_early_sel) == 8'h00);
+wire [63:0] d2_ea_early_prep = ea_scale_operands(
+    onehot_gpr_mux(ea_dec_cur.base_sel), onehot_gpr_mux(ea_dec_cur.index_sel),
+    ea_dec_cur.scale, ea_dec_cur.s2b);
+wire [31:0] d2_ea_early_partial = d2_ea_early_prep[63:32] + d2_ea_early_prep[31:0];
 // Clear-all events: segment state may change under any committed seg
 // command or descriptor load; the effective-mask mode must be stable.
 reg d2_agu_effmask_r;
@@ -3409,6 +3467,9 @@ address_unit #(.REGISTERED_EA(PC98_PIPELINE_REGS[1])) address_unit_inst (
     .d2_ea(d2_start_ea_dec),
     .split_ea_prepare(d2_ea_needs_split && d2_valid && !i_issue),
     .split_ea_use(d2_ea_needs_split && d2_ea_split_done_r),
+    .early_ea_prepare(d2_ea_early),
+    .early_ea_partial(d2_ea_early_partial),
+    .early_ea_disp(ea_dec_cur.disp),
     .split_ea_adjust(d2_entry.ea_uses_post_pop_esp ?
                      (d2_entry.data32 ? 3'd4 : 3'd2) : 3'd0),
     .displacement(d2_agu_dec.disp),
@@ -3529,6 +3590,7 @@ data_unit data_unit_inst (
     // MSVFW32 7D4B5FF7 "mov eax,[ebp+18h]" before a not-present code page).
     .recipe_commit_cancel(gp_fault_trigger || data_page_fault || div_overflow),
     .load_wb_valid(vipt_load_wb_valid_r),
+    .load_wb_older(vipt_wb_succ_r && !data_page_fault && !div_overflow),
     .load_wb_dst(vipt_load_wb_dst_r),
     .load_wb_dst_onehot(vipt_load_wb_dst_onehot_r),
     .load_wb_size(vipt_load_wb_size_r),
