@@ -471,6 +471,7 @@ reg        d2_waited_r;             // D2 held after predecessor delay slot
 reg        d2_stale_slot_r;         // D2 also waited during predecessor delay slot
 reg        d2_ea_split_done_r;      // D2a captured base + scaled index
 wire       d2_ea_split_wait;        // Three-term EA needs its D2a cycle
+wire       d2_ea_split_m3_hit;      // M3 ALU WB on a staged base/index: restage
 wire [11:0] d2_entry_r;             // Effective entry resident in D2
 wire        d2_rom_mem_resident;    // D2 entry tag aligned with ROM q_mem
 wire       init_cycle = d2_valid_r; // Temporary waveform alias; not control logic
@@ -1272,6 +1273,8 @@ always_ff @(posedge clk) begin
 
         if (q_flush || any_fault)
             d2_ea_split_done_r <= 1'b0;
+        else if (d2_ea_split_m3_hit)
+            d2_ea_split_done_r <= 1'b0;
         else if (d2_ea_early)
             d2_ea_split_done_r <= 1'b1;
         else if (d2_ea_split_wait)
@@ -1913,6 +1916,12 @@ wire [7:0] d2_split_commit_mask =
     (dly_gpr_we ? (8'h01 << dly_gpr_sel) : 8'h00) |
     (recipe_shift_write.valid ? gpr_wr_expand(recipe_shift_write.dst) : 8'h00) |
     (vipt_load_wb_valid_r ? vipt_load_wb_dst_onehot_r : 8'h00);
+// An M3 ALU result is not forwarded to EA readers (read_ea_gpr): staging in
+// its WB cycle would capture the old register. Restage on the next cycle,
+// when the value is architectural; d2_vipt_ea_hazard holds issue meanwhile.
+assign d2_ea_split_m3_hit = d2_ea_needs_split &&
+    (((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
+      vipt_load_wb_alu_dst_mask) != 8'h00);
 wire d2_ea_split_refresh = d2_ea_split_done_r &&
     (((d2_agu_dec.base_sel | d2_agu_dec.index_sel) &
       d2_split_commit_mask) != 8'h00);

@@ -16,6 +16,18 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B258 fixes **Windows 95 text drawn as dots**: on B257 about every second
+Windows 95 boot showed some or all dialog and button text as rows of dots for
+the whole session. B257's earlier split-EA capture made a latent z486 hazard
+reachable: an address staged in the same cycle as an ALU-with-memory result
+(such as `and edx,[mem]` followed by `lea eax,[edx+edx+5e3]`) used the
+register's old value and was never restaged, because that result is not
+forwarded to address inputs. D2 now restages such an address one cycle later.
+Found by the differential fuzzer; B257 showed the dots on 4 of 9 boots, B258
+on none of 8. 90 MHz seed 3 (worst slack -7.056 ns): passes QUALIFY and the
+Star Cruiser II logo check; 60 fuzz seeds plus 40 with random memory waits
+match Unicorn.
+
 B257 adds the **MPU-PC98II intelligent mode (sequencer)**, so **Star Cruiser II**
 gets past "sound source initialization" and plays its MIDI music (choose GS for
 MiSTer's FluidSynth; the game needs the EMS memory profile for its music). The
