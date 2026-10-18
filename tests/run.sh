@@ -69,6 +69,7 @@ bash tests/run-egc-write.sh
 bash tests/run-egc-engine.sh
 bash tests/run-cache-map.sh
 bash tests/run-pcm86.sh
+bash tests/run-mpu-seq.sh
 bash tests/run-audio-decimator.sh
 bash tests/run-alsa-gain.sh
 bash tests/run-snac-psx.sh
