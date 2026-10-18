@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Per-slot image translation (one shared floppy converter) and serialization of mount metadata for the
 // legacy disk engine's shared size/read-only bus.
-// FLOPPY_CONVERT=0 would leave out the HDM/FDI converter (758 ALMs, kept for
-// now; an option if area runs out): the
-// floppy slots then take D88 images directly, which need no translation.
+// FLOPPY_CONVERT=0 (used since B257) leaves out the HDM/FDI converter: the
+// floppy slots take D88 images directly, which need no translation (the OSD
+// offers D88 only; convert HDM/FDI images with the website converter).
 module pc98_image_bridge #(parameter ENABLE=1, RAW_IDE=1, FLOPPY_CONVERT=1) (
     input wire clk,
     input wire [3:0] image_mounted,

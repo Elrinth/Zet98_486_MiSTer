@@ -101,7 +101,13 @@ begin
 		readxy(x, y);
 		-- Stick and USB mouse add up.
 		packet(20, 0, "000"); push(20, 0); readxy(x, y); expect(x, y, 10, 0, "stick + USB mouse");
-		report "PASS: USB mouse packets: init gate, direction, /4 scaling, accumulation, saturation, buttons";
+		-- Slow motion: sub-count deltas carry across polls instead of being lost,
+		-- and opposite single steps cancel (no floor bias towards left/up).
+		readxy(x, y);
+		for i in 1 to 3 loop packet(1, -1, "000"); readxy(x, y); expect(x, y, 0, 0, "slow sub-count"); end loop;
+		packet(1, -1, "000"); readxy(x, y); expect(x, y, 1, 1, "slow motion carried");
+		packet(-1, 1, "000"); packet(1, -1, "000"); readxy(x, y); expect(x, y, 0, 0, "opposite steps cancel");
+		report "PASS: USB mouse packets: init gate, direction, /4 scaling, accumulation, saturation, buttons, slow motion";
 		report "PASS: MOUSECONV stick input: direction, /4 scaling, latch, accumulation, saturation, buttons";
 		done <= true; wait;
 	end process;

@@ -16,6 +16,20 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B257 adds the **MPU-PC98II intelligent mode (sequencer)**, so **Star Cruiser II**
+gets past "sound source initialization" and plays its MIDI music (choose GS for
+MiSTer's FluidSynth; the game needs the EMS memory profile for its music). The
+**Windows 95 startup sound** no longer stops after 0.4 s: the 86 board's PCM
+interrupt is now a one-shot edge per FIFO refill, as on NP2kai, so the NEC73PCM
+driver no longer sees a second interrupt after refilling and stops playback.
+Slow mouse movement is no longer biased (the /4 remainder is kept). The z486
+captures split effective addresses one stage earlier (about 5% fewer cycles,
+plus two fault-ordering fixes), and the MPU's per-track bytes moved into an MLAB,
+which let the whole design pack to 95% (B256: 98%). 90 MHz seed 4 (worst slack
+-7.087 ns): passes QUALIFY, boots Windows 95 to the desktop five times, draws
+Star Cruiser II's Arsys logo identically to NP2kai and sends its GS music to
+FluidSynth. The unused FDI/HDM converter stub is gone (D88 only, as since B251).
+
 B256 runs at **90 MHz** (B252-B255: 81.8 MHz). Two z486 timing fixes from the
 B251 work shorten the CPU's worst paths: load write-back forwarding uses the
 registered destination one-hot, and the EA adder takes a registered
@@ -366,6 +380,11 @@ The z486 build with `-MidiUart` contains an MPU-PC98II-compatible MIDI interface
 (port E0D0h, IRQ6). It sends MIDI to the MiSTer's UART, where MidiLink can play
 it through FluidSynth (or MUNT / a USB MIDI device). Tested with the PC-98 Doom
 setup program on build B164; report problems in the issue tracker.
+
+Since B257 it also has the MPU-PC98II intelligent mode (sequencer, conductor,
+clock-to-host), which games with Arsys' NMD driver need. **Star Cruiser II**:
+select **GS sound source (CM-300/CM-500)** for FluidSynth and use the EMS memory
+profile; with HIMEM only, the game plays its FM sound effects but no MIDI music.
 
 **1. Core menu (F12 in the Zet98 core)**
 

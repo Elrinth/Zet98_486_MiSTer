@@ -39,10 +39,11 @@ module pcm86_driver_refill_tb;
         for(round=0;round<4;round=round+1) begin
             wait(irq);
             driver_ack;
-            // Non-acknowledging control writes while low must keep a refill request.
-            wait(irq);
+            // Non-acknowledging control writes while low must keep a refill
+            // request (status bit 4; the pin waits for new FIFO data).
+            wait(dut.irq_pending);
             wr(16'ha468,8'ha3);
-            if(!irq) $fatal(1,"low-FIFO control write lost request");
+            if(!dut.irq_pending || irq) $fatal(1,"low-FIFO control write lost request / pin re-fired");
             for(i=0;i<4096;i=i+1) wr(16'ha46c,i^round);
             if(dut.count<=dut.threshold) $fatal(1,"test refill did not raise count");
             driver_ack;

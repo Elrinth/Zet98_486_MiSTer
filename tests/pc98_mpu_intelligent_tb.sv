@@ -91,10 +91,21 @@ module pc98_mpu_intelligent_tb;
         command(8'h94);                  // clock to host off
         begin
             reg [7:0] v;
-            repeat(20000) @(negedge clk);
+            integer queued;
+            // An FD that fired before the 94 may still be queued: drain it,
+            // then no further FD may arrive.
+            queued=0;
             rd(16'he0d2,v);
-            if (!v[7]) begin rd(16'he0d0,v); if (v===8'hfd) $fatal(1,"FD after 94 (clock to host off)"); end
+            while (!v[7]) begin
+                rd(16'he0d0,v);
+                if (v!==8'hfd) $fatal(1,"expected queued FD, got %02x",v);
+                queued=queued+1;
+                if (queued>1) $fatal(1,"more than one FD queued at 94");
+                rd(16'he0d2,v);
+            end
         end
+        count_fd(50,n);                  // over three FD periods at 200 BPM
+        if (n!=0) $fatal(1,"FD after 94 (clock to host off): %0d in 50 ms",n);
         command(8'hd0);                  // want to send data: a note on
         wr(16'he0d0,8'h90); wr(16'he0d0,8'h3c); wr(16'he0d0,8'h64);
         #(3000000);

@@ -471,7 +471,7 @@ wire [7:0] host_slot_buff_din[4];
 wire [3:0] host_rd,host_wr;
 wire [2:0] invalid_image;
 wire [17:0] hdi_info;
-pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE),.FLOPPY_CONVERT(1)) images (
+pc98_image_bridge #(.ENABLE(NATIVE_IMAGES),.RAW_IDE(RAW_IDE),.FLOPPY_CONVERT(0)) images (
     .clk(clk_sys),.image_mounted(img_mounted),.image_readonly(img_readonly),.image_size(img_size),
     .core_mounted(core_img_mounted),.core_readonly(core_img_readonly),.core_size(core_img_size),
     .disk_lba(sd_slot_lba),.disk_rd(sd_rd),.disk_wr(sd_wr),.disk_buff_din(sd_slot_buff_din),

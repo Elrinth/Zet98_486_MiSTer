@@ -88,13 +88,16 @@ module pcm86_tb;
         if(dut.count>128) $fatal(1,"PCM IRQ threshold mismatch");
         rd(16'ha468,8'h10,8'h10);
         wr(16'ha468,8'ha0); // acknowledge: bit 4 1 -> 0
-        // Still below the threshold, so the request comes back; A468h writes
-        // that leave bit 4 at 0 are not acknowledgements and must keep it.
-        while(!irq) @(negedge clk);
+        if(irq) $fatal(1,"PCM IRQ pin stayed up after the acknowledgement");
+        // Still below the threshold, so the status request comes back; A468h
+        // writes that leave bit 4 at 0 are not acknowledgements and must keep
+        // it. The pin stays low: no new interrupt without new FIFO data.
+        while(!dut.irq_pending) @(negedge clk);
         wr(16'ha468,8'ha0); wr(16'ha468,8'ha0);
-        if(!irq) $fatal(1,"PCM IRQ lost on a non-acknowledging A468h write");
+        rd(16'ha468,8'h10,8'h10);
+        repeat(2000) begin @(negedge clk); if(irq) $fatal(1,"PCM IRQ re-fired while low without new data"); end
         wr(16'ha468,8'h10); wr(16'ha468,0); // stop, mask and acknowledge
-        if(irq) $fatal(1,"PCM IRQ did not clear");
+        if(irq || dut.irq_pending) $fatal(1,"PCM IRQ did not clear");
         fifo_reset;
         // Whole physical FIFO, full rejection, concurrent refill and pointer wrap.
         wr(16'ha46a,8'h62);

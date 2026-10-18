@@ -136,6 +136,8 @@ begin
 			
 			TXX<=(others=>'0');
 			TXY<=(others=>'0');
+			valX<=(others=>'0');
+			valY<=(others=>'0');
 			lHC<='0';
 			extpend<='0';
 			sw0<='0';
@@ -284,8 +286,10 @@ begin
 			if(lHC='0' and HC='1')then
 				TXX<=valX(9 downto 2);
 				TXY<=valY(9 downto 2);
-				valX<=(others=>'0');
-				valY<=(others=>'0');
+				-- Keep the /4 remainder (floor division, so 0..3 for either sign):
+				-- clearing it lost slow motion and biased it towards left/up.
+				valX<="00000000" & valX(1 downto 0);
+				valY<="00000000" & valY(1 downto 0);
 			elsif(HC='0')then
 				TXX<=valX(9 downto 2);
 				TXY<=valY(9 downto 2);

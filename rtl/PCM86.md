@@ -29,6 +29,20 @@ the request set after a successful refill. The focused driver-sequence test
 reproduces that failure on the previous implementation and checks repeated
 refills plus preservation of low-FIFO requests.
 
+The IRQ pin is separate from the status bit (2026-10-18). FIFO data writes
+arm one interrupt. It is sent as a fresh edge when the level falls to the
+threshold while playing with interrupts enabled, or when playback/interrupts
+are enabled with the level already there, never in the middle of a refill.
+There is no further edge until more data is written (NP2kai's `reqirq`). The
+status request that returns while the FIFO is still low no longer drives the
+pin. Windows 95's NEC73PCM.DRV acknowledges, disables the IRQ, refills 4 KB and
+re-enables (1A96h-1BB3h). The returning request used to fire a second
+interrupt with the FIFO full; the driver then found no queued wave buffer,
+took its end-of-sound path (1BB6h) and stopped playback: the startup sound
+ended after about 0.4 s. `tests/pcm86_win95_tb.sv` replays that ISR with an
+edge-latching 8259 model. Its negative control is the old pin
+(`irq_pending && control[5]`).
+
 On 2026-10-04, the user confirmed that Policenauts' intro/title PCM music
 plays smoothly on the 90 MHz PR2 candidate with both NEC PC-9801VM BIOS and
 OpenBIOS. The OpenBIOS test used BIOS commit `2043a82`, which drains stale

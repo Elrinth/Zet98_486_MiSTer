@@ -25,6 +25,17 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     // stale request even without a preceding bit-4-set write: AVSDRV uses
     // IN A468 / AND AL,EF / OUT A468 both before and after each refill.
     reg ack_bit;
+    // The IRQ pin, separate from the status bit (A468h bit 4): as in NP2kai,
+    // FIFO data writes arm one interrupt, sent as a fresh edge when the level
+    // falls to the threshold while playing with interrupts enabled, or when
+    // playback/interrupts are enabled with the level already there (never
+    // in the middle of a refill); no further edge until more data is written. A status request that
+    // returns while the FIFO is still low (above) must not interrupt again:
+    // Windows 95's NEC73PCM acknowledges, refills and re-enables, and a
+    // second interrupt with the FIFO refilled finds no queued wave buffer
+    // and stops playback (the startup sound ended after a few chunks).
+    reg req_arm, irq_line, above;
+    reg [1:0] irq_gap;
     reg [15:0] threshold, count;
     reg [14:0] rdptr, wrptr;
     reg [7:0] fifo [0:32767];
@@ -38,6 +49,9 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     assign selected = decode && read;
     wire write_event = decode && write && !write_seen;
     wire reset_fifo = write_event && address==16'ha468 && writedata[3] && !control[3];
+    wire play_irq = control[7] && !control[6] && control[5];
+    wire enable_write = write_event && address==16'ha468 &&
+                        writedata[7] && !writedata[6] && writedata[5] && !play_irq;
     reg [1:0] state;
     localparam IDLE=0, WAIT_RAM=1, TAKE_BYTE=2;
     reg [2:0] bytes_left;
@@ -50,7 +64,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     wire [15:0] next_count = count + (push ? 16'd1 : 16'd0) - (pop ? 16'd1 : 16'd0);
     wire stereo = format[5:4]==3;
     wire [2:0] frame_bytes = format[6] ? (stereo ? 3'd2 : 3'd1) : (stereo ? 3'd4 : 3'd2);
-    assign irq = irq_pending && control[5];
+    assign irq = irq_line && control[5] && irq_gap==0;
     assign opna_extended=board_control[0];
     assign opna_muted=board_control[1];
     // Linear volume approximation; analog mixer/recording paths are not modeled.
@@ -84,6 +98,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
         if(reset) begin
             control<=0; format<=8'h32; board_control<=0; volume<=0; mute<=0;
             irq_pending<=0; write_seen<=0; threshold<=128; ack_bit<=0;
+            req_arm<=0; irq_line<=0; irq_gap<=0; above<=0;
             count<=0; rdptr<=0; wrptr<=0; phase<=0;
             state<=IDLE; bytes_left<=0; byte_index<=0; active_format<=0;
             sample_bytes<=0; sample_l<=0; sample_r<=0; sample_valid<=0;
@@ -93,6 +108,14 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
             phase<=sample_tick ? next_phase-PERIOD8 : next_phase;
             count<=next_count;
             if(push) wrptr<=wrptr+1'b1;
+            if(irq_gap!=0) irq_gap<=irq_gap-1'b1;
+            above<=next_count>threshold;
+            if(push) req_arm<=1;
+            else if(req_arm && next_count<=threshold &&
+                    ((play_irq && above) || enable_write)) begin
+                // Low for two clocks first: an edge even if the line was high.
+                req_arm<=0; irq_line<=1; irq_gap<=2;
+            end
             if(pop) rdptr<=rdptr+1'b1;
             if(sample_tick && control[7] && !control[6] && control[5] && count<=threshold)
                 irq_pending<=1;
@@ -138,6 +161,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
                     control<=writedata & 8'hef;
                     if(writedata[2:0]!=control[2:0]) phase<=0;
                     if(!writedata[4] && (ack_bit || next_count>threshold)) irq_pending<=0;
+                    if(!writedata[4]) irq_line<=0;
                     ack_bit<=writedata[4];
                 end
                 16'ha46a:if(control[5]) threshold<=writedata==255 ? 16'h7ffc : ({8'b0,writedata}+16'd1)<<7;
@@ -148,6 +172,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
             if(reset_fifo) begin
                 count<=0; rdptr<=0; wrptr<=0; state<=IDLE;
                 sample_l<=0; sample_r<=0; sample_valid<=0; irq_pending<=0;
+                req_arm<=0; irq_line<=0;
             end
         end
     end
