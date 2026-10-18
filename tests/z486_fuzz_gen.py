@@ -30,6 +30,11 @@ CC = ['e', 'ne', 'l', 'ge', 'le', 'g', 'b', 'ae', 'be', 'a', 's', 'ns']
 # Z486_FUZZ_486=1 adds 486 XADD/CMPXCHG blocks (existing seeds are unchanged
 # without it).
 EXT486 = os.environ.get('Z486_FUZZ_486') == '1'
+# Z486_FUZZ_REGFORMS=1 adds register-operand (ModR/M mod=11) forms right
+# after a load or ALU-load of the same register, including microcoded ones
+# (RCL/RCR, BT*, SHLD/SHRD, ADC/SBB, 16-bit forms). Off by default so
+# existing seeds are unchanged.
+REGFORMS = os.environ.get('Z486_FUZZ_REGFORMS') == '1'
 
 
 def gen(seed, blocks, block_len):
@@ -131,9 +136,46 @@ def gen(seed, blocks, block_len):
         if k == 10: return pre + [f'{lock}xadd {m},{reg(a)}', f'mov {reg(b)},{m}']
         return pre + [f'mov {reg(b)},{m}', f'{lock}xadd {m},{reg(a)}', f'add {a},{b}']
 
+    def regforms():
+        a = r()
+        b = rnd.choice([x for x in REGS if x != a])
+        pre, m = mem_op()
+        head = pre + [rnd.choice([f'mov {a},{m}', f'mov {a},{m}',
+                                  f'{rnd.choice(["add","sub","and","or","xor"])} {a},{m}'])]
+        w, wb = R16[a], R16[b]
+        ops = [
+            f'{rnd.choice(["rcl","rcr"])} {a},{rnd.randrange(1,32)}',
+            f'{rnd.choice(["rcl","rcr"])} {a},1',
+            f'{rnd.choice(["rcl","rcr"])} {w},1',
+            f'{rnd.choice(["rol","ror","shl","shr","sar"])} {w},{rnd.randrange(1,16)}',
+            f'{rnd.choice(["bt","bts","btr","btc"])} {a},{b}',
+            f'{rnd.choice(["bt","bts","btr","btc"])} {b},{a}',
+            f'{rnd.choice(["shld","shrd"])} {a},{b},{rnd.randrange(1,32)}',
+            f'{rnd.choice(["shld","shrd"])} {b},{a},{rnd.randrange(1,32)}',
+            f'{rnd.choice(["adc","sbb"])} {b},{a}',
+            f'{rnd.choice(["adc","sbb"])} {a},{b}',
+            f'{rnd.choice(["add","sub","and","or","xor","cmp","test"])} {wb},{w}',
+            f'{rnd.choice(["add","sub","and","or","xor","cmp","test"])} {b},{a}',
+            f'{rnd.choice(["inc","dec","neg","not"])} {w}',
+            f'mov {wb},{w}',
+            f'xchg {a},{b}',
+            f'imul {b},{a}',
+            f'{rnd.choice(["movzx","movsx"])} {b},{w}',
+        ]
+        if a in R8:
+            ops.append(f'{rnd.choice(["movzx","movsx"])} {b},{R8[a]}')
+            ops.append(f'{rnd.choice(["rcl","rcr","rol","ror"])} {R8[a]},1')
+        tail = [rnd.choice(ops)]
+        if rnd.random() < 0.5:
+            tail.append(f'mov {rnd.choice(REGS)},{rnd.choice([a, b])}')
+        last[0] = a
+        return [flag_def()] + head + tail
+
     def one():
         if EXT486 and rnd.random() < 0.2:
             return ext486()
+        if REGFORMS and rnd.random() < 0.3:
+            return regforms()
         if rnd.random() < 0.3:
             return idiom()
         k = rnd.randrange(34)
