@@ -10,7 +10,8 @@ run() {
 }
 run Zet98/PTC/PTC1ch.vhd Zet98/PTC/PTC8253.vhd
 # Negative controls: the old low-first square wave, and a latch that rewrites the mode.
-tr -d '\r' < Zet98/PTC/PTC1ch.vhd | sed 's/if(CURCOUNT>HALFVAL)then/if(CURCOUNT<HALFVAL)then/' > "$out/lowfirst.vhd"
+tr -d '\r' < Zet98/PTC/PTC1ch.vhd | sed 's/if(CURCOUNT>HALFVAL or CURCOUNT=x"0000")then/if(CURCOUNT<HALFVAL)then/' > "$out/lowfirst.vhd"
+! cmp -s <(tr -d '\r' < Zet98/PTC/PTC1ch.vhd) "$out/lowfirst.vhd"
 if run "$out/lowfirst.vhd" Zet98/PTC/PTC8253.vhd > "$out/neg1.log" 2>&1; then echo 'FAIL low-first mode 3 accepted'; exit 1; fi
 grep -q 'mode 3' "$out/neg1.log" || { cat "$out/neg1.log"; exit 1; }
 tr -d '\r' < Zet98/PTC/PTC8253.vhd | sed 's/CNTLAT(0)<=.1.;\t\t-- latch only: mode and BCD stay/CNTLAT(0)<='"'"'1'"'"'; OPMODE0<=WDAT(3 downto 1);/' > "$out/latch.vhd"
@@ -23,4 +24,15 @@ tr -d '\r' < Zet98/PTC/PTC1ch.vhd | sed 's/if(CTLWR=.1.)then$/if(false)then/' > 
 ! cmp -s <(tr -d '\r' < Zet98/PTC/PTC1ch.vhd) "$out/nowait.vhd"
 if run "$out/nowait.vhd" Zet98/PTC/PTC8253.vhd > "$out/neg3.log" 2>&1; then echo 'FAIL control words without load semantics accepted'; exit 1; fi
 grep -q 'mode' "$out/neg3.log" || { cat "$out/neg3.log"; exit 1; }
-echo 'PASS old low-first square wave, mode-changing latch and immediate count bytes rejected'
+# Count 0 (65536) read as a low output at the start of each period: Farland
+# Story's FMP tempo timer got an IRQ0 edge right after every reload.
+tr -d '\r' < Zet98/PTC/PTC1ch.vhd | sed 's/if(CURCOUNT>HALFVAL or CURCOUNT=x"0000")then/if(CURCOUNT>HALFVAL)then/' > "$out/count0.vhd"
+! cmp -s <(tr -d '\r' < Zet98/PTC/PTC1ch.vhd) "$out/count0.vhd"
+if run "$out/count0.vhd" Zet98/PTC/PTC8253.vhd > "$out/neg4.log" 2>&1; then echo 'FAIL count 0 starting low accepted'; exit 1; fi
+grep -q 'count 0' "$out/neg4.log" || { cat "$out/neg4.log"; exit 1; }
+# BCD borrow setting the lower digit to 0 instead of 9.
+tr -d '\r' < Zet98/PTC/PTC1ch.vhd | sed 's/-x"1") & x"9";/-x"1") \& x"0";/' > "$out/bcd.vhd"
+! cmp -s <(tr -d '\r' < Zet98/PTC/PTC1ch.vhd) "$out/bcd.vhd"
+if run "$out/bcd.vhd" Zet98/PTC/PTC8253.vhd > "$out/neg5.log" 2>&1; then echo 'FAIL BCD borrow to 0 accepted'; exit 1; fi
+grep -q 'BCD' "$out/neg5.log" || { cat "$out/neg5.log"; exit 1; }
+echo 'PASS old low-first square wave, mode-changing latch, immediate count bytes, count 0 starting low and BCD borrow to 0 rejected'

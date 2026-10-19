@@ -242,7 +242,12 @@ begin
 					-- reload restarts high, so the next rising edge (IRQ0) comes
 					-- after a full period; low-first made the BIOS interval timer,
 					-- which reloads from its callback, tick every half period.
-					if(CURCOUNT>HALFVAL)then
+					-- A count of 0 means 65536 (10000 in BCD): CURCOUNT holds 0
+					-- only at the start of each period, which is high. Reading
+					-- it as low put a rising edge (IRQ0) right after every
+					-- reload: FMP's tempo timer (Farland Story) reloads count 0
+					-- at every tick and never left the interrupt.
+					if(CURCOUNT>HALFVAL or CURCOUNT=x"0000")then
 						CNTOUTR<='1';
 					else
 						CNTOUTR<='0';
@@ -253,20 +258,20 @@ begin
 		end if;
 	end process;
 					
+	-- BCD decrement: a borrow sets the lower digits to 9 (0100 -> 0099,
+	-- 0000 -> 9999); they went to 0, so BCD counts ran up to ten times fast.
 	process(CURCOUNT,OPBCD)begin
 		if(OPBCD='1')then
 			if(CURCOUNT(3 downto 0)/=x"0")then
 				DECVAL<=CURCOUNT-x"0001";
+			elsif(CURCOUNT(7 downto 4)/=x"0")then
+				DECVAL<=CURCOUNT(15 downto 8) & (CURCOUNT(7 downto 4)-x"1") & x"9";
+			elsif(CURCOUNT(11 downto 8)/=x"0")then
+				DECVAL<=CURCOUNT(15 downto 12) & (CURCOUNT(11 downto 8)-x"1") & x"99";
+			elsif(CURCOUNT(15 downto 12)/=x"0")then
+				DECVAL<=(CURCOUNT(15 downto 12)-x"1") & x"999";
 			else
-				if(CURCOUNT(7 downto 4)/="0")then
-					DECVAL<=CURCOUNT(15 downto 8) & (CURCOUNT(7 downto 4)-x"1") & x"0";
-				else
-					if(CURCOUNT(11 downto 8)/=x"0")then	
-						DECVAL<=CURCOUNT(15 downto 12) & (CURCOUNT(11 downto 8)-x"1") & x"00";
-					else
-						DECVAL<=(CURCOUNT(15 downto 12) - x"1") & x"000";
-					end if;
-				end if;
+				DECVAL<=x"9999";
 			end if;
 		else
 			DECVAL<=CURCOUNT-x"0001";
@@ -298,6 +303,13 @@ begin
 			HALFVAL(3 downto 0)<=tmp1(4 downto 1);
 		else
 			HALFVAL<='0' & PERCOUNT(15 downto 1);
+		end if;
+		if(PERCOUNT=x"0000")then		-- count 0 = 65536 (10000 in BCD)
+			if(OPBCD='1')then
+				HALFVAL<=x"5000";
+			else
+				HALFVAL<=x"8000";
+			end if;
 		end if;
 	end process;
 	

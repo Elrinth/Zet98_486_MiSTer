@@ -16,6 +16,18 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B259 fixes **Farland Story I (English translation) hanging on a black screen
+after the sound selection** (FM, 86 and GS alike; "None" worked). Its FMP
+music driver runs the PIT channel 0 in mode 3 with a count of 0 (65536) and
+reloads it at every tick. The PIT read count 0 as a low output, so every
+reload put a rising edge on IRQ0 within microseconds and the driver never left
+its timer interrupt. A mode-3 count of 0 is now a full 65536-input period, and
+BCD counts no longer borrow to 0 (0100h counted 100 -> 00 instead of 99). The
+z486 prefetch decode windows read the stored queue plus the arriving line
+instead of a merged next-state copy (same values; about 650 ALMs smaller and
+faster). 90 MHz seed 3 (39,756 ALMs, worst slack -7.135 ns): passes QUALIFY,
+boots Windows 95, and Farland Story I reaches its title with 86 and GS.
+
 B258 fixes **Windows 95 text drawn as dots**: on B257 about every second
 Windows 95 boot showed some or all dialog and button text as rows of dots for
 the whole session. B257's earlier split-EA capture made a latent z486 hazard

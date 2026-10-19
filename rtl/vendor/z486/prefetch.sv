@@ -451,9 +451,23 @@ end
 // required preread window below supplies the advancing case. The late control
 // path therefore ends at one 64-bit select instead of traversing an add and
 // byte aligner.
-wire [31:0] d1_hold_word_cur = queue_next_normal[ptr_idx(d1_word)];
-wire [31:0] d1_hold_word_nxt = queue_next_normal[ptr_idx(d1_word + 4'd1)];
-wire [31:0] d1_hold_word_2nd = queue_next_normal[ptr_idx(d1_word + 4'd2)];
+// queue_next_normal[ptr] without reading through the merged next-state array:
+// the line word this cycle's fill writes at ptr, else the registered word.
+// Selecting the registered words first keeps the fill out of the 8:1 word
+// selects (about 200 ALMs smaller; the window oracles below check it).
+function automatic [31:0] qn_word(input [3:0] ptr);
+    logic [2:0] rel;
+    logic [1:0] lw;
+    begin
+        rel = ptr[2:0] - pf_wptr[2:0];
+        lw = rel[1:0] + pf_fetch_word_start;
+        qn_word = (good_ack && ({1'b0, rel} < {1'b0, fetch_write_words}))
+                ? line_word(pf_rdata, lw) : prefetch_queue[ptr[2:0]];
+    end
+endfunction
+wire [31:0] d1_hold_word_cur = qn_word(d1_word);
+wire [31:0] d1_hold_word_nxt = qn_word(d1_word + 4'd1);
+wire [31:0] d1_hold_word_2nd = qn_word(d1_word + 4'd2);
 wire [63:0] win_d1_hold_next =
     d1_boff == 2'd0 ? {d1_hold_word_nxt,       d1_hold_word_cur} :
     d1_boff == 2'd1 ? {d1_hold_word_2nd[7:0],  d1_hold_word_nxt,
@@ -476,9 +490,9 @@ always_comb begin
     end
 end
 
-wire [31:0] d1_preread_word_cur = queue_next_normal[ptr_idx(d1_preread_word)];
-wire [31:0] d1_preread_word_nxt = queue_next_normal[ptr_idx(d1_preread_word + 4'd1)];
-wire [31:0] d1_preread_word_2nd = queue_next_normal[ptr_idx(d1_preread_word + 4'd2)];
+wire [31:0] d1_preread_word_cur = qn_word(d1_preread_word);
+wire [31:0] d1_preread_word_nxt = qn_word(d1_preread_word + 4'd1);
+wire [31:0] d1_preread_word_2nd = qn_word(d1_preread_word + 4'd2);
 wire [63:0] win_d1_preread_next =
     d1_preread_boff == 2'd0 ? {d1_preread_word_nxt,
                                 d1_preread_word_cur} :

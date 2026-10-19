@@ -134,6 +134,46 @@ begin
             end if;
         end loop;
         assert rises>=5 report "too few mode 0 edges" severity failure;
+        -- Farland Story (FMP): mode 3 with count 0 (65536), reloaded with the
+        -- control word and count at every IRQ edge. OUT must stay high for
+        -- 32768 inputs after each load; a low blip right after the reload
+        -- gave an IRQ0 edge within microseconds and an endless interrupt storm.
+        put("11",x"36"); put("00",x"00"); put("00",x"00");
+        prev:=cntout(0);
+        assert cntout(0)='1' report "mode 3 count 0: OUT not high after the load" severity failure;
+        high_run:=0;
+        for i in 1 to 32767 loop tick(r); if cntout(0)='1' then high_run:=high_run+1; end if; end loop;
+        assert high_run=32767 report "mode 3 count 0: first half not high (" & integer'image(high_run) &
+            " of 32767 inputs)" severity failure;
+        rises:=0; last_rise:=ticks-32767;
+        for i in 1 to 3*65536+16 loop
+            tick(r);
+            if r then
+                rises:=rises+1;
+                assert ticks-last_rise=65536 report "mode 3 count 0: IRQ edges " & integer'image(ticks-last_rise) &
+                    " inputs apart, expected 65536" severity failure;
+                last_rise:=ticks;
+                put("11",x"36"); put("00",x"00"); put("00",x"00");
+            end if;
+        end loop;
+        assert rises=3 report "mode 3 count 0: " & integer'image(rises) & " edges, expected 3" severity failure;
+        -- BCD mode 3 (37h): count 0100h is 100 inputs; a borrow sets the lower
+        -- digits to 9 (0100h, 0099h, ... 0090h, 0089h ...)
+        put("11",x"37"); put("00",x"00"); put("00",x"01");
+        prev:=cntout(0);
+        rises:=0; last_rise:=ticks;
+        for i in 1 to 5*100 loop
+            tick(r);
+            if r then
+                rises:=rises+1;
+                if rises>1 then
+                    assert ticks-last_rise=100 report "BCD mode 3: IRQ edges " & integer'image(ticks-last_rise) &
+                        " inputs apart, expected 100" severity failure;
+                end if;
+                last_rise:=ticks;
+            end if;
+        end loop;
+        assert rises>=4 report "BCD mode 3: too few edges" severity failure;
         report "PASS: 8253 mode 3 starts high, reloads keep the full period, latch keeps the mode";
         report "PASS: count rewrites apply at the next reload; control words set OUT and wait for the count (no spurious IRQ0 edge)";
         finish;
