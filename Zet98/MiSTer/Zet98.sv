@@ -204,6 +204,13 @@ parameter CONF_STR = {
 `ifdef ZET98_MPU_UART
 	"P1OQ,MPU MIDI,Off,UART;",
 	"P1o35,MIDI volume,100%,75%,50%,25%,Mute,125%,150%,200%;",
+	"P2,MT32-pi;",
+	"P2oJ,USER port,SNAC pads,MT32-pi;",
+	"P2-;",
+	"P2-,Default config:;",
+	"P2oK,Synth,Munt,FluidSynth;",
+	"P2oLM,Munt ROM,MT-32 v1,MT-32 v2,CM-32L;",
+	"P2oNP,SoundFont,0,1,2,3,4,5,6,7;",
 `endif
 	"P3,Input;",
 	"P3o6,SNAC PS pads,On,Off;",
@@ -342,11 +349,38 @@ always @(posedge clk_sys) begin
 	snd_mix_l <= mix_sat(core_snd_l, cd_audio_l);
 	snd_mix_r <= mix_sat(core_snd_r, cd_audio_r);
 end
+wire [15:0] dec_l, dec_r;
 audio_decimator audio_decimator (
 	.clk(CLK_AUDIO), .enable(~status[34]),
 	.in_l(snd_mix_l), .in_r(snd_mix_r),
-	.out_l(AUDIO_L), .out_r(AUDIO_R)
+	.out_l(dec_l), .out_r(dec_r)
 );
+// MT32-pi I2S audio arrives on CLK_AUDIO: scale it with the MIDI volume
+// setting and add it here, after the decimator, without a clock crossing.
+wire        mt32_use;
+wire [15:0] mt32_i2s_l, mt32_i2s_r;
+function automatic [15:0] mt32_mix(input signed [15:0] core, input signed [15:0] s, input [2:0] g);
+	reg signed [20:0] p;
+	reg signed [21:0] sum;
+	begin
+		case(g)
+			0: p = s * 8;  1: p = s * 6;  2: p = s * 4;  3: p = s * 2;
+			4: p = 0;      5: p = s * 10; 6: p = s * 12; default: p = s * 16;
+		endcase
+		sum = core + (p >>> 3);
+		mt32_mix = sum > 32767 ? 16'h7fff : sum < -32768 ? 16'h8000 : sum[15:0];
+	end
+endfunction
+reg  [3:0]  mt32_cfg_meta = 0, mt32_cfg = 0;     // {use, volume}
+reg  [15:0] audio_out_l = 0, audio_out_r = 0;
+always @(posedge CLK_AUDIO) begin
+	mt32_cfg_meta <= {mt32_use, status[37:35]};
+	mt32_cfg <= mt32_cfg_meta;
+	audio_out_l <= mt32_cfg[3] ? mt32_mix(dec_l, mt32_i2s_l, mt32_cfg[2:0]) : dec_l;
+	audio_out_r <= mt32_cfg[3] ? mt32_mix(dec_r, mt32_i2s_r, mt32_cfg[2:0]) : dec_r;
+end
+assign AUDIO_L = audio_out_l;
+assign AUDIO_R = audio_out_r;
 
 wire  [1:0] buttons;
 
@@ -362,8 +396,17 @@ wire [15:0] joystick_r0, joystick_r1, joystick_l0, joystick_l1;
 // "Mouse stick: Left" swaps the sticks: the left one moves the mouse, the
 // right one gives the joystick directions.
 wire        swap_sticks = status[40];
+// The USER port carries either the SNAC pads or an MT32-pi (OSD MT32-pi page).
+`ifdef ZET98_MPU_UART
+wire        mt32_sel = status[51];
+`else
+wire        mt32_sel = 1'b0;
+`endif
+wire  [6:0] snac_user_out, mt32_user_out;
+assign USER_OUT = mt32_sel ? mt32_user_out : snac_user_out;
 snac_psx_pad #(.CLK_HZ(SYS_CLK_KHZ*1000)) snac_pads (
-	.clk(clk_sys), .enable(!status[38]), .swap_sticks(swap_sticks), .user_in(USER_IN), .user_out(USER_OUT),
+	.clk(clk_sys), .enable(!status[38] && !mt32_sel), .swap_sticks(swap_sticks),
+	.user_in(mt32_sel ? 7'h7F : USER_IN), .user_out(snac_user_out),
 	.joy1(snac_joy1), .joy2(snac_joy2),
 	.analog(snac_analog), .right1(snac_right1), .right2(snac_right2),
 	.mbtn1(snac_mbtn1), .mbtn2(snac_mbtn2), .keys1(snac_keys1), .keys2(snac_keys2), .raw1(snac_raw1)
@@ -539,18 +582,39 @@ pc98_artic #(.CLK_HZ(SYS_CLK_KHZ*1000)) artic (
 // master PIC IRQ6. Reuse the exported CPU I/O request, not IDE's decode.
 wire [7:0] mpu_readdata;
 wire mpu_oe, mpu_irq;
+wire mpu_tx;
 wire [127:0] cpu_debug_snapshot;
 `ifdef ZET98_MPU_UART
 pc98_mpu_uart #(.CLOCK_HZ(SYS_CLK_KHZ*1000), .RESET_PANIC(1)) mpu (
     .clk(clk_sys), .reset(!ide_resetn), .enable(status[26]),
     .io_address(ide_address), .io_writedata(ide_writedata), .io_select(ide_select),
     .io_read(ide_read), .io_write(ide_write), .io_readdata(mpu_readdata),
-    .io_oe(mpu_oe), .irq(mpu_irq), .midi_rx(UART_RXD), .midi_tx(UART_TXD),
+    .io_oe(mpu_oe), .irq(mpu_irq), .midi_rx(UART_RXD), .midi_tx(mpu_tx),
     .rx_overrun(), .rx_framing_error(), .tx_overrun()
+);
+// MIDI out goes to the MT32-pi on the USER port when one is selected and
+// answers; MidiLink (UART) then stays idle so FluidSynth does not double it.
+wire mt32_available;
+assign mt32_use = mt32_sel && mt32_available;
+assign UART_TXD = mpu_tx | mt32_use;
+mt32pi mt32pi (
+	.CLK_AUDIO(CLK_AUDIO),
+	.CLK_VIDEO(CLK_VIDEO), .CE_PIXEL(1'b0), .VGA_VS(1'b0), .VGA_DE(1'b0),   // LCD overlay unused
+	.USER_IN(mt32_sel ? USER_IN : 7'h7F), .USER_OUT(mt32_user_out),
+	.reset(RESET),
+	.midi_tx(mpu_tx | !mt32_sel), .midi_rx(),
+	.mt32_i2s_r(mt32_i2s_r), .mt32_i2s_l(mt32_i2s_l),
+	.mt32_available(mt32_available),
+	.mt32_mode_req(status[52]), .mt32_rom_req(status[54:53]), .mt32_sf_req({5'd0, status[57:55]}),
+	.mt32_mode(), .mt32_rom(), .mt32_sf(), .mt32_newmode(),
+	.mt32_lcd_en(), .mt32_lcd_pix(), .mt32_lcd_update()
 );
 `else
 assign mpu_readdata=8'hff;
 assign {mpu_oe,mpu_irq}=0;
+assign mt32_use=1'b0;
+assign mt32_user_out=7'h7F;
+assign {mt32_i2s_l,mt32_i2s_r}=32'd0;
 `ifdef ZET98_Z486_DEBUG
 // Debug builds: the z486 crash recorder's UART rides bit 0 of the snapshot.
 assign UART_TXD = cpu_debug_snapshot[0];

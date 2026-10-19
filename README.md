@@ -16,6 +16,19 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B260 adds **MT32-pi support**: with an mt32-pi on the USER port, the OSD
+**MT32-pi** page sends the MPU-PC98's MIDI to it instead of MidiLink and mixes
+its audio into the core's output (MIDI volume applies); Synth, Munt ROM and
+SoundFont set its default configuration. The USER port then does not read SNAC
+pads. The **floppy controller** now drives its four unit selects from one
+head-stepping engine instead of four (seeks run one at a time anyway). Results
+and timing match the old controller in simulation, including the immediate
+equipment check for a SEEK of a driveless unit 2/3 after a failed recalibrate;
+only the old engine's stuck busy bit for that unit is gone. 90 MHz seed 3 (worst slack -7.520 ns): passes QUALIFY, boots
+Windows 95 3/3, Farland Story I, Madou Monogatari 1 and Black Onyx floppies.
+The mt32-pi path follows the MiSTer framework module used by ao486; it has not
+been tested with a real mt32-pi yet.
+
 B259 fixes **Farland Story I (English translation) hanging on a black screen
 after the sound selection** (FM, 86 and GS alike; "None" worked). Its FMP
 music driver runs the PIT channel 0 in mode 3 with a count of 0 (65536) and
@@ -427,6 +440,13 @@ profile; with HIMEM only, the game plays its FM sound effects but no MIDI music.
 - In the MiSTer UART settings for this core, set the UART connection to **MIDI**
   and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
   FluidSynth, as for other cores).
+- **MT32-pi** (since B260): with an [mt32-pi](https://github.com/dwhinham/mt32-pi)
+  on the USER port, set **MT32-pi > USER port: MT32-pi** (MPU MIDI stays on UART).
+  The MIDI goes to the mt32-pi instead of MidiLink, and its audio is mixed into the
+  core's output at the **MIDI volume** setting. The USER port then no longer reads
+  SNAC pads. **Synth**, **Munt ROM** and **SoundFont** are sent to the mt32-pi as
+  its default configuration (as in the ao486 core). Pick Munt for games set to MT-32
+  ("MT") and FluidSynth with a GS SoundFont for games set to GS.
 
 **2. DOS: load HIMEM.** Since B165 plain `DEVICE=HIMEM.SYS` is enough. On older builds, stock PC-98 `HIMEM.SYS` works when the
 included `Z98MEM.SYS` driver ([software/z98mem.asm](software/z98mem.asm); the same file is also shared as `Z98FIX.SYS`) loads

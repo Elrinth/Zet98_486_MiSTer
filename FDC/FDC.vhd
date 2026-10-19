@@ -261,27 +261,15 @@ signal	seekbusy	:std_logic;
 signal	seekusel	:std_logic_vector(1 downto 0);
 signal	seekpend		:std_logic_vector(3 downto 0);
 
-signal	seek_sft0	:std_logic;
-signal	STEP0		:std_logic;
-signal	SDIR0		:std_logic;
 signal	seek_cyl0	:integer range 0 to maxtrack;
 signal	seek_cur0	:integer range 0 to maxtrack;
 
-signal	seek_sft1	:std_logic;
-signal	STEP1		:std_logic;
-signal	SDIR1		:std_logic;
 signal	seek_cyl1	:integer range 0 to maxtrack;
 signal	seek_cur1	:integer range 0 to maxtrack;
 
-signal	seek_sft2	:std_logic;
-signal	STEP2		:std_logic;
-signal	SDIR2		:std_logic;
 signal	seek_cyl2	:integer range 0 to maxtrack;
 signal	seek_cur2	:integer range 0 to maxtrack;
 
-signal	seek_sft3	:std_logic;
-signal	STEP3		:std_logic;
-signal	SDIR3		:std_logic;
 signal	seek_cyl3	:integer range 0 to maxtrack;
 signal	seek_cur3	:integer range 0 to maxtrack;
 signal	iC0,iC1,iC2,iC3	:integer range 0 to maxtrack;
@@ -514,29 +502,34 @@ port(
 );
 end component;
 
-component headseek
+component headseek4
 generic(
 	maxtrack	:integer	:=79;
-	maxset		:integer	:=10;
-	initseek	:integer	:=0
+	maxset		:integer	:=10
 );
 port(
-	desttrack	:in integer range 0 to maxtrack;
-	destset		:in std_logic;
-	setwait		:in integer range 0 to maxset;		--settling time
-	
-	curtrack	:out integer range 0 to maxtrack;
-	
-	reachtrack	:out std_logic;
-	busy		:out std_logic;
-	
+	dest0		:in integer range 0 to maxtrack;
+	dest1		:in integer range 0 to maxtrack;
+	dest2		:in integer range 0 to maxtrack;
+	dest3		:in integer range 0 to maxtrack;
+	destset		:in std_logic_vector(3 downto 0);
+	init		:in std_logic_vector(3 downto 0);
+	setwait		:in integer range 0 to maxset;
+	usel		:in std_logic_vector(1 downto 0);
+
+	cur0		:out integer range 0 to maxtrack;
+	cur1		:out integer range 0 to maxtrack;
+	cur2		:out integer range 0 to maxtrack;
+	cur3		:out integer range 0 to maxtrack;
+
+	reachtrack	:out std_logic_vector(3 downto 0);
+	busy		:out std_logic_vector(3 downto 0);
+	seekerr		:out std_logic_vector(3 downto 0);
+
 	track0		:in std_logic;
 	seek		:out std_logic;
 	sdir		:out std_logic;
-	
-	init		:in std_logic;
-	seekerr		:out std_logic;
-	
+
 	sft			:in std_logic;
 	clk			:in std_logic;
 	rstn		:in std_logic
@@ -4513,110 +4506,40 @@ begin
 	seek_cyl2<=iC2 when tdo(2)='1' else iC2*2 when (iC2*2)<maxtrack else maxtrack;
 	seek_cyl3<=iC3 when tdo(3)='1' else iC3*2 when (iC3*2)<maxtrack else maxtrack;
 	
-	seek_sft0	<=seek_sft when seekusel="00" else '0';
-	seek_sft1	<=seek_sft when seekusel="01" else '0';
-	seek_sft2	<=seek_sft when seekusel="10" else '0';
-	seek_sft3	<=seek_sft when seekusel="11" else '0';
-	
-	hds0	:headseek generic map(maxtrack,30,0) port map(
-		desttrack	=>seek_cyl0,
-		destset		=>seek_bgnv(0),
+	-- One stepping engine for all four units (seekcont serializes them).
+	hds	:headseek4 generic map(maxtrack,30) port map(
+		dest0		=>seek_cyl0,
+		dest1		=>seek_cyl1,
+		dest2		=>seek_cyl2,
+		dest3		=>seek_cyl3,
+		destset		=>seek_bgnv,
+		init		=>seek_initv,
 		setwait		=>30,
+		usel		=>seekusel,
 
-		curtrack	=>seek_cur0,
-	
-		reachtrack	=>seek_endv(0),
-		busy		=>seek_busyv(0),
-	
+		cur0		=>seek_cur0,
+		cur1		=>seek_cur1,
+		cur2		=>seek_cur2,
+		cur3		=>seek_cur3,
+
+		reachtrack	=>seek_endv,
+		busy		=>seek_busyv,
+		seekerr		=>seek_errv,
+
 		track0		=>track0,
-		seek		=>STEP0,
-		sdir		=>SDIR0,
-	
-		init		=>seek_initv(0),
-		seekerr		=>seek_errv(0),
-		sft			=>seek_sft0,
+		seek		=>STEP,
+		sdir		=>SDIR,
+
+		sft			=>seek_sft,
 		clk			=>clk,
 		rstn		=>rstn
 	);
-	
-	hds1	:headseek generic map(maxtrack,30,0) port map(
-		desttrack	=>seek_cyl1,
-		destset		=>seek_bgnv(1),
-		setwait		=>30,
-	
-		curtrack	=>seek_cur1,
-	
-		reachtrack	=>seek_endv(1),
-		busy		=>seek_busyv(1),
-	
-		track0		=>track0,
-		seek		=>STEP1,
-		sdir		=>SDIR1,
-	
-		init		=>seek_initv(1),
-		seekerr		=>seek_errv(1),
-		sft			=>seek_sft1,
-		clk			=>clk,
-		rstn		=>rstn
-	);
-	
-	hds2	:headseek generic map(maxtrack,30,0) port map(
-		desttrack	=>seek_cyl2,
-		destset		=>seek_bgnv(2),
-		setwait		=>30,
-	
-		curtrack	=>seek_cur2,
-	
-		reachtrack	=>seek_endv(2),
-		busy		=>seek_busyv(2),
-	
-		track0		=>track0,
-		seek		=>STEP2,
-		sdir		=>SDIR2,
-	
-		init		=>seek_initv(2),
-		seekerr		=>seek_errv(2),
-		sft			=>seek_sft2,
-		clk			=>clk,
-		rstn		=>rstn
-	);
-	
-	hds3	:headseek generic map(maxtrack,30,0) port map(
-		desttrack	=>seek_cyl3,
-		destset		=>seek_bgnv(3),
-		setwait		=>30,
-	
-		curtrack	=>seek_cur3,
-	
-		reachtrack	=>seek_endv(3),
-		busy		=>seek_busyv(3),
-	
-		track0		=>track0,
-		seek		=>STEP3,
-		sdir		=>SDIR3,
-	
-		init		=>seek_initv(3),
-		seekerr		=>seek_errv(3),
-		sft			=>seek_sft3,
-		clk			=>clk,
-		rstn		=>rstn
-	);
-	
+
 	seek_busy<=	seek_busyv(0) when seekusel="00" else
 					seek_busyv(1) when seekusel="01" else
 					seek_busyv(2) when seekusel="10" else
 					seek_busyv(3) when seekusel="11" else
 					'0';
-	STEP<=		STEP0 when seekusel="00" else
-					STEP1 when seekusel="01" else
-					STEP2 when seekusel="10" else
-					STEP3 when seekusel="11" else
-					'1';
-	SDIR<=		SDIR0 when seekusel="00" else
-					SDIR1 when seekusel="01" else
-					SDIR2 when seekusel="10" else
-					SDIR3 when seekusel="11" else
-					'1';
 
 	PCN0<=conv_std_logic_vector(seek_cur0,8);
 	PCN1<=conv_std_logic_vector(seek_cur1,8);
