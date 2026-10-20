@@ -44,10 +44,12 @@ class Guard:
         self.saved = None
 
     def active(self):
+        # MGL launchers report their setname (PC98_OPT1, ...) as the core name.
         try:
-            return self.core.read_text().strip().upper() == 'PC98'
+            name = self.core.read_text().strip().upper()
         except FileNotFoundError:
             return False
+        return name.startswith(('PC98', 'ZET98'))
 
     def poll(self):
         if not self.active():

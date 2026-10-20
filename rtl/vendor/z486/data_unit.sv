@@ -457,8 +457,18 @@ wire [31:0] gpr_irf_value =
 wire [2:0] load_capture_widx = (load_alu_dst_capture_size == 2'd0)
                              ? {1'b0, load_alu_dst_capture_dst[1:0]}
                              : load_alu_dst_capture_dst;
-wire [31:0] load_capture_base = read_gpr_load_forwarded(load_capture_widx,
-                                                        2'd2);
+wire [31:0] load_capture_forwarded = read_gpr_load_forwarded(load_capture_widx,
+                                                             2'd2);
+// The bank forwards plain loads only. An older M3 committing to the captured
+// register on this edge ("xor ebx,[m]; mov bx,[m]" with unregistered EA) must
+// supply its bytes, or the younger merge keeps the pre-M3 upper half. The
+// ALU result only reaches this capture register, not a successor's ALU.
+wire        load_capture_m3_hit = load_wb_valid && load_wb_is_alu &&
+                                  load_wb_dst_onehot[load_capture_widx];
+wire [31:0] load_capture_base = load_capture_m3_hit
+    ? merge_load_forward(load_capture_forwarded, load_wb_alu_result,
+                         load_wb_dst, load_wb_size)
+    : load_capture_forwarded;
 
 always_ff @(posedge clk) begin
     if (!reset_n) begin

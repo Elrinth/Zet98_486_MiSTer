@@ -119,3 +119,43 @@ Local evidence is in `build/doom-perf/`: `b240-r5-end.png`,
 `fb-only-verified-end.png`, `fb-only-qualify.png`, `fb-only-validation.json`
 and `PC98_Z486_90_NATIVE_FB_20261004.rbf`. The full-native RAM configuration
 remains unqualified; these results apply only to framebuffer-only mode.
+
+## Native RAM with a two-clock store hold (B261)
+
+The full-native RAM configuration (`-NativeDdr` without
+`-NativeDdrFramebufferOnly`) was retried on the B260 sources in October 2026.
+Each 32-bit store to extended RAM then costs one 64-bit DDR command instead of
+two halfword handshakes (about 10 clocks), so the z486's 3-entry store queue no
+longer stalls the pipeline (and instruction fetch) after CALL/PUSH bursts.
+
+On hardware it failed as on 2026-10-04, but differently per placement. MS-DOS
+rejected HIMEM.SYS ("bad or missing") while every file read back identically;
+Doom (DX386) quit or hung in `R_Init`; a recorder build looped on invalid
+opcodes at the DOS banner. Bisection builds (`ZET98_NATIVE_DDR_WRITES_ONLY` /
+`_READS_ONLY` in `ao486_memory_bridge.sv`) showed native reads alone are
+fine and native stores are the trigger. Holding the store's completion pulse
+for `ZET98_NATIVE_WRITE_HOLD` clocks after DDR acceptance fixes it: 6 and 2
+both pass. The cause is not known; no simulation reproduced it, including
+randomized DDR busy/latency, PEGC scan-out contention, IRQs, paging and the
+hardware test programs below. The Cyclone V HPS manual guarantees in-order
+execution for overlapping accesses on one FPGA-to-SDRAM port.
+
+Released configuration: `-NativeDdr -NativeDdrWriteHold 2 -PackedGraphics`
+(90 MHz, pipeline 2). Seed 3: 41,188 ALMs, worst slack -7.048 ns. Seed 7:
+41,258 ALMs, -7.183 ns. Both boot DOS with HIMEM (30,720 KB XMS), pass QUALIFY
+including the 16 MB XMS MEMTEST, and run the Doom timedemo; seed 3 also passes
+EXTTEST with its interrupt pass and boots Windows 95 to the desktop.
+
+- Doom `-timedemo demo1 -nosound -nomusic -nosfx` (DOOM.vhd, small view):
+  B260 801 realtics, B261 seed 3 767 realtics (4.4% faster).
+- Dhrystone relinked into extended RAM on the PC-98 testbench
+  (`z486_xms_resident_tb`): 550k cycles (halfword RAM path), 443k (native,
+  no hold), 452k (native, hold 2).
+
+Hardware test programs (tests/hardware, assemble with NASM, run from DOS):
+`exttest98.asm` (1-64 MB stores/copies/code execution, plain, paged and with
+IRQ0 at about 600 Hz; stays above the HMA), `extmix98.asm` (4000 real/protected
+mode round trips copying conventional <-> extended memory), `a20test98.asm`,
+`int1ftest98.asm` (INT 1Fh AH=90h block moves), `crcf98.asm` (file checksum)
+and `memsize98.asm` (BIOS memory-size bytes). `irqext_probe.asm` is the
+simulation counterpart for `z486_xms_resident_tb` with `PIT_PM_TEST=1`.

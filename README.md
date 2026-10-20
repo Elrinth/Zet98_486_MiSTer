@@ -16,6 +16,24 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B261 makes **extended-memory programs faster**: the CPU now reaches extended
+RAM with one 64-bit DDR command per store instead of two 16-bit bus
+handshakes, so stores no longer back up and stall the CPU after calls and
+pushes. Doom's timedemo runs 4.4% faster than on B260 (767 instead of 801
+realtics); code running in extended memory takes about 18% fewer clocks in a
+Dhrystone test. The same change failed on hardware in October (B241) and again
+at first now; stores are therefore reported complete two clocks after the DDR
+accepts them, which hardware needs (see
+[rtl/cpu/NATIVE_DDR.md](rtl/cpu/NATIVE_DDR.md)). It also fixes a z486 bug that
+released cores did not hit: a byte/word load right after a register-memory ALU
+instruction on the same register (`xor ebx,[m]; mov bx,[m]`) could merge with
+the register's old value in a faster pipeline setting
+(`tests/run-z486-m3-partial.sh`). The MiSTer MIDI helper scripts now apply
+their FluidSynth tuning to every launcher name starting with PC98 or Zet98
+(MGL setnames such as PC98_OPT1 got the untuned synth, so Nightslave's music
+stuttered). 90 MHz seed 3 (41,188 ALMs, worst slack -7.048 ns): passes QUALIFY
+with 16 MB XMS, boots Windows 95 and runs the Doom timedemo.
+
 B260 adds **MT32-pi support**: with an mt32-pi on the USER port, the OSD
 **MT32-pi** page sends the MPU-PC98's MIDI to it instead of MidiLink and mixes
 its audio into the core's output (MIDI volume applies); Synth, Munt ROM and

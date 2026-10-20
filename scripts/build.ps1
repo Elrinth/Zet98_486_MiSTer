@@ -30,10 +30,16 @@ param(
     [switch]$RawIde,
     [switch]$MidiUart,
     [switch]$PackedGraphics,
-    # Native DWORD DDR RAM and linear PEGC path; opt-in until qualified.
+    # Native DWORD DDR RAM and linear PEGC path (released since B261 with
+    # -NativeDdrWriteHold 2; add -NativeDdrFramebufferOnly for the B241-B260 path).
     [switch]$NativeDdr,
     # Keep ordinary RAM on B240's backend; widen only linear graphics stores/reads.
     [switch]$NativeDdrFramebufferOnly,
+    # Report a native DDR store complete this many clocks after DDR accepts it.
+    # 0 (complete at acceptance) corrupts DOS/HIMEM/Doom on hardware; 2 is the
+    # qualified B261 setting (see rtl/cpu/NATIVE_DDR.md).
+    [ValidateRange(0, 15)]
+    [int]$NativeDdrWriteHold = 0,
     # z486 PC98 timing registers (bit 0 entry ROM, bit 1 effective address, bit 2
     # late data requests). 7 = all (released builds); fewer = faster per clock.
     [ValidateRange(0, 7)]
@@ -205,6 +211,10 @@ try {
     }
     if ($NativeDdr) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR=1"
+    }
+    if ($NativeDdrWriteHold -gt 0) {
+        if (-not $NativeDdr) { throw 'NativeDdrWriteHold requires NativeDdr.' }
+        Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_WRITE_HOLD=$NativeDdrWriteHold"
     }
     [bool]$NativeDdrFramebufferOnly | Set-Content -LiteralPath (Join-Path $buildRoot 'native-ddr-fb-only.txt')
     if ($NativeDdrFramebufferOnly) {

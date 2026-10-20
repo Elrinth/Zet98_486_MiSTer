@@ -65,7 +65,17 @@ module ao486_memory_bridge #(
     input  wire [31:0] wide_readdata
 );
     localparam IDLE = 3'd0, TRANSFER = 3'd1, RELEASE = 3'd2,
-               WIDE_ISSUE = 3'd3, WIDE_DATA = 3'd4;
+               WIDE_ISSUE = 3'd3, WIDE_DATA = 3'd4, WIDE_HOLD = 3'd5;
+    // Report a native store complete only this many clocks after DDR accepts
+    // it (build.ps1 -NativeDdrWriteHold). Completion at acceptance corrupts
+    // DOS, HIMEM and Doom on hardware with native RAM; 2 clocks or more run
+    // them correctly (B261). Simulation never reproduced the failure.
+`ifdef ZET98_NATIVE_WRITE_HOLD
+    localparam [3:0] WRITE_HOLD = `ZET98_NATIVE_WRITE_HOLD;
+`else
+    localparam [3:0] WRITE_HOLD = 4'd0;
+`endif
+    reg [3:0] hold_count;
     reg [2:0] state;
     reg [29:0] address;
     reg [31:0] write_data;
@@ -104,7 +114,16 @@ module ao486_memory_bridge #(
         !(crosses_block && (first_block == 29 || first_block == WIDE_RAM_MB*2-1));
     wire wide_fb = wide_linear_enable &&
         (first_block == 13'h01e || first_block == 13'h1ffe) && !crosses_block;
-    wire use_wide = WIDE_RAM_MB != 0 && (wide_ram || wide_fb);
+    wire use_wide_any = WIDE_RAM_MB != 0 && (wide_ram || wide_fb);
+    // Diagnostic split (hardware bisection, 2026-10-19): keep RAM reads or RAM
+    // writes on the halfword path. The framebuffer alias is unaffected.
+`ifdef ZET98_NATIVE_DDR_WRITES_ONLY
+    wire use_wide = use_wide_any && (avm_write || wide_fb);
+`elsif ZET98_NATIVE_DDR_READS_ONLY
+    wire use_wide = use_wide_any && (!avm_write || wide_fb);
+`else
+    wire use_wide = use_wide_any;
+`endif
     assign wide_address = address;
     assign wide_writedata = write_data;
     assign wide_byteenable = byte_enable;
@@ -140,6 +159,7 @@ module ao486_memory_bridge #(
             avm_readdata <= 0;
             avm_readdatavalid <= 0;
             avm_write_done <= 0;
+            hold_count <= 0;
         end else begin
             avm_readdatavalid <= 0;
             avm_write_done <= 0;
@@ -180,8 +200,20 @@ module ao486_memory_bridge #(
                 RELEASE: if (!bus_ack)
                     state <= remaining == 0 ? IDLE : TRANSFER;
                 WIDE_ISSUE: if (!wide_waitrequest) begin
-                    avm_write_done <= write_request;
-                    state <= write_request ? IDLE : WIDE_DATA;
+                    if (write_request && WRITE_HOLD != 0) begin
+                        hold_count <= WRITE_HOLD;
+                        state <= WIDE_HOLD;
+                    end else begin
+                        avm_write_done <= write_request;
+                        state <= write_request ? IDLE : WIDE_DATA;
+                    end
+                end
+                WIDE_HOLD: begin
+                    hold_count <= hold_count - 1'b1;
+                    if (hold_count == 4'd1) begin
+                        avm_write_done <= 1'b1;
+                        state <= IDLE;
+                    end
                 end
                 WIDE_DATA: if (wide_readdatavalid) begin
                     avm_readdata <= wide_readdata;
