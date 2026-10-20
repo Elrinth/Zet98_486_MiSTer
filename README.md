@@ -16,6 +16,20 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B263 makes **conventional-memory reads twice as fast**: CPU reads of main RAM
+below A0000h now go through a line buffer that fetches four words with one
+SDRAM burst. Conventional LODSD bandwidth rises from 7.3 to 14.3 MB/s and REP
+MOVSD from 6.5 to 11.4 MB/s, and Doom's timedemo runs in 615 realtics (B262:
+726, 15% faster). The buffer existed since B228 but was switched off because
+its same-clock tag compare on the decoded bus address missed timing at 90 MHz
+and returned wrong data on hardware; its lookup and write snoop are now
+registered. `tests/run-sdram-linebuf.sh` checks the buffer in front of the
+real SDRAM controller (posted writes, bursts, font video traffic) with the
+CPU bridge's bus timing; `tests/hardware/convtest98.asm` (CONVTEST.COM) is the
+hardware check that caught the old buffer. 90 MHz seed 8 (41,179 ALMs, worst
+slack -6.931 ns): passes QUALIFY with 16 MB XMS and CONVTEST, boots Windows
+95, runs the Doom timedemo and Farland Story.
+
 B262 makes **extended-memory reads faster**: a cache-line fill from extended
 RAM is now one two-beat DDR burst instead of two separate DDR reads, saving one
 memory round trip per line. Doom's timedemo runs in 726 realtics (B261: 767,

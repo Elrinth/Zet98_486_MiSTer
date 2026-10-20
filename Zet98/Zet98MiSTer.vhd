@@ -2348,10 +2348,11 @@ signal	SND_STUB	:std_logic;
 signal	SND_DOE		:std_logic;
 signal	SND_STUB_WORD	:std_logic_vector(15 downto 0);
 signal	BUF_ELIG, BUF_ELIG_MAP, BUF_RD4, BUF_ACK, BUF_DOE, BUF_SNOOP, BUF_SDRACK	:std_logic;
--- Main-RAM read line buffer: off until its hit path is pipelined. At 90 MHz
--- the tag compare on the decoded bus address missed timing by 4.8 ns and
--- corrupted reads (Briganty, B228W); disabled, the logic is removed.
-constant USE_LINEBUF	:boolean	:=false;
+-- Main-RAM read line buffer (four-word CPURD4 fills): about twice the
+-- conventional-memory read bandwidth. Its lookup is registered; the earlier
+-- same-clock tag compare on the decoded bus address missed timing at 90 MHz
+-- and corrupted reads (Briganty B228W, Doom/Windows 95 in B262 tests).
+constant USE_LINEBUF	:boolean	:=true;
 signal	BUF_RDAT	:std_logic_vector(15 downto 0);
 signal	DBIO_ADDR	:std_logic_vector(12 downto 1);
 signal	DBIO_ODAT	:std_logic_vector(15 downto 0);

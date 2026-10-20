@@ -5,12 +5,22 @@ LIBRARY	IEEE;
 -- Read line buffer for CPU reads of main RAM (below A0000h).
 -- A miss fetches the aligned four-word SDRAM group with one CPURD4 burst
 -- (the path the GRCG uses for four planes) instead of a CPURD1 per word, so
--- one ~22-clock controller round trip serves four words. Hits answer with a
--- one-clock acknowledge, like text VRAM. Every SDRAM write on the CPU port
--- (CPU, DMA, GRCG/EGC, loader) to the buffered group drops the line; the tag
--- is the physical SDRAM word address, so bank windows cannot alias it.
--- The controller drains posted writes before any read, so a fill never
--- returns data older than a write already acknowledged.
+-- one ~22-clock controller round trip serves four words. Every SDRAM write on
+-- the CPU port (CPU, DMA, GRCG/EGC, loader) to the buffered group drops the
+-- line; the tag is the physical SDRAM word address, so bank windows cannot
+-- alias it. The controller drains posted writes before any read, so a fill
+-- never returns data older than a write already acknowledged.
+-- No state or acknowledge depends on the live decoded bus address in the
+-- clock it appears: a request is registered first and looked up on the next
+-- clock (hit acknowledge after two clocks). The earlier same-clock tag compare
+-- missed timing at 90 MHz and returned wrong data on hardware (Briganty
+-- B228W; Doom, Windows 95, CONVTEST in B262 tests). A write's snoop compare
+-- is registered as one bit: every CPU-port write stays requested over at
+-- least two clock edges (its acknowledge is registered and the requester sees
+-- it a clock later), so a late first compare is repeated with a settled
+-- address, and a false match only drops the line.
+-- The bus must drop the request after each acknowledge (ao486_memory_bridge
+-- RELEASE does), since a held request is not compared against a new address.
 entity mainram_linebuf is
 generic(
 	AW	:integer	:=22
@@ -43,7 +53,7 @@ port(
 end mainram_linebuf;
 
 architecture rtl of mainram_linebuf is
-type state_t is (st_IDLE, st_FILL, st_HOLD);
+type state_t is (st_IDLE, st_LOOK, st_FILL, st_HOLD);
 signal	state	:state_t;
 signal	req		:std_logic;
 signal	valid	:std_logic;
@@ -54,12 +64,14 @@ signal	lbank	:std_logic_vector(1 downto 0);
 subtype word_t is std_logic_vector(15 downto 0);
 type line_t is array(0 to 3) of word_t;
 signal	line	:line_t;
-signal	hitword	:word_t;
 signal	fillword	:word_t;
 signal	hit		:std_logic;
+signal	shit	:std_logic;
+signal	sflush	:std_logic;
 begin
 	req<=elig and mrd;
-	hit<='1' when valid='1' and tagbank=bank and tag=addr(AW-1 downto 2) else '0';
+	-- Registered operands only (laddr/lbank are the request latched in IDLE).
+	hit<='1' when valid='1' and tagbank=lbank and tag=laddr(AW-1 downto 2) else '0';
 
 	with laddr(1 downto 0) select fillword<=
 		sdr_rdat0 when "00",
@@ -69,27 +81,41 @@ begin
 
 	rd4<='1' when state=st_FILL and req='1' else '0';
 	doe<='1' when req='1' and (state=st_FILL or state=st_HOLD) else '0';
-	rdat<=fillword when state=st_FILL else hitword;
+	rdat<=fillword when state=st_FILL else line(conv_integer(laddr(1 downto 0)));
 
 	process(clk,rstn)begin
 		if(rstn='0')then
 			state<=st_IDLE;
 			valid<='0';
 			ack<='0';
+			shit<='0';
+			sflush<='0';
 		elsif(clk' event and clk='1')then
 			ack<='0';
+			-- A write's snoop lands one clock late. The bus needs at least
+			-- three clocks after a write's acknowledge (RELEASE, IDLE, the
+			-- next request, then LOOK) before a lookup.
+			if(snoop_wr='1' and snoop_bank=tagbank and snoop_addr(AW-1 downto 2)=tag)then
+				shit<='1';
+			else
+				shit<='0';
+			end if;
+			sflush<=flush;
 			case state is
 			when st_IDLE =>
 				if(req='1')then
 					laddr<=addr;
 					lbank<=bank;
-					if(hit='1')then
-						hitword<=line(conv_integer(addr(1 downto 0)));
-						ack<='1';
-						state<=st_HOLD;
-					else
-						state<=st_FILL;
-					end if;
+					state<=st_LOOK;
+				end if;
+			when st_LOOK =>
+				if(req='0')then
+					state<=st_IDLE;
+				elsif(hit='1')then
+					ack<='1';
+					state<=st_HOLD;
+				else
+					state<=st_FILL;
 				end if;
 			when st_FILL =>
 				if(req='0')then
@@ -102,16 +128,15 @@ begin
 					tag<=laddr(AW-1 downto 2);
 					tagbank<=lbank;
 					valid<='1';
-					hitword<=fillword;
 					state<=st_HOLD;
 				end if;
 			when st_HOLD =>
-				if(req='0' or addr/=laddr or bank/=lbank)then
+				if(req='0')then
 					state<=st_IDLE;
 				end if;
 			end case;
 			-- Coherence last: a write to the buffered group always wins.
-			if(flush='1' or (snoop_wr='1' and snoop_bank=tagbank and snoop_addr(AW-1 downto 2)=tag))then
+			if(sflush='1' or shit='1')then
 				valid<='0';
 			end if;
 		end if;
