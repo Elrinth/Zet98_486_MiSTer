@@ -83,6 +83,8 @@ module z486_xms_resident_tb;
     reg [28:0] keys[0:DDR_WORDS-1];
     reg [63:0] words[0:DDR_WORDS-1];
     integer used=0,ddr_commands=0,left=0,read_index=0,ticks=0,boots=0;
+    integer beat_index[0:1];
+    integer beat_at=0,beat_count=1;
     integer n,k,found;
     reg [7:0] resident_original[0:4095];
     integer resized=0;
@@ -120,10 +122,15 @@ module z486_xms_resident_tb;
         ddr_readdatavalid<=0;
         if(left!=0) begin
             left<=left-1;
-            if(left==1) begin ddr_readdatavalid<=1; ddr_readdata<=words[read_index]; end
+            if(left==1) begin
+                ddr_readdatavalid<=1; ddr_readdata<=words[beat_index[beat_at]];
+                // Burst beats follow on consecutive clocks.
+                if(beat_at+1<beat_count) begin beat_at<=beat_at+1; left<=1; end
+            end
         end
         if((ddr_read || ddr_write) && !ddr_busy) begin
-            if(left!=0 || ddr_burstcount!=1 || ddr_address[28:25]!=3)
+            if(left!=0 || ddr_address[28:25]!=3 || ddr_burstcount==0 ||
+               (ddr_write && ddr_burstcount!=1) || ddr_burstcount>2)
                 $fatal(1,"invalid DDR command ordering or region");
             if(ddr_address[24:0] < (32'h100000>>3) ||
                ddr_address[24:0] >= ((RAM_MB*32'h100000)>>3) ||
@@ -139,7 +146,20 @@ module z486_xms_resident_tb;
             if(ddr_write) begin
                 for(k=0;k<8;k=k+1)
                     if(ddr_byteenable[k]) words[found][k*8+:8]=ddr_writedata[k*8+:8];
-            end else begin read_index<=found; left<=3+ddr_commands%5; end
+            end else begin
+                beat_index[0]=found;
+                for(k=1;k<ddr_burstcount;k=k+1) begin
+                    found=-1;
+                    for(n=0;n<used;n=n+1) if(keys[n]==ddr_address+k) found=n;
+                    if(found<0) begin
+                        if(used==DDR_WORDS) $fatal(1,"DDR model table full");
+                        found=used; used=used+1; keys[found]=ddr_address+k;
+                        words[found]=pattern_word(ddr_address+k);
+                    end
+                    beat_index[k]=found;
+                end
+                beat_at<=0; beat_count<=ddr_burstcount; left<=3+ddr_commands%5;
+            end
             ddr_commands<=ddr_commands+1;
         end
     end

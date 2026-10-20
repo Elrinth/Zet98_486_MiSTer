@@ -140,6 +140,7 @@ module pc98_native_ddr_bridge #(
     output wire [28:0] ddr_address,
     output wire [63:0] ddr_writedata,
     output wire [7:0] ddr_byteenable,
+    output wire [1:0] ddr_burstcount,
     output wire ddr_read, ddr_write,
     input wire ddr_busy, ddr_readdatavalid,
     input wire [63:0] ddr_readdata
@@ -150,6 +151,13 @@ module pc98_native_ddr_bridge #(
     reg [3:0] remaining;
     reg [63:0] read_word;
     reg cancelled=0;
+    // A cache-line fill (four DWORDs on a 16-byte boundary) is one DDR burst
+    // of two 64-bit beats: one memory latency instead of two. The second
+    // beat waits in beat2 while the first beat's DWORDs are returned.
+    reg pair=0, beat2_valid=0;
+    reg [63:0] beat2;
+    reg [1:0] beats_out=0;          // DDR beats accepted but not yet returned
+    wire line_fill = read && burstcount==4'd4 && address[1:0]==2'b00;
     wire [31:0] physical = {state==IDLE ? address : next_address,2'b00};
     wire high_fb_alias = physical[31:19] == (32'hfff00000 >> 19);
     wire [31:0] backing = (FRAMEBUFFER_ONLY || high_fb_alias) ?
@@ -163,18 +171,29 @@ module pc98_native_ddr_bridge #(
         physical[2] ? {byteenable,4'b0} : {4'b0,byteenable};
     assign ddr_read=!reset && ((state==IDLE && read) || state==ISSUE);
     assign ddr_write=!reset && state==IDLE && write;
-    assign busy=state!=IDLE;
+    assign ddr_burstcount=(state==IDLE && line_fill) ? 2'd2 : 2'd1;
+    assign busy=state!=IDLE || beats_out!=0;
     assign waitrequest=reset || busy || ddr_busy;
     assign readdatavalid=state==WORD && !reset && !cancelled;
     assign readdata=next_address[0] ? read_word[63:32] : read_word[31:0];
+    wire accept_read=ddr_read && !ddr_busy;
+    // WORD returns the high DWORD of the current beat and needs the next one.
+    wire need_beat = state==WORD && remaining!=1 && next_address[0];
     always @(posedge clk) begin
+        // Every native response beat retires one accepted beat (a zero-latency
+        // beat arrives in its own acceptance cycle).
+        beats_out<=beats_out + (accept_read ? ddr_burstcount : 2'd0) -
+                   (ddr_readdatavalid ? 2'd1 : 2'd0);
         if(reset) begin
             cancelled<=1;
-            // Accepted reads retain ownership until the DDR response drains.
-            if(state!=DATA || ddr_readdatavalid) state<=IDLE;
+            beat2_valid<=0;
+            // Accepted reads retain ownership until every DDR beat drains.
+            if(beats_out==0 || (beats_out==1 && ddr_readdatavalid)) state<=IDLE;
+            else state<=DATA;
         end else case(state)
             IDLE: if(read && !waitrequest) begin
                 next_address<=address; remaining<=burstcount; cancelled<=0;
+                pair<=line_fill; beat2_valid<=0;
                 if(ddr_readdatavalid) begin read_word<=ddr_readdata;state<=WORD;end
                 else state<=DATA;
             end
@@ -184,13 +203,23 @@ module pc98_native_ddr_bridge #(
             end
             DATA: if(ddr_readdatavalid) begin
                 read_word<=ddr_readdata;
-                state<=cancelled ? IDLE : WORD;
+                state<=cancelled ? (beats_out>1 ? DATA : IDLE) : WORD;
             end
             WORD: begin
                 remaining<=remaining-1'b1;
                 next_address<=next_address+1'b1;
                 if(remaining==1) state<=IDLE;
-                else if(next_address[0]) state<=ISSUE;
+                else if(next_address[0]) begin
+                    if(!pair) state<=ISSUE;
+                    else if(beat2_valid) begin
+                        read_word<=beat2; beat2_valid<=0;
+                    end else if(ddr_readdatavalid) read_word<=ddr_readdata;
+                    else state<=DATA;
+                end
+                // The burst's second beat arriving while the first is returned.
+                if(pair && ddr_readdatavalid && !need_beat) begin
+                    beat2<=ddr_readdata; beat2_valid<=1;
+                end
             end
         endcase
     end
@@ -199,5 +228,7 @@ module pc98_native_ddr_bridge #(
         if(read && write) $fatal(1,"native DDR simultaneous read/write");
         if(read && (burstcount==0 || burstcount>8)) $fatal(1,"native DDR invalid burst");
     end
+    always @(posedge clk) if(!reset && state==WORD && pair && beat2_valid && ddr_readdatavalid)
+        $fatal(1,"native DDR third beat for a two-beat line fill");
     // synthesis translate_on
 endmodule

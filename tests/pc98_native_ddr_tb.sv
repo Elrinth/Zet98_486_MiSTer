@@ -13,17 +13,21 @@ module pc98_native_ddr_tb;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;
     wire [7:0] ddr_byteenable;
+    wire [1:0] ddr_burstcount;
     wire ddr_read,ddr_write;
     wire ddr_busy=force_busy || cycles%7<2;
     reg delayed_valid=0;
     reg [63:0] delayed_data=0;
     reg [7:0] return_mask=0;
-    wire ddr_readdatavalid=LATENCY==0 ? command && ddr_read : delayed_valid;
-    wire [63:0] ddr_readdata=LATENCY==0 ? masked_read(words[index],ddr_byteenable) : delayed_data;
+    // LATENCY 0 answers beat 0 in the command cycle; a burst's second beat
+    // still arrives on the following clock.
+    wire ddr_readdatavalid=LATENCY==0 ? (command && ddr_read) || delayed_valid : delayed_valid;
+    wire [63:0] ddr_readdata=LATENCY==0 && command && ddr_read ?
+        masked_read(words[index],ddr_byteenable) : delayed_data;
     reg force_busy=0;
     pc98_native_ddr_bridge dut(.*);
     reg [63:0] words[0:255],expected[0:255];
-    integer cycles=0,commands=0,left=0,return_index=0,checks=0;
+    integer cycles=0,commands=0,left=0,return_index=0,checks=0,beats_left=0;
     wire command=(ddr_read || ddr_write) && !ddr_busy;
     wire [7:0] index=ddr_address[7:0];
     reg stalled=0;
@@ -52,19 +56,29 @@ module pc98_native_ddr_tb;
             if(left==1) begin
                 delayed_valid<=1;
                 delayed_data<=masked_read(words[return_index],return_mask);
+                // A two-beat burst returns its second word on the next clock.
+                if(beats_left>1) begin beats_left<=beats_left-1;return_index<=return_index+1;left<=1;end
+                else beats_left<=0;
             end
         end
         if(command) begin
             if(ddr_read) check(ddr_byteenable==8'hff,"read must enable the complete reused DDR word");
             check(!reset && !(ddr_read && ddr_write),"command during reset or R/W overlap");
-            check(left==0 && !delayed_valid,"read response overtaken");
+            check(left==0 && !delayed_valid && beats_left==0,"read response overtaken");
             check(ddr_address[28:25]==4'h3,"DDR escaped core-owned region");
             check(ddr_address==((32'h30100000>>3)|index) ||
                   ddr_address==((32'h30f00000>>3)|index),"RAM/linear alias backing address");
             if(ddr_write) begin
                 for(integer k=0;k<8;k++)
                     if(ddr_byteenable[k]) words[index][k*8+:8]<=ddr_writedata[k*8+:8];
-            end else begin return_index<=index;return_mask<=ddr_byteenable;left<=LATENCY;end
+            end else begin
+                check(ddr_burstcount==1 || ddr_burstcount==2,"native DDR burst length");
+                return_mask<=ddr_byteenable;
+                if(LATENCY==0) begin
+                    // Beat 0 is returned combinationally in the command cycle.
+                    if(ddr_burstcount==2) begin return_index<=index+1;beats_left<=1;left<=1;end
+                end else begin return_index<=index;beats_left<=ddr_burstcount;left<=LATENCY;end
+            end
             commands<=commands+1;
         end
     end
@@ -107,7 +121,8 @@ module pc98_native_ddr_tb;
         end
         for(integer n=1;n<=8;n++) begin
             before_commands=commands;get(32'h00100100,n);
-            check(commands-before_commands==(n+1)/2,"aligned burst did not reuse both DDR halves");
+            // A 16-byte line fill is one two-beat DDR burst.
+            check(commands-before_commands==(n==4 ? 1 : (n+1)/2),"aligned burst did not reuse both DDR halves");
             before_commands=commands;get(32'hfff00104,n);
             check(commands-before_commands==(n+2)/2,"odd-start burst DDR count");
         end
@@ -124,6 +139,15 @@ module pc98_native_ddr_tb;
         @(negedge clk);reset=0;
         while(busy) begin check(!readdatavalid,"canceled read delivered data");@(negedge clk);end
         get(32'h00100020,4);
+        // A reset during a two-beat line fill drains both beats.
+        @(negedge clk);address=32'h00100040>>2;read=1;burstcount=4;
+        @(posedge clk);while(waitrequest) @(posedge clk);
+        @(negedge clk);read=0;reset=1;
+        @(negedge clk);reset=0;
+        while(busy) begin check(!readdatavalid,"canceled line fill delivered data");@(negedge clk);end
+        check(beats_left==0 && left==0,"line fill beats left behind");
+        get(32'h00100060,4);
+        get(32'h00100008,4);
         $display("PASS native DDR latency=%0d checks=%0d commands=%0d",LATENCY,checks,commands);
         $finish;
     end

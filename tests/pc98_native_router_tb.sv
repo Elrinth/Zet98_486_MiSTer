@@ -42,7 +42,7 @@ module pc98_native_router_tb;
         .pegc_video_burstcount(5'b0),.pegc_video_read(1'b0));
     reg [28:0] keys[0:255];
     reg [63:0] words[0:255];
-    integer used=0,cycles=0,left=0,read_index=0,commands=0,checks=0;
+    integer used=0,cycles=0,left=0,read_index=0,commands=0,checks=0,second_index=-1;
     reg write_pending=0;
     reg [31:0] pending_address,pending_data;
     integer write_requests=0,write_completions=0;
@@ -78,11 +78,16 @@ module pc98_native_router_tb;
         end
         if(left!=0) begin
             left<=left-1;
-            if(left==1) begin ddr_readdata<=words[read_index];ddr_readdatavalid<=1;end
+            if(left==1) begin
+                ddr_readdata<=words[read_index];ddr_readdatavalid<=1;
+                // A two-beat line fill returns its second word next clock.
+                if(second_index>=0) begin read_index<=second_index;second_index<=-1;left<=1;end
+            end
         end
         if((ddr_read || ddr_write) && !ddr_busy) begin
-            check(left==0 && !ddr_readdatavalid,"DDR response overtaken");
-            check(ddr_burstcount==1 && ddr_address[28:25]==4'h3,"DDR region/burst");
+            check(left==0 && !ddr_readdatavalid && second_index<0,"DDR response overtaken");
+            check((ddr_burstcount==1 || (ddr_read && ddr_burstcount==2)) &&
+                  ddr_address[28:25]==4'h3,"DDR region/burst");
             begin : lookup
                 integer found;
                 found=-1;
@@ -90,7 +95,16 @@ module pc98_native_router_tb;
                 if(found==-1) begin found=used;keys[used]=ddr_address;words[used]=0;used++;end
                 if(ddr_write) begin
                     for(integer k=0;k<8;k++) if(ddr_byteenable[k]) words[found][k*8+:8]=ddr_writedata[k*8+:8];
-                end else begin read_index<=found;left<=25;end
+                end else begin
+                    read_index<=found;left<=25;
+                    if(ddr_burstcount==2) begin : second_beat
+                        integer f2;
+                        f2=-1;
+                        for(integer i=0;i<used;i++) if(keys[i]==ddr_address+1) f2=i;
+                        if(f2==-1) begin f2=used;keys[used]=ddr_address+1;words[used]=0;used++;end
+                        second_index<=f2;
+                    end
+                end
             end
             commands<=commands+1;
         end

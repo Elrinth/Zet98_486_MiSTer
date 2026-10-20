@@ -168,19 +168,21 @@ module pc98_ao486 #(
     wire [7:0] legacy_ram_byteenable, native_ddr_byteenable;
     wire legacy_ram_read, legacy_ram_write, legacy_ram_busy, legacy_ram_valid;
     wire native_ddr_read, native_ddr_write, native_ddr_busy, native_ddr_valid;
+    wire [1:0] native_ddr_burstcount;
     wire native_request = native_ddr_read || native_ddr_write;
-    reg ram_response_native=0, ram_read_pending=0, fb_read_pending=0;
+    reg ram_response_native=0, fb_read_pending=0;
+    reg [1:0] ram_read_left=0;      // RAM read beats still to return
+    wire ram_read_pending=ram_read_left!=0;
     wire fb_command_read, fb_command_busy, fb_response_valid;
     // The legacy and native RAM clients share a DDR arbiter slot. The common
     // CPU bus serializes them; retain the response tag through CPU-only reset.
     wire ram_read_accept=ram_ddr_read && !ram_ddr_busy;
     wire ram_response_tag=ram_read_pending ? ram_response_native : native_request;
     always @(posedge clk) begin
-        if(ram_ddr_valid) ram_read_pending<=0;
         if(ram_read_accept) begin
             ram_response_native<=native_request;
-            ram_read_pending<=!ram_ddr_valid;
-        end
+            ram_read_left<=ram_ddr_burstcount[1:0] - (ram_ddr_valid && !ram_read_pending ? 2'd1 : 2'd0);
+        end else if(ram_ddr_valid && ram_read_pending) ram_read_left<=ram_read_left-1'b1;
         if(fb_response_valid) fb_read_pending<=0;
         if(fb_command_read && !fb_command_busy) fb_read_pending<=!fb_response_valid;
     end
@@ -190,7 +192,7 @@ module pc98_ao486 #(
     assign ram_ddr_byteenable=native_request ? native_ddr_byteenable : legacy_ram_byteenable;
     assign ram_ddr_read=native_ddr_read || legacy_ram_read;
     assign ram_ddr_write=native_ddr_write || legacy_ram_write;
-    assign ram_ddr_burstcount=1;
+    assign ram_ddr_burstcount=native_request ? {6'b0,native_ddr_burstcount} : 8'd1;
     assign native_ddr_busy=ram_ddr_busy || legacy_ram_read || legacy_ram_write;
     assign legacy_ram_busy=ram_ddr_busy || native_request;
     assign native_ddr_valid=ram_ddr_valid && ram_response_tag;
@@ -202,11 +204,12 @@ module pc98_ao486 #(
             .read(wide_read),.write(wide_write),.waitrequest(wide_waitrequest),
             .busy(wide_busy),.readdatavalid(wide_readdatavalid),.readdata(wide_readdata),
             .ddr_address(native_ddr_address),.ddr_writedata(native_ddr_writedata),
-            .ddr_byteenable(native_ddr_byteenable),.ddr_read(native_ddr_read),.ddr_write(native_ddr_write),
+            .ddr_byteenable(native_ddr_byteenable),.ddr_burstcount(native_ddr_burstcount),
+            .ddr_read(native_ddr_read),.ddr_write(native_ddr_write),
             .ddr_busy(native_ddr_busy),.ddr_readdatavalid(native_ddr_valid),.ddr_readdata(ddr_readdata)
         );
     end else begin : no_native_ddr
-        assign {native_ddr_address,native_ddr_writedata,native_ddr_byteenable,native_ddr_read,native_ddr_write}=0;
+        assign {native_ddr_address,native_ddr_writedata,native_ddr_byteenable,native_ddr_burstcount,native_ddr_read,native_ddr_write}=0;
         assign {wide_busy,wide_readdatavalid,wide_readdata}=0;
         assign wide_waitrequest=1;
     end endgenerate
@@ -256,7 +259,8 @@ module pc98_ao486 #(
         );
         pc98_pegc_ddr_arbiter arbiter (
             .clk(clk),.reset(reset),.ram_address(ram_ddr_address),.ram_writedata(ram_ddr_writedata),
-            .ram_byteenable(ram_ddr_byteenable),.ram_read(ram_ddr_read),.ram_write(ram_ddr_write),
+            .ram_byteenable(ram_ddr_byteenable),.ram_burstcount(ram_ddr_burstcount[4:0]),
+            .ram_read(ram_ddr_read),.ram_write(ram_ddr_write),
             .ram_busy(ram_ddr_busy),.ram_readdatavalid(ram_ddr_valid),
             .fb_address(fb_address),.fb_writedata(fb_writedata),.fb_byteenable(fb_byteenable),
             .fb_read(fb_read),.fb_write(fb_write),.fb_busy(fb_busy),.fb_readdatavalid(fb_valid),

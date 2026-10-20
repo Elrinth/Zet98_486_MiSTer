@@ -16,6 +16,14 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B262 makes **extended-memory reads faster**: a cache-line fill from extended
+RAM is now one two-beat DDR burst instead of two separate DDR reads, saving one
+memory round trip per line. Doom's timedemo runs in 726 realtics (B261: 767,
+B260: 801 - 10% faster than B260); extended-memory LODSD bandwidth rises from
+22.8 to 28.1 MB/s and REP MOVSD from 18.9 to 24.0 MB/s. 90 MHz seed 3 (41,259
+ALMs, worst slack -6.736 ns): passes QUALIFY with 16 MB XMS, EXTTEST with its
+interrupt pass, boots Windows 95 and runs the Doom timedemo.
+
 B261 makes **extended-memory programs faster**: the CPU now reaches extended
 RAM with one 64-bit DDR command per store instead of two 16-bit bus
 handshakes, so stores no longer back up and stall the CPU after calls and

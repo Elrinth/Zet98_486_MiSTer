@@ -11,6 +11,7 @@ module pc98_pegc_ddr_arbiter (
     input wire [28:0] ram_address,
     input wire [63:0] ram_writedata,
     input wire [7:0] ram_byteenable,
+    input wire [4:0] ram_burstcount,
     input wire ram_read, ram_write,
     output wire ram_busy, ram_readdatavalid,
     input wire [28:0] fb_address,
@@ -44,7 +45,7 @@ module pc98_pegc_ddr_arbiter (
         case(grant)
             0: begin
                 ddr_address=ram_address; ddr_writedata=ram_writedata;
-                ddr_byteenable=ram_byteenable;
+                ddr_byteenable=ram_byteenable; ddr_burstcount={3'b0,ram_burstcount};
                 chosen_read=ram_read; chosen_write=ram_write;
             end
             1: begin

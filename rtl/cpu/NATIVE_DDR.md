@@ -159,3 +159,21 @@ mode round trips copying conventional <-> extended memory), `a20test98.asm`,
 `int1ftest98.asm` (INT 1Fh AH=90h block moves), `crcf98.asm` (file checksum)
 and `memsize98.asm` (BIOS memory-size bytes). `irqext_probe.asm` is the
 simulation counterpart for `z486_xms_resident_tb` with `PIT_PM_TEST=1`.
+
+## Two-beat line fills (B262)
+
+`pc98_native_ddr_bridge` turns an aligned four-DWORD read (a 16-byte cache
+line fill) into one DDR command with burstcount 2. The second 64-bit beat is
+held in a register while the first beat's DWORDs are returned; a beat counter
+keeps the bridge busy until every accepted beat has drained (also across a
+CPU-only reset). `pc98_ao486` keeps the RAM response tag until the last beat
+(`ram_read_left`), and the PEGC arbiter passes the RAM burst length through
+(it already counted burst beats for video scan-out). Other reads keep the
+one-word path.
+
+EXTBENCH on hardware (B261 -> B262): extended LODSD 22,776 -> 28,078 KB/s,
+REP MOVSD 18,851 -> 23,986 KB/s, XMS move ext->conv 16,224 -> 19,718 KB/s.
+Doom timedemo 767 -> 726 realtics. Tests: `tests/run-native-ddr.sh` (bridge
+at latencies 0/1/7/37 incl. a reset during a line fill; router with two-beat
+responses), z486 native/write-completion suites, and 10 fuzz seeds with random
+DDR timing and PEGC scan-out contention.
