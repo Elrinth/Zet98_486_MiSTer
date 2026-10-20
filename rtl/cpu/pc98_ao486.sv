@@ -10,6 +10,10 @@ module pc98_ao486 #(
     parameter EXT_RAM_READ_CACHE = 1'b1,
     parameter EXT_RAM_EARLY_READ_HIT = 1'b1,
     parameter EXT_RAM_DWORD_READ = 1'b1,
+    // Legacy fabric reads (the Zet98 main-RAM line buffer) may return a whole
+    // DWORD on one acknowledge: bus_dword_ok marks it, bus_readdata_high is
+    // the upper word. Off by default (the inputs are ignored).
+    parameter LEGACY_DWORD_READ = 1'b0,
     parameter LOWMEM_CACHE = 1'b0,
     parameter LOWMEM_CACHE_KB = 8,
     parameter UPPER_RAM_ICACHE = 0,
@@ -55,6 +59,8 @@ module pc98_ao486 #(
     output wire        bus_io,
     input  wire [15:0] bus_readdata,
     input  wire        bus_ack,
+    input  wire        bus_dword_ok,
+    input  wire [15:0] bus_readdata_high,
     output wire        unmapped_access,
     output wire [127:0] debug_snapshot,
     output wire [28:0] ddr_address,
@@ -158,6 +164,10 @@ module pc98_ao486 #(
         assign legacy_readdata=peripheral_read;
     end endgenerate
     assign unmapped_access = physical_strobe && !mapped;
+    // Only without the CPU-side low-memory cache, which answers legacy reads
+    // itself one word at a time.
+    wire legacy_dword_capable = LEGACY_DWORD_READ && !LOWMEM_CACHE &&
+        legacy_mapped && !bus_io && bus_dword_ok;
 
     wire [28:0] ram_ddr_address;
     wire [63:0] ram_ddr_writedata;
@@ -378,7 +388,8 @@ module pc98_ao486 #(
         .bus_write(bus_write), .bus_strobe(physical_strobe), .bus_io(bus_io),
         .bus_readdata(pegc_claimed ? pegc_readdata : legacy_mapped ? legacy_readdata : extended_mapped ? extended_readdata : 16'hffff),
         .bus_ack((legacy_mapped && legacy_ack) || pegc_ack || extended_ack || unmapped_access),
-        .bus_dword_capable(extended_dword_capable), .bus_read_high(extended_read_high),
+        .bus_dword_capable(extended_dword_capable || legacy_dword_capable),
+        .bus_read_high(extended_mapped ? extended_read_high : bus_readdata_high),
         .wide_linear_enable(pegc_linear_enable),.wide_backend_busy(wide_backend_busy),
         .wide_address(wide_address),.wide_writedata(wide_writedata),
         .wide_byteenable(wide_byteenable),.wide_burstcount(wide_burstcount),

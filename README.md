@@ -16,6 +16,17 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B264 reads **conventional-memory DWORDs in one bus transfer**: when a 32-bit
+read's low word comes from the main-RAM line buffer, the buffer returns the
+high word with the same acknowledge (it is in the same four-word line), so
+the CPU bridge skips the second 16-bit handshake, as it already did for
+extended RAM. Conventional LODSD bandwidth rises from 14.3 to 16.4 MB/s and
+REP MOVSD from 11.4 to 12.6 MB/s (B262: 7.3 and 6.5); real-mode code fetch
+gains the same way. Doom, which runs from extended memory, is unchanged (612
+realtics). 90 MHz seed 3 (41,490 ALMs, worst slack -6.803 ns): passes QUALIFY
+with 16 MB XMS and CONVTEST, boots Windows 95, runs the Doom timedemo and
+Farland Story.
+
 B263 makes **conventional-memory reads twice as fast**: CPU reads of main RAM
 below A0000h now go through a line buffer that fetches four words with one
 SDRAM burst. Conventional LODSD bandwidth rises from 7.3 to 14.3 MB/s and REP

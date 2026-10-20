@@ -33,7 +33,8 @@ architecture test of sdram_linebuf_tb is
     signal sdr_ack, cpu_ack : std_logic;
     signal rd0, rd1, rd2, rd3 : std_logic_vector(15 downto 0);
     signal buf_rd4, buf_ack, buf_doe : std_logic;
-    signal buf_rdat, cpu_rdat : std_logic_vector(15 downto 0);
+    signal buf_rdat, cpu_rdat, buf_rdath : std_logic_vector(15 downto 0);
+    signal buf_dw : std_logic;
     signal cke, cs, ras, cas, we, udq, ldq, ba1, ba0 : std_logic;
     signal ma : std_logic_vector(12 downto 0);
     signal dq : std_logic_vector(15 downto 0);
@@ -97,7 +98,7 @@ begin
         elig=>'1', mrd=>mrd, bank=>bank, addr=>address,
         snoop_wr=>mwr and SNOOP_ON, snoop_bank=>bank, snoop_addr=>address, flush=>'0',
         sdr_ack=>sdr_ack, sdr_rdat0=>rd0, sdr_rdat1=>rd1, sdr_rdat2=>rd2, sdr_rdat3=>rd3,
-        rd4=>buf_rd4, ack=>buf_ack, doe=>buf_doe, rdat=>buf_rdat,
+        rd4=>buf_rd4, ack=>buf_ack, doe=>buf_doe, rdat=>buf_rdat, dw=>buf_dw, rdat_hi=>buf_rdath,
         clk=>cpuclk, rstn=>rstn);
     cpu_ack <= sdr_ack or buf_ack;
     cpu_rdat <= buf_rdat when buf_doe='1' else x"dead";
@@ -166,7 +167,9 @@ begin
         variable i, b, key, kind : natural;
         variable sel : std_logic_vector(1 downto 0);
         variable value, got : std_logic_vector(15 downto 0);
-        variable reads, writes, hits : natural := 0;
+        variable reads, writes, hits, dwords : natural := 0;
+        variable dwv : std_logic;
+        variable hiv : std_logic_vector(15 downto 0);
         impure function rnd(n : positive) return natural is
         begin
             s := (s * 25173 + 13849) mod 65536;
@@ -187,6 +190,7 @@ begin
                 exit when cpu_ack='1';
             end loop;
             r := cpu_rdat;                                 -- sampled on the ACK edge
+            dwv := buf_dw and not w; hiv := buf_rdath;     -- bus_dword_capable, bus_read_high
             mwr<='0'; mrd<='0';
             loop                                           -- RELEASE
                 wait until rising_edge(cpuclk);
@@ -232,8 +236,20 @@ begin
             elsif kind < 8 then                            -- RMW: read then write
                 do_read(key, 1);
                 do_write(key, 1 + rnd(2));
-            elsif kind < 9 then                            -- dword read: two halves
-                if i mod 4 /= 3 then
+            elsif kind < 9 then                            -- dword read
+                if i mod 2 = 0 then                        -- aligned: one transfer if dw
+                    do_read(key, 0);
+                    if dwv='1' then
+                        assert hiv = model(key+1)
+                            report "dword high word " & integer'image(key+1) & " got " &
+                                to_hstring(hiv) & " expected " & to_hstring(model(key+1)) &
+                                " at " & integer'image(now / 1 ns) & " ns" severity failure;
+                        dwords := dwords + 1;
+                        wait until rising_edge(cpuclk);
+                    else
+                        do_read(key+1, 1 + rnd(2));
+                    end if;
+                elsif i mod 4 /= 3 then                    -- misaligned: two halves
                     do_read(key, 0); do_read(key+1, 1 + rnd(2));
                 else
                     do_read(key, 1);
@@ -249,8 +265,9 @@ begin
         for k in 0 to 2*SLOTS-1 loop
             do_read(k, 1);
         end loop;
+        assert dwords > 0 report "no single-transfer dword reads" severity failure;
         report "PASS line buffer + SDRAMC: " & integer'image(writes) & " writes, " &
-            integer'image(reads) & " reads, CPU " & integer'image(CPU_MHZ) & " MHz, phase " &
+            integer'image(reads) & " reads (" & integer'image(dwords) & " dwords in one transfer), CPU " & integer'image(CPU_MHZ) & " MHz, phase " &
             integer'image(MEM_PHASE_PS) & " ps" &
             ", " & integer'image(now / 1 ns) & " ns" severity note;
         stop;

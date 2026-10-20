@@ -46,6 +46,12 @@ port(
 	ack			:out std_logic;							-- hit acknowledge
 	doe			:out std_logic;							-- drive read data
 	rdat		:out std_logic_vector(15 downto 0);
+	-- The odd word after an even request (same line) is available with the
+	-- acknowledge, so a 486 dword read needs one bus transfer, not two.
+	-- From registered state only: FILL/HOLD exist only while the buffer
+	-- serves the current request (a request is dropped after its ACK).
+	dw			:out std_logic;
+	rdat_hi		:out std_logic_vector(15 downto 0);
 
 	clk			:in std_logic;
 	rstn		:in std_logic
@@ -82,6 +88,11 @@ begin
 	rd4<='1' when state=st_FILL and req='1' else '0';
 	doe<='1' when req='1' and (state=st_FILL or state=st_HOLD) else '0';
 	rdat<=fillword when state=st_FILL else line(conv_integer(laddr(1 downto 0)));
+	dw<='1' when (state=st_FILL or state=st_HOLD) and laddr(0)='0' else '0';
+	rdat_hi<=	sdr_rdat3 when state=st_FILL and laddr(1)='1' else
+				sdr_rdat1 when state=st_FILL else
+				line(3) when laddr(1)='1' else
+				line(1);
 
 	process(clk,rstn)begin
 		if(rstn='0')then

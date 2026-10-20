@@ -185,7 +185,7 @@ port(
 end component;
 
 component pc98_ao486
-generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8; UPPER_RAM_ICACHE :integer :=0; CLOCK_RATE_MHZ :integer :=90; PEGC_ENABLE :integer :=0);
+generic(EXT_RAM_MB :integer :=0; LOWMEM_CACHE :integer :=0; LOWMEM_CACHE_KB :integer :=8; UPPER_RAM_ICACHE :integer :=0; CLOCK_RATE_MHZ :integer :=90; PEGC_ENABLE :integer :=0; LEGACY_DWORD_READ :integer :=0);
 port(
     clk, reset :in std_logic;
     cache_invalidate, cache_upper_ram_native :in std_logic;
@@ -200,6 +200,8 @@ port(
     bus_write, bus_strobe, bus_io :out std_logic;
     bus_readdata :in std_logic_vector(15 downto 0);
     bus_ack :in std_logic;
+    bus_dword_ok :in std_logic;
+    bus_readdata_high :in std_logic_vector(15 downto 0);
     unmapped_access :out std_logic;
     debug_snapshot :out std_logic_vector(127 downto 0);
     ddr_address :out std_logic_vector(28 downto 0);
@@ -2353,7 +2355,8 @@ signal	BUF_ELIG, BUF_ELIG_MAP, BUF_RD4, BUF_ACK, BUF_DOE, BUF_SNOOP, BUF_SDRACK	
 -- same-clock tag compare on the decoded bus address missed timing at 90 MHz
 -- and corrupted reads (Briganty B228W, Doom/Windows 95 in B262 tests).
 constant USE_LINEBUF	:boolean	:=true;
-signal	BUF_RDAT	:std_logic_vector(15 downto 0);
+signal	BUF_RDAT, BUF_RDATH	:std_logic_vector(15 downto 0);
+signal	BUF_DW		:std_logic;
 signal	DBIO_ADDR	:std_logic_vector(12 downto 1);
 signal	DBIO_ODAT	:std_logic_vector(15 downto 0);
 signal	DBIO_DOE	:std_logic;
@@ -2661,13 +2664,13 @@ begin
     end generate;
 
     ao486_cpu: if CPU486/=0 generate
-        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE, CLOCK_RATE_MHZ=>SYSFREQ/1000, PEGC_ENABLE=>PEGC_ENABLE) port map(
+        cpu: pc98_ao486 generic map(EXT_RAM_MB=>EXT_RAM_MB, LOWMEM_CACHE=>LOWMEM_CACHE, LOWMEM_CACHE_KB=>LOWMEM_CACHE_KB, UPPER_RAM_ICACHE=>UPPER_RAM_ICACHE, CLOCK_RATE_MHZ=>SYSFREQ/1000, PEGC_ENABLE=>PEGC_ENABLE, LEGACY_DWORD_READ=>1) port map(
             cpu_speed_sel=>pCPUSpeed,
             clk=>cpuclk, reset=>not srstn,
             interrupt_do=>INTM, interrupt_vector=>cpu_vector, interrupt_done=>tgca,
             bus_address=>cpuaddr, bus_select=>cpusel, bus_writedata=>cpuod,
             bus_write=>cpuoe, bus_strobe=>stb, bus_io=>tga,
-            bus_readdata=>dbus, bus_ack=>cpuack, unmapped_access=>open, debug_snapshot=>pCPUDebug,
+            bus_readdata=>dbus, bus_ack=>cpuack, bus_dword_ok=>BUF_DW, bus_readdata_high=>BUF_RDATH, unmapped_access=>open, debug_snapshot=>pCPUDebug,
             cache_invalidate=>cache_invalidate_cpu, cache_upper_ram_native=>cache_upper_ram_native,
             cache_window_write=>cache_window_write, cache_window_ab=>cache_window_ab,
             ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
@@ -3134,6 +3137,8 @@ begin
 		ack			=>BUF_ACK,
 		doe			=>BUF_DOE,
 		rdat		=>BUF_RDAT,
+		dw			=>BUF_DW,
+		rdat_hi		=>BUF_RDATH,
 		clk			=>cpuclk,
 		rstn		=>srstn
 	);
