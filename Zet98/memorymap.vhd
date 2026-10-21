@@ -224,9 +224,14 @@ begin
 		x"0000" when '1' & x"701",		-- CC2E02h: 00 00
 		x"00d2" when '1' & x"702",		-- CC2E04h: D2 00
 		x"0008" when '1' & x"703",		-- CC2E06h: 08 00
-		x"ffcb" when '1' & x"704",		-- CC2E08h: CB (RETF), then FFh
+		x"ffcf" when '1' & x"704",		-- CC2E08h: CF (IRET), then FFh
 		x"ffff" when others;			-- as NP2kai: the rest reads empty
 		-- (Zeros here made Flame Zapper's NAX driver stall its intro.)
+		-- The entry is the sound BIOS interrupt handler (header: INT D2h at
+		-- offset 0008h), so it returns with IRET. NP2kai's default stub has
+		-- RETF there: AIDS - Jinai Seijin points INT 50h at CEE0:0008, every
+		-- call left FLAGS on the stack and the game's return then jumped into
+		-- the vector table (triple fault, reboot after A>AIDS).
 	
 	MRD<=	DMARD when DMAEN='1' else
 			'0' when CPUTGA='1' else

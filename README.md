@@ -16,6 +16,22 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B265 fixes **two reboots**. AIDS - Jinai Seijin restarted the PC right after
+starting: without a sound board ROM the core answers with a small stub (as
+NP2kai does), and its entry at CEE0:0008 returned with RETF although it is the
+sound BIOS interrupt handler. The game points INT 50h there, so every call left
+FLAGS on the stack until the game returned into the interrupt vector table and
+the CPU triple-faulted. The stub now returns with IRET. Windows 95 rebooted when
+a floppy image was mounted while it ran: the media-change interrupt that Open
+BIOS uses could only be acknowledged through its own port 7ED0h, but Windows'
+floppy driver answers the interrupt the uPD765 way (SENSE INTERRUPT STATUS and
+EOI). The interrupt fired again after every SENSE until Windows' kernel stack
+overflowed. A SENSE INTERRUPT STATUS now acknowledges it too. 90 MHz seed 3
+(39,570 ALMs, worst slack -7.386 ns): passes QUALIFY, boots Windows 95 five times,
+shows the Star Cruiser II logo without stray pixels and runs Flame Zapper
+Kotsujin. Opening a floppy in Windows 95 still hangs (also on B264); that is
+being worked on.
+
 B264 reads **conventional-memory DWORDs in one bus transfer**: when a 32-bit
 read's low word comes from the main-RAM line buffer, the buffer returns the
 high word with the same acknowledge (it is in the same four-word line), so

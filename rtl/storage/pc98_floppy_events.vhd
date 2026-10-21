@@ -17,15 +17,16 @@ end entity;
 
 architecture rtl of pc98_floppy_events is
     signal previous, pending : std_logic_vector(1 downto 0) := "00";
-    signal enabled, old_wr, native_quiet, event_quiet : std_logic := '0';
+    signal enabled, old_wr, native_quiet, event_quiet, event_irq : std_logic := '0';
 begin
     rdata <= x"A" & enabled & native_irq & pending;
     oe <= '1' when address=x"7ED0" and rd='1' else '0';
     -- Never interrupt an in-flight data command or seek. Native completion
     -- has priority; pending changes survive until the BIOS acknowledges them.
-    irq <= '1' when enabled='1' and pending/="00" and busy='0'
+    event_irq <= '1' when enabled='1' and pending/="00" and busy='0'
                     and native_irq='0' and native_quiet='1'
                     and event_quiet='1' else '0';
+    irq <= event_irq;
     process(clk, rstn)
         variable next_pending : std_logic_vector(1 downto 0);
     begin
@@ -54,6 +55,19 @@ begin
                 elsif wdata(7 downto 2)="100000" then
                     next_pending := next_pending and not wdata(1 downto 0);
                 end if;
+            end if;
+            -- A driver that owns the controller itself (Windows 95's floppy
+            -- driver) answers the IRQ the uPD765 way: SENSE INTERRUPT STATUS
+            -- (08h to the data port, 92h or CAh) and EOI, never 7ED0h. Take that
+            -- as the acknowledgement. Otherwise the event stayed pending, each
+            -- SENSE made the controller busy for a moment, and the IRQ re-rose
+            -- after it: an interrupt storm that overflowed Windows' ring-0 stack
+            -- (reboot when a floppy was mounted). While this IRQ is up the
+            -- controller is idle, so 08h there is a command byte, not a parameter.
+            if event_irq='1' and wr='1' and old_wr='0' and wdata=x"08"
+               and (address=x"0092" or address=x"00CA") then
+                event_quiet <= '0';
+                next_pending := "00";
             end if;
             -- A simultaneous transition wins over W1C, including a same-size
             -- replacement: diskemu drops present while it reloads the image.

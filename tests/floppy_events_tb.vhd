@@ -42,8 +42,19 @@ begin
         write_byte(x"00");present<="11";tick;tick;
         assert irq='0' and data=x"A0" severity failure;
         write_byte(x"A5");present<="00";tick;assert irq='1' severity failure;
+        -- A native driver (Windows 95) acknowledges with SENSE INTERRUPT STATUS.
+        address<=x"0092";write_byte(x"08");
+        assert irq='0' and data(1 downto 0)="00" report "native SENSE did not acknowledge" severity failure;
+        tick;tick;assert irq='0' report "IRQ re-rose after native SENSE (storm)" severity failure;
+        -- 08h while the event IRQ is held off (controller busy) is a parameter byte.
+        present<="11";busy<='1';tick;write_byte(x"08");
+        busy<='0';tick;tick;
+        assert data(1 downto 0)="11" and irq='1' report "parameter byte taken as acknowledgement" severity failure;
+        address<=x"00CA";write_byte(x"08");
+        assert irq='0' and data(1 downto 0)="00" report "640 KB interface SENSE did not acknowledge" severity failure;
+        address<=x"7ED0";
         rstn<='0';tick;assert irq='0' and data=x"A0" report "reset did not disable extension" severity failure;
-        report "PASS floppy events: legacy, swap, busy, native IRQ, per-drive ack, race, reset";
+        report "PASS floppy events: legacy, swap, busy, native IRQ, per-drive ack, race, native SENSE ack, reset";
         stop;
     end process;
 end;
