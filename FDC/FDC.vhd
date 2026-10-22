@@ -64,7 +64,11 @@ port(
 	mfm		:out std_logic;
 	
 	ismode	:in std_logic	:='1';
-	
+	-- uPD765 RESET pin (port 94h/CCh bit 7). The caller also holds rstn low
+	-- while it is set; RSTMOTOR is the motor bit (94h bit 3).
+	RSTPIN	:in std_logic	:='0';
+	RSTMOTOR:in std_logic	:='1';
+
 	mon0	:out std_logic_vector(7 downto 0);
 	mon1	:out std_logic_vector(7 downto 0);
 	mon2	:out std_logic_vector(7 downto 0);
@@ -161,6 +165,9 @@ signal	SEclr	:std_logic;
 signal	iSE		:std_logic;
 signal	SISen	:std_logic;
 signal	SISclr	:std_logic;
+signal	lRSTPIN	:std_logic	:='0';
+signal	RSTINT	:std_logic	:='0';
+signal	rstcount	:integer range 0 to sysclk*1000	:=0;
 
 signal	IOWR_DAT	:std_logic;
 signal	IORD_DAT	:std_logic;
@@ -4383,6 +4390,8 @@ begin
 				if(ismode='1')then
 					SISen<='1';
 				end if;
+			elsif(RSTINT='1')then
+				INTn<='0';
 			elsif(CPUWR_DAT='1' or CPURD_DAT='1')then	-- or CPURD_STA='1' or DMARDx='1' or DMAWRx='1'
 				INTn<='1';
 			end if;
@@ -4392,6 +4401,28 @@ begin
 		end if;
 	end process;
 	
+	-- A reset that ends with the motor bit set raises INT about 1 ms later with
+	-- no status pending, so SENSE INTERRUPT STATUS answers 80h (as NP2kai's
+	-- io/fdc.c, 5939e0c, reference only). Windows 95's HSFLOP.PDR pulses
+	-- port 94h 98h->18h before every access and waits for this interrupt;
+	-- without it, opening the floppy hung Explorer.
+	process(clk)begin
+		if(clk' event and clk='1')then
+			RSTINT<='0';
+			lRSTPIN<=RSTPIN;
+			if(RSTPIN='1')then
+				rstcount<=0;
+			elsif(lRSTPIN='1' and RSTMOTOR='1')then
+				rstcount<=sysclk*1000;
+			elsif(rstcount=1)then
+				RSTINT<='1';
+				rstcount<=0;
+			elsif(rstcount/=0)then
+				rstcount<=rstcount-1;
+			end if;
+		end if;
+	end process;
+
 	sEXM<='1' when (execstate/=es_IDLE and ND='1') else '0';
 	
 	ST0<=sIC &sSE & sEC & sNR & sHD & sUS;

@@ -225,11 +225,8 @@ parameter CONF_STR = {
 	"P4o9A,RAM size,32 MB,64 MB,16 MB;",
 	"P4R9,Eject FD0;",
 	"P4RA,Eject FD1;",
-	"P4S3,RAM,NVRAM;",
 	"P4R7,Sync FD0;",
 	"P4R8,Sync FD1;",
-	"P4RB,Load SRAM;",
-	"P4RC,Store SRAM;",
 	"P5,DIP switches;",
 	"P5OD,DIP1-8 HGC,Extend,Normal;",
 	"P5o0,DIP1-3 Display,Normal,Plasma;",
@@ -928,7 +925,7 @@ Zet98MiSTer #(.SYSFREQ(SYS_CLK_KHZ), .CPU486(CPU486_ENABLED), .EXT_RAM_MB(EXT_RA
 	.pFDSYNC(fdsync),
 	.pFDEJECT(fdeject),
 
-	.mist_mounted(core_img_mounted & (RAW_IDE ? 4'b1011 : 4'b1111)),
+	.mist_mounted(core_img_mounted & (RAW_IDE ? 4'b0011 : 4'b0111)),
 	.mist_readonly({4{core_img_readonly}}),
 	.mist_imgsize(core_img_size),
 

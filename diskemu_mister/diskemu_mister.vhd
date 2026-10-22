@@ -2225,29 +2225,14 @@ begin
 						mist_buffwr	when emustate=es_ssave else
 						'0';
 	
-	sram	:sramcont port map(
-		addr	=>sram_addr,
-		rdat	=>sram_rdat,
-		wdat	=>sram_wdat,
-		wr		=>sramwr,
-		
-		ldreq		=>sram_ldreq,
-		streq		=>sram_streq,
-		done		=>sramdone,
-
-		mist_rd	=>mist_rd(bit_sram),
-		mist_wr	=>mist_wr(bit_sram),
-		mist_ack	=>mist_ack,
-		
-		mist_lba		=>lba_sram,
-		mist_addr	=>mist_buffaddr,
-		mist_wdat	=>mist_buffdout,
-		mist_rdat	=>sram_bufout,
-		mist_we		=>sram_bufwr,
-		
-		clk		=>sclk,
-		rstn		=>rstn
-	);						
+	-- The CPU never reaches this RAM (Zet98MiSTer ties sram_cs low), so the
+	-- NVRAM image slot and Load/Store SRAM did nothing. Removed: 16 KB of M10K.
+	sram_rdat<=(others=>'0');
+	sramdone<='1';
+	sram_bufout<=(others=>'0');
+	lba_sram<=(others=>'0');
+	mist_rd(bit_sram)<='0';
+	mist_wr(bit_sram)<='0';						
 						
 end rtl;
 	

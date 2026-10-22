@@ -81,6 +81,8 @@ ghdl -e --std=08 -fsynopsys --workdir="$out" dma_grant_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" dma_grant_tb --assert-level=error
 bash tests/run-dma-byte-pointer.sh
 bash tests/run-dma-terminal-count.sh
+bash tests/run-dma-verify.sh
+bash tests/run-dma-ddr.sh
 ghdl -a --std=08 --workdir="$out" rtl/startup_mute.vhd tests/startup_mute_tb.vhd
 ghdl -e --std=08 --workdir="$out" startup_mute_tb
 ghdl -r --std=08 --workdir="$out" startup_mute_tb --assert-level=error

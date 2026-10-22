@@ -223,6 +223,29 @@ port(
 );
 end component;
 
+component pc98_dma_ddr
+generic(GATE_VALID :integer :=1);
+port(
+    clk, reset :in std_logic;
+    dma_address :in std_logic_vector(23 downto 0);
+    dma_read, dma_write :in std_logic;
+    dma_writedata :in std_logic_vector(7 downto 0);
+    dma_ack :out std_logic;
+    dma_readdata :out std_logic_vector(7 downto 0);
+    cpu_address :in std_logic_vector(28 downto 0);
+    cpu_writedata :in std_logic_vector(63 downto 0);
+    cpu_byteenable, cpu_burstcount :in std_logic_vector(7 downto 0);
+    cpu_read, cpu_write :in std_logic;
+    cpu_busy, cpu_readdatavalid :out std_logic;
+    ddr_address :out std_logic_vector(28 downto 0);
+    ddr_writedata :out std_logic_vector(63 downto 0);
+    ddr_byteenable, ddr_burstcount :out std_logic_vector(7 downto 0);
+    ddr_read, ddr_write :out std_logic;
+    ddr_busy, ddr_readdatavalid :in std_logic;
+    ddr_readdata :in std_logic_vector(63 downto 0)
+);
+end component;
+
 component pc98_pegc_line_fetch
 port(cpu_clk,video_clk,reset:in std_logic;
      line_start,line_enable:in std_logic;
@@ -828,6 +851,9 @@ port(
 	
 	busy	:out std_logic;
 	mfm	:out std_logic;
+	
+	RSTPIN	:in std_logic	:='0';
+	RSTMOTOR:in std_logic	:='1';
 	
 	mon0	:out std_logic_vector(7 downto 0);
 	mon1	:out std_logic_vector(7 downto 0);
@@ -2027,6 +2053,17 @@ signal	DMA_UADR:std_logic_vector(3 downto 0);
 signal	DMA_CURCH:integer range 0 to 4;
 signal	DMAU_CS	:std_logic;
 signal	DMAUM_CS:std_logic;
+-- DMA cycles with bank 10h-EFh go to extended RAM in DDR (pc98_dma_ddr).
+signal	DMAX_EN	:std_logic;
+signal	DMAX_RD	:std_logic;
+signal	DMAX_WR	:std_logic;
+signal	DMAX_ACK	:std_logic;
+signal	DMAX_RDAT	:std_logic_vector(7 downto 0);
+signal	DMAX_WDAT	:std_logic_vector(7 downto 0);
+signal	cpu_ddr_address	:std_logic_vector(28 downto 0);
+signal	cpu_ddr_writedata	:std_logic_vector(63 downto 0);
+signal	cpu_ddr_byteenable,cpu_ddr_burstcount	:std_logic_vector(7 downto 0);
+signal	cpu_ddr_read,cpu_ddr_write,cpu_ddr_busy,cpu_ddr_valid	:std_logic;
 
 --general bus
 signal	abus	:std_logic_vector(19 downto 1);
@@ -2638,6 +2675,7 @@ begin
 	pDdrAddress<=(others=>'0'); pDdrWriteData<=(others=>'0');
 	pDdrByteEnable<=(others=>'0'); pDdrBurstCount<=(others=>'0');
 	pDdrRead<='0'; pDdrWrite<='0';
+	DMAX_ACK<='0'; DMAX_RDAT<=(others=>'1');
 	cpu	:zet port map(
 		wb_clk_i	=>cpuclk,
 		wb_rst_i	=>not srstn,
@@ -2673,16 +2711,29 @@ begin
             bus_readdata=>dbus, bus_ack=>cpuack, bus_dword_ok=>BUF_DW, bus_readdata_high=>BUF_RDATH, unmapped_access=>open, debug_snapshot=>pCPUDebug,
             cache_invalidate=>cache_invalidate_cpu, cache_upper_ram_native=>cache_upper_ram_native,
             cache_window_write=>cache_window_write, cache_window_ab=>cache_window_ab,
-            ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
-            ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
-            ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
-            ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData,
+            ddr_address=>cpu_ddr_address, ddr_writedata=>cpu_ddr_writedata,
+            ddr_byteenable=>cpu_ddr_byteenable, ddr_burstcount=>cpu_ddr_burstcount,
+            ddr_read=>cpu_ddr_read, ddr_write=>cpu_ddr_write, ddr_busy=>cpu_ddr_busy,
+            ddr_readdatavalid=>cpu_ddr_valid, ddr_readdata=>pDdrReadData,
             pegc_analog16=>tGDC_COLORMODE, pegc_display_enable=>pc_display, pegc_gdc_5mhz=>pc_clk2,
             pegc_mode256=>pc_mode, pegc_single_page=>pc_single, pegc_line480=>pc_line480, pegc_pixel_clk=>grpclk,
             pegc_palette_index=>pc_index, pegc_palette_rgb=>pc_rgb,
             pegc_video_address=>pc_ddr_address, pegc_video_burstcount=>pc_ddr_count,
             pegc_video_read=>pc_ddr_read, pegc_video_busy=>pc_ddr_busy, pegc_video_readdatavalid=>pc_ddr_valid,
             pegc_video_readdata=>pc_ddr_data
+        );
+        dma_ddr: pc98_dma_ddr generic map(GATE_VALID=>1-PEGC_ENABLE) port map(
+            clk=>cpuclk, reset=>not srstn,
+            dma_address=>DMA_UADRw & DMA_OADR, dma_read=>DMAX_RD, dma_write=>DMAX_WR,
+            dma_writedata=>DMAX_WDAT, dma_ack=>DMAX_ACK, dma_readdata=>DMAX_RDAT,
+            cpu_address=>cpu_ddr_address, cpu_writedata=>cpu_ddr_writedata,
+            cpu_byteenable=>cpu_ddr_byteenable, cpu_burstcount=>cpu_ddr_burstcount,
+            cpu_read=>cpu_ddr_read, cpu_write=>cpu_ddr_write,
+            cpu_busy=>cpu_ddr_busy, cpu_readdatavalid=>cpu_ddr_valid,
+            ddr_address=>pDdrAddress, ddr_writedata=>pDdrWriteData,
+            ddr_byteenable=>pDdrByteEnable, ddr_burstcount=>pDdrBurstCount,
+            ddr_read=>pDdrRead, ddr_write=>pDdrWrite, ddr_busy=>pDdrBusy,
+            ddr_readdatavalid=>pDdrReadValid, ddr_readdata=>pDdrReadData
         );
         cyc<=stb;
         nmia<='0';
@@ -2778,6 +2829,7 @@ begin
 	-- Memory-to-FDC DMA must retain memory-device priority and odd-byte routing,
 	-- without pulling unrelated I/O read outputs into a floppy write register.
 	dma_mem_high <=
+		'1' & DMAX_RDAT when DMAX_RD='1' else
 		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' else
 		'1' & x"ff" when UMA_DOE='1' else
@@ -2786,6 +2838,7 @@ begin
 		'1' & tramdo(15 downto 8) when tramdoe(1)='1' else
 		'0' & x"ff";
 	dma_mem_low <=
+		'1' & DMAX_RDAT when DMAX_RD='1' else
 		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' else
 		'1' & x"ff" when UMA_DOE='1' else
@@ -3024,6 +3077,15 @@ begin
 		rstn	=>srstn
 	);
 	DMA_UADR<=DMA_UADRw(3 downto 0);
+	-- 386+ PC-98s decode all eight bank bits (A16-A23). Banks 10h-EFh are
+	-- extended RAM (Windows 95 puts its floppy DMA buffer there); F0h-FFh
+	-- alias the top 1 MB like the CPU's 15-16 MB aperture, so they and banks
+	-- 00h-0Fh keep the 20-bit fabric.
+	DMAX_EN<='1' when CPU486/=0 and EXT_RAM_MB/=0 and DMAen='1' and
+		DMA_UADRw(7 downto 4)/="0000" and DMA_UADRw(7 downto 4)/="1111" else '0';
+	DMAX_RD<=DMA_MRD and DMAX_EN;
+	DMAX_WR<=DMA_MWR and DMAX_EN;
+	DMAX_WDAT<=FDC_ODAT when FDC_DOE='1' else x"ff";
 	
 	DMAsel<="01" when DMA_OADR(0)='0' else
 			"10" when DMA_OADR(0)='1' else
@@ -3039,8 +3101,8 @@ begin
 		CPUOE		=>cpuoe,
 		DMAEN		=>DMAen,
 		DMAADDR	=>DMA_UADR & DMA_OADR(15 downto 1),
-		DMARD		=>DMA_MRD,
-		DMAWR		=>DMA_MWR,
+		DMARD		=>DMA_MRD and not DMAX_EN,
+		DMAWR		=>DMA_MWR and not DMAX_EN,
 		
 		BNK89SEL	=>BNK89_SEL,
 		BNKABSEL	=>BNKAB_SEL,
@@ -3090,7 +3152,7 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	MEMack<=(CB_ACK and not FONT_CB) or (G_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK or BUF_ACK;
+	MEMack<=(CB_ACK and not FONT_CB) or (G_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK or BUF_ACK or DMAX_ACK;
 	ack<=MEMack or iack;
 	
 --	DBIO	:diskbios port map(
@@ -4092,8 +4154,13 @@ begin
 		busy	=>FDC_BUSY,
 		mfm	=>FDE_MFM,
 		
+		-- Port 94h/CCh bit 7 is the FDC's RESET pin (NP2kai resets the FDC
+		-- there too); its release raises the reset interrupt (FDC.vhd).
+		RSTPIN	=>FDC_RESET,
+		RSTMOTOR=>FDC_MOTOR,
+		
 		clk		=>cpuclk,
-		rstn	=>srstn
+		rstn	=>srstn and (not FDC_RESET)
 	);
 
 	

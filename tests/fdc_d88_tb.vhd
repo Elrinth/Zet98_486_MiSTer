@@ -170,6 +170,8 @@ architecture test of fdc_d88_tb is
     signal fdc_indisk : std_logic_vector(1 downto 0);
     -- port 94h bit 3 (the BIOS writes 08h/18h; Xanadu's own driver 10h/00h)
     signal FDC_MOTOR : std_logic := '1';
+    signal fdc_reset : std_logic := '0';   -- port 94h bit 7
+    signal fdc_rstn : std_logic;
     constant FDC_FREADY : std_logic := '0';   -- drive READY counts (B228)
     constant FDC_H_Dn : std_logic := '1';     -- 1MB (2HD) interface
 
@@ -322,6 +324,7 @@ begin
     fdc_wdat <= dma_wdat when dma_dackn='0' else cpu_wdat;
     fdc_ready_in <= FDE_READYn and not FDC_FREADY;
     fdc_motorn <= (not FDC_MOTOR) & (not FDC_MOTOR);
+    fdc_rstn <= rstn and not fdc_reset;
     fdc_tc <= dma_tc;
     FD : entity work.FDC generic map(
         maxtrack=>85, maxbwidth=>(BR_300_D*SYSFREQ/1000000), rdytout=>800,
@@ -338,7 +341,8 @@ begin
         int0=>FDC_int, int1=>FDC_int, int2=>FDC_int, int3=>FDC_int,
         td0=>'1', td1=>'1', td2=>'1', td3=>'1',
         hmssft=>FDC_hmssft, busy=>FDC_BUSY, mfm=>FDE_MFM,
-        clk=>clk, rstn=>rstn);
+        RSTPIN=>fdc_reset, RSTMOTOR=>FDC_MOTOR,
+        clk=>clk, rstn=>fdc_rstn);
 
     FDC_USELbn <= "1110" when FDC_USEL="00" else "1101" when FDC_USEL="01" else
                   "1011" when FDC_USEL="10" else "1000" when FDC_USEL="11" else "1111";
@@ -417,6 +421,7 @@ begin
         variable res : bytes_t(0 to 6);
         variable t0 : time;
         variable failures : natural := 0;
+        variable rst_ms : real;
 
         procedure clocks(n : natural) is
         begin
@@ -816,6 +821,37 @@ begin
             fdt_hd <= FDC_H_Dn;
             clocks(100);
             read_id(1, 0, 0, 0, -1, 3);
+            -- Windows 95 HSFLOP: port 94h 98h -> 18h (RESET with the motor bit),
+            -- then it waits for the reset interrupt; SENSE answers 80h.
+            fdc_reset <= '1';
+            clocks(SYSFREQ / 100);             -- 10 us
+            fdc_reset <= '0'; t0 := now;
+            wait_int("FDC reset", 20 ms, rst_ms);
+            check_time("FDC reset interrupt", rst_ms, 5);
+            put(16#08#); get(res(0));
+            report "after reset: INT at " & real'image(rst_ms) & " ms, SENSE " & integer'image(res(0));
+            assert res(0) = 16#80# report "SENSE after reset is not 80h" severity error;
+            clocks(10);
+            assert FDC_INTn = '1' report "reset interrupt still pending after SENSE" severity error;
+            specify;
+            recalibrate;
+            read_id(1, 0, 0, 0, -1, 3);
+            read_data(1, 0, 0, 0, 0, 1, 3, 8, 1);
+            -- Windows 95's first READ DATA after the reset runs with DMA
+            -- channel 2 masked (nobody answers DRQ): the FDC must end it with
+            -- an overrun (IC=01, OR) and an interrupt, not wait forever.
+            dma_len <= 0; dma_go <= not dma_go;
+            clocks(10);
+            put(16#E6#); put(0); put(0); put(0); put(1); put(3); put(16#10#); put(0); put(16#FF#);
+            t0 := now;
+            wait_int("READ DATA without DMA", 2 sec, rst_ms);
+            for i in 0 to 6 loop get(res(i)); end loop;
+            show("READ DATA without DMA", 7);
+            check_time("READ DATA without DMA", rst_ms, LIMIT_MS);
+            if not (res(0) = 16#40# and (res(1) / 16) mod 2 = 1) then
+                report "READ DATA without DMA did not end with an overrun" severity error;
+                failures := failures + 1;
+            end if;
         elsif TEST = "fm" then
             -- a single-density track must still turn at 360 rpm
             index_period(0);

@@ -16,6 +16,24 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B266 lets **Windows 95 open floppy disks**. Opening FD (B:) used to hang
+Explorer; three things were missing. Windows' floppy driver resets the uPD765
+through port 94h bit 7 before every access and waits for the interrupt that
+follows; that bit only reset the drive timing, so no interrupt ever came. The
+bit now resets the FDC, and about 1 ms after the reset ends (motor bit set) the
+FDC interrupts with no status pending, as NP2kai does. Windows then reads into a
+DMA buffer above 1 MB (bank EDh with 64 MB), but the 8237's bank registers only
+reached the first 1 MB. DMA cycles with banks 10h-EFh now go to extended RAM in
+DDR (`rtl/cpu/pc98_dma_ddr.sv`), sharing the CPU's DDR port. Before the real
+read, Windows checks the disk with a DMA verify transfer, which ran as a
+memory-to-device cycle and made the FDC overrun, so Windows called every disk
+unformatted; verify now acknowledges the device without a memory cycle, like an
+8237. The NVRAM image slot and Load/Store SRAM menu entries are gone: nothing on
+the PC-98 side could read that memory, and removing it frees 16 KB of block RAM.
+90 MHz seed 2 (41,548 ALMs, worst slack -7.345 ns): passes QUALIFY, boots
+Windows 95 five times, opens a floppy inserted at boot or while Windows runs,
+shows the Star Cruiser II logo without stray pixels and runs Flame Zapper.
+
 B265 fixes **two reboots**. AIDS - Jinai Seijin restarted the PC right after
 starting: without a sound board ROM the core answers with a small stub (as
 NP2kai does), and its entry at CEE0:0008 returned with RETF although it is the
@@ -29,8 +47,7 @@ EOI). The interrupt fired again after every SENSE until Windows' kernel stack
 overflowed. A SENSE INTERRUPT STATUS now acknowledges it too. 90 MHz seed 3
 (39,570 ALMs, worst slack -7.386 ns): passes QUALIFY, boots Windows 95 five times,
 shows the Star Cruiser II logo without stray pixels and runs Flame Zapper
-Kotsujin. Opening a floppy in Windows 95 still hangs (also on B264); that is
-being worked on.
+Kotsujin.
 
 B264 reads **conventional-memory DWORDs in one bus transfer**: when a 32-bit
 read's low word comes from the main-RAM line buffer, the buffer returns the

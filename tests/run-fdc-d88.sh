@@ -2,6 +2,7 @@
 # D88 -> diskemu_mister (MiSTer sd model, SDRAM track cache) -> FDemu -> FDC,
 # with BIOS-like SPECIFY/RECALIBRATE/SEEK/READ ID/READ DATA over DMA.
 #   std : 2HD MFM sanity (+ the boot's FM READ ID probe must fail in time)
+#         and the 94h bit 7 reset interrupt (Windows 95 HSFLOP)
 #   fm  : Xanadu-style FM 26x128 track 0/1, IPL whole-track read, 360 rpm,
 #         every track word in the D88 density (gap 4a was the other one),
 #         then Xanadu's own driver reads with port 94h bit 3 (motor) clear

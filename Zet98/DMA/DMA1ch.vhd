@@ -173,10 +173,16 @@ begin
 			when st_WAITBUS =>
 				if(BUSACK='1')then
 					DAOE<='1';
-					if(DIRMODE="00" or DIRMODE="10")then
+					-- Verify (00) moves no data: like an 8237, acknowledge the
+					-- device without a memory cycle. The FDC takes its byte
+					-- on DACK+RD, so run the device read of a write transfer
+					-- and skip MEMWR. (It ran as a memory-to-device read,
+					-- writing into the FDC during READ DATA: overrun, and
+					-- Windows 95 called every floppy "not formatted".)
+					if(DIRMODE="10")then
 						MEMRD<='1';
 						state<=st_TRANS1;
-					elsif(DIRMODE="01")then
+					else
 						DACK<='1';
 						IORD<='1';
 						state<=st_TRANS0;
@@ -185,7 +191,7 @@ begin
 			when st_TRANS0 =>
 				state<=st_TRANS1;
 			when st_TRANS1 =>
-				if(DIRMODE="00" or DIRMODE="10")then
+				if(DIRMODE="10")then
 					if(MEMACK='1')then
 						DACK<='1';
 						IOWR<='1';
@@ -193,14 +199,16 @@ begin
 					end if;
 				else
 					if(IOWAIT='0')then
-						MEMWR<='1';
+						if(DIRMODE="01")then
+							MEMWR<='1';
+						end if;
 						state<=st_TRANS3;
 					end if;
 				end if;
 			when st_TRANS2 =>
 				state<=st_TRANS3;
 			when st_TRANS3 =>
-				if(DIRMODE="00" or DIRMODE="10")then
+				if(DIRMODE="10")then
 					if(IOWAIT='0')then
 						DACK<='0';
 						IOWR<='0';
@@ -217,7 +225,7 @@ begin
 						end if;
 					end if;
 				else
-					if(MEMACK='1')then
+					if(MEMACK='1' or DIRMODE="00")then
 						DACK<='0';
 						IORD<='0';
 						MEMWR<='0';
