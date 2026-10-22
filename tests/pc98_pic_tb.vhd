@@ -163,6 +163,36 @@ begin
         write_pic(false,'0',x"0b"); addr<='0'; cycles(2);
         assert mdout=x"00" report "nested handlers left a level in service" severity failure;
         write_pic(false,'0',x"0a");
+        -- A request masked after INT rose but before INTA (Farland Story II's
+        -- mouse polling toggles the IMR) is answered as a default IR7: the
+        -- master's IR7 is the cascade, so the slave supplies 17h. No ISR bit
+        -- is set, and the request is delivered once unmasked.
+        mirq(1)<='1'; cycles(2); mirq(1)<='0'; await_irq;
+        write_pic(false,'1',x"3f");
+        inta<='1'; wait for 1 ns;
+        assert mdoe='0' and sdoe='1' and sdout=x"17"
+            report "masked master request did not give the default IR7 vector 17h" severity failure;
+        wait until rising_edge(clk); cycles(1); inta<='0'; cycles(10);
+        write_pic(false,'0',x"0b"); write_pic(true,'0',x"0b"); addr<='0'; cycles(2);
+        assert mdout=x"00" and sdout=x"00" report "default IR7 set an ISR bit" severity failure;
+        write_pic(false,'0',x"0a"); write_pic(true,'0',x"0a");
+        write_pic(false,'1',x"3d"); await_irq;
+        acknowledge(false,x"09"); write_pic(false,'0',x"20"); cycles(12);
+        write_pic(true,'1',x"cf");
+        sirq(5)<='1'; cycles(2); sirq(5)<='0'; await_irq;
+        write_pic(true,'1',x"ef");
+        inta<='1'; wait for 1 ns;
+        assert mdoe='0' and sdoe='1' and sdout=x"17"
+            report "masked slave request did not give the default IR7 vector 17h" severity failure;
+        wait until rising_edge(clk); cycles(1); inta<='0'; cycles(10);
+        write_pic(false,'0',x"0b"); write_pic(true,'0',x"0b"); addr<='0'; cycles(2);
+        assert mdout=x"00" and sdout=x"00" report "default IR7 set an ISR bit" severity failure;
+        write_pic(false,'0',x"0a"); write_pic(true,'0',x"0a");
+        write_pic(true,'1',x"cf"); await_irq;
+        acknowledge(true,x"15"); write_pic(true,'0',x"20"); write_pic(false,'0',x"20"); cycles(12);
+        assert mint='0' report "unmasked mouse request repeated after EOI" severity failure;
+        write_pic(true,'1',x"ef");
+        report "PASS: requests masked before INTA give the default IR7 (INT 17h) without an ISR bit, then deliver";
         report "PASS: fully nested priority: IRQ1 over an unfinished cascade level, EOI ends the highest level";
         report "PASS: 32 MPU IRQ6 vectors/EOIs and simultaneous MIDI + cascaded IRQ12";
         report "PASS: polled MIDI withdrawal, reassertion, masking and held-level EOI";

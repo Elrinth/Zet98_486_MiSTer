@@ -87,6 +87,9 @@ signal	lIRM	:std_logic_vector(7 downto 0);
 signal	IRL		:std_logic_vector(7 downto 0);
 signal	LCx		:integer range 0 to 7;
 signal	INTnum	:integer range 0 to 7;
+-- A request was pending when the acknowledge began. Without one the 8259A
+-- answers a default IR7 and sets no ISR bit (datasheet, "Interrupt Sequence").
+signal	INTvalid	:std_logic;
 signal	PRI		:integer range 0 to 7;
 signal	IVECT	:std_logic_vector(7 downto 0);
 signal acknowledged_irq :integer range 0 to 7;
@@ -282,7 +285,7 @@ begin
 					end if;
 					-- Consume only the acknowledged request. EOI must not erase
 					-- a fresh edge that arrived while this IRQ was in service.
-					if(INTAm='1' and lINTA='0' and INTnum=i)then
+					if(INTAm='1' and lINTA='0' and INTnum=i and INTvalid='1')then
 						IRL(i)<='0';
 					end if;
 --					if(IMR(i)='1')then
@@ -345,11 +348,17 @@ begin
 	variable sel	:integer range 0 to 7;
 	begin
 		if(rstn='0')then
-			INTnum<=0;
+			INTnum<=7;
+			INTvalid<='0';
 		elsif(clk' event and clk='1')then
 			-- Freeze selection through the accepted INTA phase.
 			if INTAm='0' then
-			INTnum<=0;
+			-- A request masked or withdrawn after INT rose is answered as a
+			-- default IR7 (on the PC-98 master: the cascade, so the slave's
+			-- IR7, INT 17h). Vector 0 here made Farland Story II's mouse
+			-- polling (IMR toggles) call INT 08h, where PCM4DRV played noise.
+			INTnum<=7;
+			INTvalid<='0';
 			for i in 7 downto 0 loop
 				selx:=i+PRI;
 				if(selx>7)then
@@ -359,6 +368,7 @@ begin
 				end if;
 				if(IRR(sel)='1')then
 					INTnum<=sel;
+					INTvalid<='1';
 				end if;
 			end loop;
 			end if;
@@ -386,9 +396,11 @@ begin
 				lEOI<=lEOI-1;
 			end if;
 			if(INTAm='1' and lINTA='0')then
-				LCx<=INTnum;
-				ISnum<=INTnum;
-				ISR(INTnum)<='1';
+				if(INTvalid='1')then
+					LCx<=INTnum;
+					ISnum<=INTnum;
+					ISR(INTnum)<='1';
+				end if;
 			elsif(lINTA='1' and INTAm='0')then
 				if(AEOI='1')then
 					lEOI<=5;

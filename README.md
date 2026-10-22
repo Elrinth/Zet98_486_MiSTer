@@ -16,6 +16,21 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B267 removes the **static in Farland Story II's menus** (sound select, title,
+hardware checker). The game reads the mouse in a loop that masks and unmasks
+the keyboard and mouse interrupts around every call. When a request was masked
+after the PIC had raised INT but before the CPU acknowledged it, the core's 8259
+answered with IR0, so the CPU ran the timer interrupt (INT 08h). Farland's
+PCM4DRV plays its 4-bit PCM from that interrupt through an SSG channel, so each
+false timer tick set that channel's volume while the SSG noise generator was
+still on. A real 8259A answers such a request with a default IR7 and no
+in-service bit; on the PC-98 master IR7 is the cascade, so the slave supplies
+INT 17h, which the BIOS just acknowledges. The core now does the same
+(`tests/run-pic.sh` covers the masking race). 90 MHz seed 3 (41,550 ALMs, worst
+slack -7.578 ns): Farland Story II's menus are silent, passes QUALIFY, boots
+Windows 95 five times, shows the Star Cruiser II logo without stray pixels and
+runs Flame Zapper Kotsujin.
+
 B266 lets **Windows 95 open floppy disks**. Opening FD (B:) used to hang
 Explorer; three things were missing. Windows' floppy driver resets the uPD765
 through port 94h bit 7 before every access and waits for the interrupt that
