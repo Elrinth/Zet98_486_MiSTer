@@ -16,6 +16,15 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B268 is B267 rebuilt with a different placement (90 MHz, seed 10, worst slack
+-7.075 ns); the logic is unchanged. On a tester's MiSTer the B267 build (seed 3)
+garbled Night Slave's in-mission pilot captions and the game's graphics, while
+B266 was clean: at 90 MHz the core does not meet timing, so whether a placement
+works depends on the board's FPGA. Of B267 seeds 1-10, seeds 2 and 8 did not fit
+and seeds 6 and 7 failed on the reference board. Seed 10 passes QUALIFY, boots
+Windows 95 five times, opens a floppy disk under Windows 95 and shows Night
+Slave's captions cleanly.
+
 B267 removes the **static in Farland Story II's menus** (sound select, title,
 hardware checker). The game reads the mouse in a loop that masks and unmasks
 the keyboard and mouse interrupts around every call. When a request was masked
