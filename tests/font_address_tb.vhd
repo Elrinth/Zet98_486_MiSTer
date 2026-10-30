@@ -103,6 +103,19 @@ begin
                 end loop;
             end loop;
         end loop;
+        -- Port reads ignore bit 7 of A3h (NP2kai code & 7F7Fh): Zavas II writes
+        -- its rows with bit 7 set, e.g. A1=37h A3=84h, and reads both halves
+        -- through A5h bit 5. The half must follow A5h, not A3h bit 7.
+        for jis_row in 1 to 92 loop
+            for half in 0 to 1 loop
+                output(16#a1#,16#37#); output(16#a3#,jis_row); output(16#a5#,half*32+7);
+                left_sel:=bank; left_addr:=address;
+                output(16#a3#,jis_row+128);
+                assert bank=left_sel and address=left_addr
+                    report "A3h bit 7 changed the glyph (Zavas II) at row " & integer'image(jis_row) &
+                        " half " & integer'image(half) severity failure;
+            end loop;
+        end loop;
         -- A PC-98 marks a right half in text VRAM with bit 7 of the first code
         -- byte (the low byte); this core also uses bit 15. Both must select the
         -- same right-half address, which differs from the left half and keeps
@@ -150,6 +163,7 @@ begin
             end loop;
         end loop;
         report "PASS: zero-high-byte user character writes 56h/57h (both halves), ANK reads unchanged";
+        report "PASS: port reads ignore A3h bit 7, halves follow A5h bit 5, all rows";
         report "PASS: text-VRAM right halves by low-byte bit 7 and by bit 15, all rows";
         report "PASS: 8192 ANK addresses and 282624 FONT.ROM addresses across 92 JIS rows";
         report "PASS: full FONT.ROM loader bank boundaries, range limits and write strobe";

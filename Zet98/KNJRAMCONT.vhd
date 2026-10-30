@@ -96,9 +96,13 @@ begin
 	-- ZUN -G defines its characters this way and used to overwrite V and W.
 	CGWRITE<='1' when (iowr='1' and ioaddr=x"00a9") or (cgw_en='1' and cgw_wr='1') else '0';
 	GAIJI_ZERO<='1' when JISCODE(15 downto 8)=x"00" and JISCODE(6 downto 1)="101011" and CGWRITE='1' else '0';
+	-- Bit 7 of port A3h is dropped as well (NP2kai code & 7F7Fh): knjaddrcnv
+	-- reads it as the text-VRAM right-half mark, but for port and CG-window
+	-- reads only A5h bit 5 / the window address choose the half. Zavas II
+	-- writes A3h with bit 7 set and got the same half twice (doubled text).
 	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" and GAIJI_ZERO='0' else
-			cgw_right & JISCODE(14 downto 0) when cgw_en='1' else     -- odd address: right half
-			not CPOS(5) & JISCODE(14 downto 0);
+			cgw_right & JISCODE(14 downto 8) & '0' & JISCODE(6 downto 0) when cgw_en='1' else     -- odd address: right half
+			not CPOS(5) & JISCODE(14 downto 8) & '0' & JISCODE(6 downto 0);
 	CGKANJI<='0' when JISCODE(15 downto 8)=x"00" and GAIJI_ZERO='0' else '1';
 	-- Port A1h bit 7 is dropped like NP2kai's code & 7F7Fh, so user character
 	-- 7680h shares a slot with 7600h. It must stay a Kanji-ROM access even

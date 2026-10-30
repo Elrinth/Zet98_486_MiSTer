@@ -16,6 +16,17 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B269 fixes **doubled menu text in Zavas II** ("ZZAAVVAASS"). The game reads
+glyphs through the CG ports and writes port A3h with bit 7 set; the core passed
+that bit on as the text-VRAM right-half mark, so both halves of every Kanji
+glyph came out as the right half. CG port and CG-window reads now ignore it, as
+NP2kai does. The release bitstream is B268's placement with that one logic cell
+edited ([`scripts/eco-b269-zavas-cg.tcl`](scripts/eco-b269-zavas-cg.tcl)), so
+timing is identical to B268: new 90 MHz placements of the fix failed Windows 95
+on the reference board. It passes QUALIFY, boots Windows 95 five times, opens a
+floppy disk under Windows 95, and shows Zavas II's menu and Night Slave's
+mission start cleanly.
+
 B268 is B267 rebuilt with a different placement (90 MHz, seed 10, worst slack
 -7.075 ns); the logic is unchanged. On a tester's MiSTer the B267 build (seed 3)
 garbled Night Slave's in-mission pilot captions and the game's graphics, while

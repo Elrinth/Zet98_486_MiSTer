@@ -59,6 +59,23 @@ fi
 grep -q 'Font loader lost a bank boundary or the third bank' "$out/bad-loader.log" || { cat "$out/bad-loader.log"; exit 1; }
 echo 'PASS: original two-bank font loader rejected'
 
+# Restore the old port code that kept A3h bit 7 (Zavas II: doubled text).
+python3 - "$out/bad-a3.vhd" <<'PY'
+from pathlib import Path
+import sys
+s=Path('Zet98/KNJRAMCONT.vhd').read_text()
+new="JISCODE(14 downto 8) & '0' & JISCODE(6 downto 0)"
+assert s.count(new) == 2
+Path(sys.argv[1]).write_text(s.replace(new, "JISCODE(14 downto 0)"))
+PY
+ghdl -a --std=08 -fsynopsys --workdir="$out" Zet98/knjaddrcnv.vhd "$out/bad-a3.vhd" tests/font_address_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" font_address_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=error > "$out/bad-a3.log" 2>&1; then
+    echo 'FAIL: port code with A3h bit 7 kept passed' >&2; exit 1
+fi
+grep -q 'A3h bit 7 changed the glyph' "$out/bad-a3.log" || { cat "$out/bad-a3.log"; exit 1; }
+echo 'PASS: port code keeping A3h bit 7 rejected'
+
 # Text-VRAM right halves marked by bit 7 of the first code byte must not be
 # ignored (Flame Zapper Kotsujin's user-defined characters showed left halves).
 sed 's/l_rn<=kcode(15) or kcode(7);/l_rn<=kcode(15);/' Zet98/knjaddrcnv.vhd > "$out/bad-lr.vhd"
