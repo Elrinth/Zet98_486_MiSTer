@@ -39,7 +39,12 @@ port(
 	LINENUM2	:in std_logic_vector(9 downto 0);
 	LINENUM3	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
-	
+	-- GDC at 5 MHz (both clock latches): the pitch counts each planar line
+	-- twice, so a line advances by PITCH/2 words. NP2kai's makegrph keeps an
+	-- 80-byte line at both clocks the same way (pitch in bytes when the area
+	-- has the 5 MHz IM bit, doubled otherwise).
+	FAST	:in std_logic := '0';
+
 	clk		:in std_logic;
 	rstn	:in std_logic
 );
@@ -115,11 +120,12 @@ type area_lengths is array(0 to 3) of integer range 0 to 1023;
 signal base_pixel, base_frame : area_bases;
 signal length_pixel, length_frame : area_lengths;
 signal pitch_pixel : std_logic_vector(7 downto 0);
+signal fast_pixel : std_logic;
 signal repeat_pixel : std_logic_vector(4 downto 0);
 -- Display parameters for the frame being scanned: taken at its first line so
 -- that GDC writes during the frame apply from the next frame on, like the
 -- start address (a mid-frame change split the picture while games scroll).
-signal pitch_frame : std_logic_vector(7 downto 0);
+signal pitch_frame : std_logic_vector(7 downto 0);   -- words from one planar line to the next
 signal repeat_frame : std_logic_vector(4 downto 0);
 signal frame_seen : std_logic := '0';    -- a frame start was scanned since reset
 signal frame_start : std_logic := '0';   -- one clock at the first visible line
@@ -137,17 +143,24 @@ begin
     process(clk,rstn) begin
         if rstn='0' then
             base_pixel<=(others=>(others=>'0'));length_pixel<=(others=>0);
-            pitch_pixel<=(others=>'0');repeat_pixel<=(others=>'0');
+            pitch_pixel<=(others=>'0');fast_pixel<='0';repeat_pixel<=(others=>'0');
         elsif rising_edge(clk) then
             base_pixel<=(BASEADDR0,BASEADDR1,BASEADDR2,BASEADDR3);
             length_pixel<=(conv_integer(LINENUM0),conv_integer(LINENUM1),
                            conv_integer(LINENUM2),conv_integer(LINENUM3));
-            pitch_pixel<=PITCH;repeat_pixel<=DOTPLINE;
+            pitch_pixel<=PITCH;fast_pixel<=FAST;repeat_pixel<=DOTPLINE;
             -- Until the first frame start, the frame copies follow the live
             -- settings (reset may release in the middle of a frame).
             if frame_seen='0' or frame_start='1' then
-                base_frame<=base_pixel; pitch_frame<=pitch_pixel; repeat_frame<=repeat_pixel;
+                base_frame<=base_pixel; repeat_frame<=repeat_pixel;
                 length_frame<=length_pixel;
+                -- Windows 95's EGC driver at 5 MHz (pitch 80) showed every
+                -- other line, then a shifted copy, with the full pitch.
+                if fast_pixel='1' then
+                    pitch_frame<='0' & pitch_pixel(7 downto 1);
+                else
+                    pitch_frame<=pitch_pixel;
+                end if;
             end if;
         end if;
     end process;

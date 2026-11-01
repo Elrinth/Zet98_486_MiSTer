@@ -639,7 +639,8 @@ begin
 		LINENUM2=>glinenum2_pixel_source,
 		LINENUM3=>glinenum3_pixel_source,
 		PITCH	=>gpitch_pixel_source,
-		
+		FAST	=>pc_pixel_source(5),
+
 		clk		=>clk3,
 		rstn	=>pixel_rstn
 	);

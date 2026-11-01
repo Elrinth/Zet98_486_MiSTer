@@ -16,6 +16,21 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B270 fixes **planar graphics with the GDC at 5 MHz** (PC-9821 mode). At 5 MHz
+the GDC pitch counts each planar line twice (Windows 95's EGC driver sets pitch
+80 for a 640-dot line), but the core moved down a full pitch per line, so the
+screen showed every other line and then a shifted copy. A line now advances by
+half the pitch at 5 MHz, as in NP2kai: Battle Skin Panic 9821's GAINAX logo
+(with DIP switch 2-8 at 5 MHz and Open BIOS 2026-10-31) and Windows 95 under a
+5 MHz GDC display correctly. Like B269, the release bitstream is the previous
+placement with the change added by a Chip Planner ECO
+([`scripts/eco-b270-stride.tcl`](scripts/eco-b270-stride.tcl)): eight new logic
+cells feed the per-frame pitch registers, every other cell is functionally
+identical to B269 (compared over the whole netlist), and the worst slack is
+unchanged (-7.075 ns). It passes QUALIFY, boots Windows 95 five times, opens a
+floppy disk under Windows 95, and shows Zavas II's menu and Night Slave's
+mission start cleanly.
+
 B269 fixes **doubled menu text in Zavas II** ("ZZAAVVAASS"). The game reads
 glyphs through the CG ports and writes port A3h with bit 7 set; the core passed
 that bit on as the text-VRAM right-half mark, so both halves of every Kanji

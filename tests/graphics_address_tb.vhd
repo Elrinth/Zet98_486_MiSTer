@@ -18,7 +18,10 @@ use work.VIDEO_TIMING_pkg.all;
 entity graphics_address_tb is
     generic(REPEATS : natural := 0; FIRST_LENGTH : natural := 3;
             SECOND_LENGTH, THIRD_LENGTH, FOURTH_LENGTH : natural := 0;
-            EXPECT_BLANK_IDLE : boolean := true);
+            EXPECT_BLANK_IDLE : boolean := true;
+            -- 1: GDC at 5 MHz. The GDC pitch is then 2*STRIDE+1 (odd, to
+            -- check that the half drops the low bit) for the same line.
+            FAST : natural := 0);
 end entity;
 architecture test of graphics_address_tb is
     signal clk : std_logic := '0';
@@ -26,13 +29,18 @@ architecture test of graphics_address_tb is
     signal addr : std_logic_vector(13 downto 0);
     signal uc : natural range 0 to 7 := 1;
     signal hc : natural range 0 to 107 := 0;
-    signal vc : natural range 0 to 439 := 0;
+    signal vc : natural range 0 to VWIDTH-1 := 0;   -- 400-line frames use rows 0-439
     signal requests : natural := 0;
     constant BASE0 : natural := 16300;
     constant BASE1 : natural := 2048;
     constant BASE2 : natural := 9000;
     constant BASE3 : natural := 16383;
     constant STRIDE : natural := 43;
+    function bit_of(n : natural) return std_logic is
+    begin
+        if n=1 then return '1'; else return '0'; end if;
+    end function;
+    constant FAST_BIT : std_logic := bit_of(FAST);
     type naturals is array(0 to 3) of natural;
     constant BASES : naturals := (BASE0, BASE1, BASE2, BASE3);
     constant LENGTHS : naturals := (FIRST_LENGTH, SECOND_LENGTH, THIRD_LENGTH, FOURTH_LENGTH);
@@ -61,7 +69,9 @@ begin
         LINENUM0=>std_logic_vector(to_unsigned(FIRST_LENGTH,10)),
         LINENUM1=>std_logic_vector(to_unsigned(SECOND_LENGTH,10)),
         LINENUM2=>std_logic_vector(to_unsigned(THIRD_LENGTH,10)),
-        LINENUM3=>std_logic_vector(to_unsigned(FOURTH_LENGTH,10)), PITCH=>std_logic_vector(to_unsigned(STRIDE,8)),
+        LINENUM3=>std_logic_vector(to_unsigned(FOURTH_LENGTH,10)),
+        PITCH=>std_logic_vector(to_unsigned(STRIDE*(1+FAST)+FAST,8)),
+        FAST=>FAST_BIT,
         clk=>clk, rstn=>rstn);
     process(clk)
         variable word_index, logical_line, raster, expected, area, first : natural := 0;
