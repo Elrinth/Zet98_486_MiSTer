@@ -213,7 +213,8 @@ port(
 	LINENUM2	:in std_logic_vector(9 downto 0);
 	LINENUM3	:in std_logic_vector(9 downto 0);
 	PITCH	:in std_logic_vector(7 downto 0);
-	
+	FAST	:in std_logic := '0';
+
 	clk		:in std_logic;
 	rstn	:in std_logic
 );

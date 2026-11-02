@@ -71,14 +71,29 @@ org 0x1000
     cmp ax, 0x7777
     jne fail
 
-    call 0xe000:0                 ; ROM/peripherals must remain uncached
+    call 0xd800:0                 ; ROM/peripherals must remain uncached
     cmp ax, 0x5555
     jne fail
     mov dx, 0x7ff4
     out dx, ax
-    call 0xe000:0
+    call 0xd800:0
     cmp ax, 0x6666
     jne fail
+
+    ; BIOS code (E8000h-FFFFFh) is instruction-cached: once warm, a call
+    ; there fetches nothing from the bus.
+    call 0xe800:0                 ; warm
+    cmp ax, 0x1357
+    jne fail
+    mov dx, 0x7ff0
+    mov ax, 0x0301
+    out dx, ax
+    call 0xe800:0
+    cmp ax, 0x1357
+    jne fail
+    mov dx, 0x7ff0
+    mov ax, 0x0302
+    out dx, ax
 
     mov dx, 0x7ff0
     mov ax, 0x0101

@@ -16,6 +16,23 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B271 makes **BIOS calls fast**: the CPU now instruction-caches BIOS code
+(E0000h-FFFFFh). It ran uncached over the 16-bit bus at about 0.7 us per
+instruction. Elvira's bottom panel no longer flickers light blue: MS-DOS reads
+the clock through the BIOS about 38 times per frame there, each read kept
+interrupts off for 400 us, timer ticks were lost and the game's palette switch
+landed late. Tokimeki Bishoujo no longer seems to stop after its ANSWER logo:
+its LIO drawing took about three minutes to reach the title, now 30-45 seconds.
+Like B270, the release bitstream is the previous placement with the change
+added by a Chip Planner ECO
+([`scripts/eco-b271-bios-cache.tcl`](scripts/eco-b271-bios-cache.tcl)): one
+logic cell's function is edited, every other cell is functionally identical to
+B270 (compared over the whole netlist), and timing is unchanged (-7.075 ns).
+New 90 MHz placements of the change failed QUALIFY on the reference board. It
+passes QUALIFY, boots Windows 95 five times, opens a floppy disk under Windows
+95, loads ten times in a row, and shows Night Slave's mission start and Star
+Cruiser II's logo cleanly.
+
 B270 fixes **planar graphics with the GDC at 5 MHz** (PC-9821 mode). At 5 MHz
 the GDC pitch counts each planar line twice (Windows 95's EGC driver sets pitch
 80 for a 640-dot line), but the core moved down a full pitch per line, so the

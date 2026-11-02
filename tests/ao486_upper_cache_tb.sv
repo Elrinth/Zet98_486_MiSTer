@@ -3,6 +3,9 @@
 module ao486_upper_cache_tb;
     parameter UPPER_RAM_ICACHE = 1;
     parameter SKIP_INVALIDATION = 0;
+    // memory.sv instruction-caches E0000h-FFFFFh (BIOS code); 0 when the run
+    // script builds a copy without that range.
+    parameter BIOS_ICACHE = 1;
     reg clk = 0;
     always #5 clk = !clk;
     reg reset = 1, dma_active = 0;
@@ -44,6 +47,9 @@ module ao486_upper_cache_tb;
     wire interrupt_done;
     reg [15:0] bus_readdata = 0;
     reg bus_ack = 0;
+    // Single-word legacy transfers (the line buffer's dword path is not modelled).
+    wire bus_dword_ok = 0;
+    wire [15:0] bus_readdata_high = 0;
     wire [127:0] debug_snapshot;
     wire [28:0] ddr_address;
     wire [63:0] ddr_writedata;
@@ -76,6 +82,7 @@ module ao486_upper_cache_tb;
     integer cycles = 0, transactions = 0, phase = 0, delay_left = 0;
     integer dma_left = 0, dma_tests = 0, bank_writes = 0;
     integer start_cycles, start_fetches, measurements = 0, upper_fetches = 0;
+    integer bios_fetches = 0, bios_start = 0, bios_measurements = 0;
     reg [19:0] held_addr, mapped_addr;
     reg [15:0] held_data;
     reg [1:0] held_select;
@@ -121,10 +128,19 @@ module ao486_upper_cache_tb;
                            20'h07ff2: begin
                                dma_left = 300; dma_active = 1; dma_tests = dma_tests + 1;
                            end
-                           20'h07ff4: begin memory[20'he0001] = 8'h66; memory[20'he0002] = 8'h66; end
+                           20'h07ff4: begin memory[20'hd8001] = 8'h66; memory[20'hd8002] = 8'h66; end
                            20'h07ff0: begin
                                if (held_data == 16'h0101) begin
                                    start_cycles = cycles; start_fetches = upper_fetches;
+                               end else if (held_data == 16'h0301) begin
+                                   bios_start = bios_fetches;
+                               end else if (held_data == 16'h0302) begin
+                                   bios_measurements = bios_measurements + 1;
+                                   $display("BENCH bios=%0d bios_fetches=%0d", BIOS_ICACHE, bios_fetches-bios_start);
+                                   if (BIOS_ICACHE && bios_fetches != bios_start)
+                                       $fatal(1, "Cached BIOS code was fetched again");
+                                   if (!BIOS_ICACHE && bios_fetches == bios_start)
+                                       $fatal(1, "Uncached BIOS code was not fetched");
                                end else if (held_data == 16'h0201) begin
                                    measurements = measurements + 1;
                                    $display("BENCH upper=%0d cycles=%0d upper_fetches=%0d", UPPER_RAM_ICACHE,
@@ -132,9 +148,9 @@ module ao486_upper_cache_tb;
                                end else if (held_data == 16'hdead)
                                    $fatal(1, "Upper RAM cache coherence failure PC=%h bank89=%h bankab=%h", dut.cpu.eip, bank89, bankab);
                                else if (held_data == 16'h600d) begin
-                                   if (dma_tests != 1 || measurements != 1 || bank_writes != 3)
+                                   if (dma_tests != 1 || measurements != 1 || bank_writes != 3 || bios_measurements != 1)
                                        $fatal(1, "Missing upper-cache checks");
-                                   $display("PASS: full CPU upper=%0d: warm fetch, native store snoop, alias store, DMA, remap/restore, ROM bypass and loop checksum", UPPER_RAM_ICACHE);
+                                   $display("PASS: full CPU upper=%0d bios=%0d: warm fetch, native store snoop, alias store, DMA, remap/restore, ROM bypass, BIOS fetch and loop checksum", UPPER_RAM_ICACHE, BIOS_ICACHE);
                                    $finish;
                                end else $fatal(1, "Unexpected diagnostic word %h", held_data);
                            end
@@ -146,6 +162,7 @@ module ao486_upper_cache_tb;
                            if (held_select[0]) memory[mapped_addr] = held_data[7:0];
                            if (held_select[1]) memory[mapped_addr+20'd1] = held_data[15:8];
                        end else if (held_addr >= 20'h90000 && held_addr < 20'ha0000) upper_fetches = upper_fetches + 1;
+                       else if (held_addr >= 20'he8000) bios_fetches = bios_fetches + 1;
                        bus_readdata = {memory[mapped_addr+20'd1], memory[mapped_addr]};
                    end
                    bus_ack = 1; phase = 2; transactions = transactions + 1;
@@ -167,7 +184,8 @@ module ao486_upper_cache_tb;
         memory[20'hffff0]=8'hea; memory[20'hffff1]=0; memory[20'hffff2]=8'h10;
         memory[20'hffff3]=0; memory[20'hffff4]=0;
         memory[20'h10000]=8'hb8; memory[20'h10001]=8'haa; memory[20'h10002]=8'haa; memory[20'h10003]=8'hcb;
-        memory[20'he0000]=8'hb8; memory[20'he0001]=8'h55; memory[20'he0002]=8'h55; memory[20'he0003]=8'hcb;
+        memory[20'hd8000]=8'hb8; memory[20'hd8001]=8'h55; memory[20'hd8002]=8'h55; memory[20'hd8003]=8'hcb;
+        memory[20'he8000]=8'hb8; memory[20'he8001]=8'h57; memory[20'he8002]=8'h13; memory[20'he8003]=8'hcb;
         repeat (5) @(posedge clk);
         @(negedge clk); reset = 0;
     end

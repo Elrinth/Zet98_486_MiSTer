@@ -656,9 +656,18 @@ l1_icache #(
     .invalidate_all(PC98_MODE && cache_invalidate),
     // The existing PC-98 policy asserts this only for the native RAM bank;
     // remaps, alias writes and DMA invalidate all outstanding cache state.
+    // BIOS code (E8000h-FFFFFh) is instruction-cached too: uncached it ran at
+    // about 0.7 us per instruction over the 16-bit bus, so an INT 1Ch clock
+    // read kept interrupts off for 400 us (Elvira's raster split slipped) and
+    // LIO drawing crawled (Tokimeki Bishoujo). The window is ROM on real
+    // hardware and no code is written into it at run time, so its stores are
+    // not snooped. E0000h-E7FFFh (graphics plane memory, which nobody runs code
+    // from) shares the range check: B271's one-LUT ECO tests a19 & a18 & a17.
     .cache_enable(!PC98_MODE || pc98_cacheable(icache_req_phys_addr) ||
                   (cache_upper_ram && icache_req_phys_addr >= 32'h0008_0000 &&
-                   icache_req_phys_addr < 32'h000a_0000))
+                   icache_req_phys_addr < 32'h000a_0000) ||
+                  (icache_req_phys_addr >= 32'h000e_0000 &&
+                   icache_req_phys_addr < 32'h0010_0000))
 );
 
 endmodule
