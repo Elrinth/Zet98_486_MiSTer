@@ -354,7 +354,10 @@ audio_decimator audio_decimator (
 );
 // MT32-pi I2S audio arrives on CLK_AUDIO: scale it with the MIDI volume
 // setting and add it here, after the decimator, without a clock crossing.
-wire        mt32_use;
+// It is mixed whenever the USER port is set to MT32-pi, as ao486 does: an
+// MT32-pi without the MiSTer I2C control ("mister = on") never identifies
+// itself (mt32_use) but still plays.
+wire        mt32_use, mt32_sel;
 wire [15:0] mt32_i2s_l, mt32_i2s_r;
 function automatic [15:0] mt32_mix(input signed [15:0] core, input signed [15:0] s, input [2:0] g);
 	reg signed [20:0] p;
@@ -368,10 +371,10 @@ function automatic [15:0] mt32_mix(input signed [15:0] core, input signed [15:0]
 		mt32_mix = sum > 32767 ? 16'h7fff : sum < -32768 ? 16'h8000 : sum[15:0];
 	end
 endfunction
-reg  [3:0]  mt32_cfg_meta = 0, mt32_cfg = 0;     // {use, volume}
+reg  [3:0]  mt32_cfg_meta = 0, mt32_cfg = 0;     // {MT32-pi port, volume}
 reg  [15:0] audio_out_l = 0, audio_out_r = 0;
 always @(posedge CLK_AUDIO) begin
-	mt32_cfg_meta <= {mt32_use, status[37:35]};
+	mt32_cfg_meta <= {mt32_sel, status[37:35]};
 	mt32_cfg <= mt32_cfg_meta;
 	audio_out_l <= mt32_cfg[3] ? mt32_mix(dec_l, mt32_i2s_l, mt32_cfg[2:0]) : dec_l;
 	audio_out_r <= mt32_cfg[3] ? mt32_mix(dec_r, mt32_i2s_r, mt32_cfg[2:0]) : dec_r;
@@ -395,9 +398,9 @@ wire [15:0] joystick_r0, joystick_r1, joystick_l0, joystick_l1;
 wire        swap_sticks = status[40];
 // The USER port carries either the SNAC pads or an MT32-pi (OSD MT32-pi page).
 `ifdef ZET98_MPU_UART
-wire        mt32_sel = status[51];
+assign      mt32_sel = status[51];
 `else
-wire        mt32_sel = 1'b0;
+assign      mt32_sel = 1'b0;
 `endif
 wire  [6:0] snac_user_out, mt32_user_out;
 assign USER_OUT = mt32_sel ? mt32_user_out : snac_user_out;

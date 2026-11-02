@@ -16,6 +16,19 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B272 fixes **silent music with an mt32-pi**. The mt32-pi's audio comes back to
+the core over the USER port, and the core mixed it in only after the mt32-pi had
+identified itself over I2C, which it does only with `mister = on` in
+`mt32-pi.cfg`; ao486 mixes it whenever the mt32-pi is not muted. It is now mixed
+whenever **MT32-pi > USER port: MT32-pi** is selected. Games also need **Audio &
+Video > MPU MIDI: UART**: both settings are off by default (see "Playing Doom
+with General MIDI music"). Like B271, the release bitstream is the previous
+placement with one logic cell's function edited
+([`scripts/eco-b272-mt32-mix.tcl`](scripts/eco-b272-mt32-mix.tcl)); every other
+cell is functionally identical to B271 and timing is unchanged. It passes
+QUALIFY, boots Windows 95 five times, opens a floppy disk under Windows 95, and
+shows Night Slave's mission start cleanly.
+
 B271 makes **BIOS calls fast**: the CPU now instruction-caches BIOS code
 (E0000h-FFFFFh). It ran uncached over the 16-bit bus at about 0.7 us per
 instruction. Elvira's bottom panel no longer flickers light blue: MS-DOS reads
@@ -592,12 +605,14 @@ profile; with HIMEM only, the game plays its FM sound effects but no MIDI music.
   and choose **FluidSynth** in MidiLink (the MiSTer needs a SoundFont installed for
   FluidSynth, as for other cores).
 - **MT32-pi** (since B260): with an [mt32-pi](https://github.com/dwhinham/mt32-pi)
-  on the USER port, set **MT32-pi > USER port: MT32-pi** (MPU MIDI stays on UART).
-  The MIDI goes to the mt32-pi instead of MidiLink, and its audio is mixed into the
-  core's output at the **MIDI volume** setting. The USER port then no longer reads
-  SNAC pads. **Synth**, **Munt ROM** and **SoundFont** are sent to the mt32-pi as
-  its default configuration (as in the ao486 core). Pick Munt for games set to MT-32
-  ("MT") and FluidSynth with a GS SoundFont for games set to GS.
+  on the USER port, set both **MPU MIDI: UART** and **MT32-pi > USER port:
+  MT32-pi** (unlike ao486, neither is on by default). The MIDI goes to the mt32-pi
+  instead of MidiLink, and its audio is mixed into the core's output at the
+  **MIDI volume** setting (since B272 also without the I2C link). The USER port
+  then no longer reads SNAC pads. With `mister = on` in `mt32-pi.cfg`, **Synth**,
+  **Munt ROM** and **SoundFont** are sent to the mt32-pi as its default
+  configuration (as in the ao486 core). Pick Munt for games set to MT-32 ("MT")
+  and FluidSynth with a GS SoundFont for games set to GS.
 
 **2. DOS: load HIMEM.** Since B165 plain `DEVICE=HIMEM.SYS` is enough. On older builds, stock PC-98 `HIMEM.SYS` works when the
 included `Z98MEM.SYS` driver ([software/z98mem.asm](software/z98mem.asm); the same file is also shared as `Z98FIX.SYS`) loads
