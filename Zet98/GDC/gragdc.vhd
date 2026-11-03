@@ -388,9 +388,12 @@ begin
 					case FIFORDAT(7 downto 0) is
 					when x"00" =>	--RESET1
 						gdcreset<='1';
-					when x"6b" | x"0d" =>
+					-- SYNC's DE bit also turns the display on/off (uPD7220,
+					-- NP2kai). Libros de Chilam Balam starts its graphics
+					-- with a bare SYNC 0Fh and stayed black.
+					when x"6b" | x"0d" | x"0f" =>
 						GRAPHEN<='1';
-					when x"0c" =>
+					when x"0c" | x"0e" =>
 						GRAPHEN<='0';
 					when x"6c" =>
 						D_OP<=DO_DRAW;

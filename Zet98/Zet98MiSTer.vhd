@@ -370,7 +370,8 @@ port(
     PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
     PC_X :out std_logic_vector(9 downto 0);
     ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
-    LINE480 :in std_logic := '0'
+    LINE480 :in std_logic := '0';
+    TSCROLL :in std_logic_vector(14 downto 0) := (others=>'0')
 );
 end component;
 
@@ -1950,7 +1951,8 @@ end component;
 --clocks and resets
 signal	drstn	:std_logic;
 signal	srstn	:std_logic;
-signal video_settings_source,video_settings_received : std_logic_vector(194 downto 0);
+signal video_settings_source,video_settings_received : std_logic_vector(209 downto 0);
+signal CRTC_SSL, CRTC_SUR, CRTC_SDR : std_logic_vector(4 downto 0);
 signal	mrstn	:std_logic;
 signal	irstn	:std_logic;
 signal	vrstn	:std_logic;
@@ -2766,6 +2768,7 @@ begin
 		'1' & CB_RDAT0(15 downto 8)	when CB_RD1='1' and FONT_CB='0' and bussel(1)='1' else
 		'1' & G_RDAT0(15 downto 8)	when G_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8)		when tramdoe(1)='1' else
+		'1' & aramdo(15 downto 8)		when aramdoe(1)='1' else
 		'1' & BNK89_ODAT				when BNK89_DOE='1' else
 		'1' & BNKAB_ODAT				when BNKAB_DOE='1' else
 		'1' & KBod					when KBoe='1' else
@@ -2828,19 +2831,24 @@ begin
 		FDC_ODAT & FDC_ODAT when FDC_DOE='1' else x"ffff";
 	-- Memory-to-FDC DMA must retain memory-device priority and odd-byte routing,
 	-- without pulling unrelated I/O read outputs into a floppy write register.
+	-- 16-bit sources count only on the byte lane the DMA address selects: the
+	-- GRCG/EGC port drives both lanes on every graphics VRAM read, so an
+	-- unqualified low lane won odd addresses and a floppy write from VRAM
+	-- stored each even byte twice (Eye of the Beholder's save disk).
 	dma_mem_high <=
 		'1' & DMAX_RDAT when DMAX_RD='1' else
-		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' else
-		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' else
+		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' and bussel(1)='1' else
+		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' and bussel(1)='1' else
 		'1' & x"ff" when UMA_DOE='1' else
 		'1' & CB_RDAT0(15 downto 8) when CB_RD1='1' and FONT_CB='0' and bussel(1)='1' else
 		'1' & G_RDAT0(15 downto 8) when G_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8) when tramdoe(1)='1' else
+		'1' & aramdo(15 downto 8) when aramdoe(1)='1' else
 		'0' & x"ff";
 	dma_mem_low <=
 		'1' & DMAX_RDAT when DMAX_RD='1' else
-		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' else
-		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' else
+		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' and bussel(0)='1' else
+		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' and bussel(0)='1' else
 		'1' & x"ff" when UMA_DOE='1' else
 		'1' & CB_RDAT0(7 downto 0) when CB_RD1='1' and FONT_CB='0' and bussel(0)='1' else
 		'1' & G_RDAT0(7 downto 0) when G_RD1='1' and bussel(0)='1' else
@@ -3484,8 +3492,10 @@ begin
     video_settings_source(193 downto 184) <= tGDC_DISPAL;
     -- Port 09A8h 480-line mode (PEGC control).
     video_settings_source(194) <= pc_line480;
+    -- Text CRTC smooth scroll: SDR, SUR, SSL.
+    video_settings_source(209 downto 195) <= CRTC_SDR & CRTC_SUR & CRTC_SSL;
     gdc_settings : entity work.video_settings_transfer
-        generic map(WIDTH=>195)
+        generic map(WIDTH=>210)
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
     pVideoDebug <= '0' & video_settings_source(127 downto 57);
@@ -3544,6 +3554,7 @@ begin
         PC_RSTN=>pc_rstn,PC_LINE_ADDRESS=>pc_line_address,PC_X=>pc_x,
         ROUT8=>pVideoR,GOUT8=>pVideoG,BOUT8=>pVideoB,
         LINE480=>video_settings_received(194),
+        TSCROLL=>video_settings_received(209 downto 195),
 		GCOLOR		=>'0',
 		MONOSEL		=>(others=>'0'),
 		TXTEN		=>video_settings_received(119),
@@ -3746,7 +3757,11 @@ begin
 
 	
 	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,grpclk,srstn);
-	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,grpclk,srstn);
+	-- The attribute area keeps the upper byte of each word as memory (the display
+	-- uses the lower byte only), as NP2kai and MAME do: Ningyou Tsukai 2 uses
+	-- A0000h-A3FFFh as a bitmap buffer and copies it with word moves, and the
+	-- upper bytes read as FFh turned into visible attributes (screen garbage).
+	amem	:tvram port map(aramcs,aramaddr,bussel,MRD,MWR,mem_wdata,aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,grpclk,srstn);
 	vadat<=vadatw(7 downto 0);
 
 	
@@ -3996,6 +4011,19 @@ begin
 	SYSP_PCI<=SYSP_PCO;
 	BEEPON<=not SYSP_PCO(3);
 	
+	-- Text CRTC smooth scroll, five bits each as NP2kai crtc.c: 76h SSL (lines),
+	-- 78h SUR (scroll region start), 7Ah SDR (rows in the region). Tenbu
+	-- Sangokushi Seishi's mouse pointer needs it; 70h-74h stay unused.
+	CRTC76	:IO_WR generic map(x"0076") port map(ADR=>ioaddr_even, WR=>iowr, DAT=>io_wdata(7 downto 0),
+		bit7=>open, bit6=>open, bit5=>open, bit4=>CRTC_SSL(4), bit3=>CRTC_SSL(3),
+		bit2=>CRTC_SSL(2), bit1=>CRTC_SSL(1), bit0=>CRTC_SSL(0), clk=>cpuclk, rstn=>srstn);
+	CRTC78	:IO_WR generic map(x"0078") port map(ADR=>ioaddr_even, WR=>iowr, DAT=>io_wdata(7 downto 0),
+		bit7=>open, bit6=>open, bit5=>open, bit4=>CRTC_SUR(4), bit3=>CRTC_SUR(3),
+		bit2=>CRTC_SUR(2), bit1=>CRTC_SUR(1), bit0=>CRTC_SUR(0), clk=>cpuclk, rstn=>srstn);
+	CRTC7A	:IO_WR generic map(x"007a") port map(ADR=>ioaddr_even, WR=>iowr, DAT=>io_wdata(7 downto 0),
+		bit7=>open, bit6=>open, bit5=>open, bit4=>CRTC_SDR(4), bit3=>CRTC_SDR(3),
+		bit2=>CRTC_SDR(2), bit1=>CRTC_SDR(1), bit0=>CRTC_SDR(0), clk=>cpuclk, rstn=>srstn);
+
 	WR20	:IO_WR generic map(x"0020") port map(
 		ADR		=>ioaddr_even,
 		WR		=>iowr,

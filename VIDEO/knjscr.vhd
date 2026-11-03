@@ -48,7 +48,9 @@ port(
 
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    ATRSEL :in std_logic := '0'
+    ATRSEL :in std_logic := '0';
+    -- CRTC smooth scroll {SDR, SUR, SSL} (ports 7Ah, 78h, 76h).
+    TSCROLL :in std_logic_vector(14 downto 0) := (others=>'0')
 );
 end KNJSCR;
 
@@ -85,6 +87,9 @@ signal cursor_enable_pixel, cursor_blink_pixel :std_logic;
 signal cursor_upper_pixel, cursor_lower_pixel :integer range 0 to 19;
 signal attribute_mode_pixel :std_logic;
 signal cursor_rate_pixel :std_logic_vector(4 downto 0);
+signal scroll_pixel :std_logic_vector(14 downto 0);
+signal SCR_SSL, SCR_SUR, SCR_SDR :integer range 0 to 31;
+signal ROW_ADV :std_logic;
 
 component delayer
 generic(
@@ -132,12 +137,14 @@ begin
 			cursor_enable_pixel<='0'; cursor_blink_pixel<='0';
 			cursor_upper_pixel<=0; cursor_lower_pixel<=0;
 			cursor_rate_pixel<="01000"; attribute_mode_pixel<='0';
+			scroll_pixel<=(others=>'0');
 		elsif rising_edge(clk) then
 			base_addr_pixel<=BASEADDR; pitch_pixel<=PITCH;
 			cursor_addr_pixel<=CURADDR;
 			cursor_enable_pixel<=CURE; cursor_blink_pixel<=CBLINK;
 			cursor_upper_pixel<=CURUPPER; cursor_lower_pixel<=CURLOWER;
 			cursor_rate_pixel<=BLINKRATE; attribute_mode_pixel<=ATRSEL;
+			scroll_pixel<=TSCROLL;
 		end if;
 	end process;
 
@@ -219,7 +226,7 @@ begin
 		pf : entity work.font_prefetch port map(
 			clk=>clk, rstn=>rstn,
 			HUCOUNT=>HUCOUNT, VCOUNT=>VCOUNT, HCOMP=>HCOMP, DHCOMP=>DHCOMP, DVCOMP=>DVCOMP,
-			C_LIN=>C_LIN, BASEADDR=>base_addr_pixel, PITCH=>wPITCH,
+			ROW_ADV=>ROW_ADV, BASEADDR=>base_addr_pixel, PITCH=>wPITCH,
 			TRAMADR=>pf_tramadr, TRAMDRV=>pf_tramdrv, TRAMDAT=>TRAMDAT,
 			RD_CELL=>pf_cell, RD_LINE=>pf_line, RD_BYTE=>pf_byte,
 			FNTADR=>FNTADR, FNTRD=>FNTRD, FNTACK=>FNTACK, FNTDAT=>FNTDAT);
@@ -246,7 +253,11 @@ begin
 	-- counters advance sequentially, and character height is fixed per frame.
 	row_index : entity work.text_row_counter
 		generic map(FIRST_VISIBLE_LINE=>VIV, TOTAL_LINES=>VWIDTH)
-		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn);
+		port map(vcount=>VCOUNT, hcomp=>HCOMP, char_lines=>CHRLINES, row_index=>C_LIN,
+			clk=>clk, rstn=>rstn, ssl=>SCR_SSL, sur=>SCR_SUR, sdr=>SCR_SDR, row_advance=>ROW_ADV);
+	SCR_SSL<=conv_integer(scroll_pixel(4 downto 0));
+	SCR_SUR<=conv_integer(scroll_pixel(9 downto 5));
+	SCR_SDR<=conv_integer(scroll_pixel(14 downto 10));
 	C_COL<=0 when HUCOUNT<HIV else HUCOUNT-HIV;
 
 	-- The cursor is on for 2*BR frames and off for 2*BR frames (BR=0: 64),
@@ -319,7 +330,7 @@ begin
 			if(DHCOMP='1')then
 				gaiji_r<='0';
 				if(VCOUNT>VIV)then
-					if(C_LIN/=0)then
+					if(ROW_ADV='0')then
 						TRAMADRb<=C0ADDR;
 					else
 						C_LOW<=(C_LOW+1) mod 32;

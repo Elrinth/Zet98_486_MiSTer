@@ -33,7 +33,8 @@ port(
     HCOMP   : in std_logic;
     DHCOMP  : in std_logic;
     DVCOMP  : in std_logic;
-    C_LIN   : in integer range 0 to 31;
+    -- The renderer's line starts the next text row (text_row_counter).
+    ROW_ADV : in std_logic;
     BASEADDR: in std_logic_vector(12 downto 0);
     PITCH   : in std_logic_vector(12 downto 0);
     -- text RAM read port, borrowed during the scan window
@@ -110,7 +111,8 @@ architecture rtl of font_prefetch is
 begin
     -- Row bookkeeping, mirroring KNJSCR: the frame base is taken at the
     -- frame start, and the renderer advances a row at the delayed line start
-    -- after the first visible line when the line in the row returns to 0.
+    -- after the first visible line when the row counter starts a new row
+    -- (not on the CRTC smooth scroll's restart of the row after the region).
     process(clk, rstn)
         variable next_addr : std_logic_vector(12 downto 0);
     begin
@@ -131,7 +133,7 @@ begin
                 trig <= '1'; trig_side <= '1'; trig_addr <= next_addr;
                 row_addr <= next_addr;
             end if;
-            if DHCOMP='1' and VCOUNT>VIV and C_LIN=0 then
+            if DHCOMP='1' and VCOUNT>VIV and ROW_ADV='1' then
                 next_addr := row_addr + PITCH;
                 disp_side <= not disp_side;
                 trig <= '1'; trig_side <= disp_side; trig_addr <= next_addr;

@@ -84,6 +84,21 @@ begin
                 end loop;
             end loop;
         end loop;
+        -- A second byte below 20h reads the row's blank 20h slot (NEC and
+        -- NP2kai: no glyph), not the end of the row before (Bomber Quest).
+        for jis_row in 1 to 92 loop
+            output(16#a3#,jis_row);
+            for code in 1 to 31 loop          -- A1h=0 selects the ANK font
+                output(16#a1#,code);
+                for half in 0 to 1 loop
+                    output(16#a5#,half*32+7);
+                    expected_address:=16#1800#+(jis_row-1)*96*32+(1-half)*16+7;
+                    assert to_integer(unsigned(bank))*131072+to_integer(unsigned(address))=expected_address
+                        report "second byte below 20h borrowed a glyph at JIS row " & integer'image(jis_row) &
+                            " character " & integer'image(code) severity failure;
+                end loop;
+            end loop;
+        end loop;
         -- Independent FONT.ROM layout: 0x1800-byte ANK area, then 92 rows
         -- of 96 glyphs, each holding the 16 left bytes and 16 right bytes.
         for jis_row in 1 to 92 loop
@@ -166,6 +181,7 @@ begin
         report "PASS: port reads ignore A3h bit 7, halves follow A5h bit 5, all rows";
         report "PASS: text-VRAM right halves by low-byte bit 7 and by bit 15, all rows";
         report "PASS: 8192 ANK addresses and 282624 FONT.ROM addresses across 92 JIS rows";
+        report "PASS: second bytes below 20h read the row's blank slot, all rows";
         report "PASS: full FONT.ROM loader bank boundaries, range limits and write strobe";
         finish;
     end process;

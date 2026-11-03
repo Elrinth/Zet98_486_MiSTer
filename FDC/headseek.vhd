@@ -416,7 +416,12 @@ begin
 					null;
 				elsif(destset(su)='1')then
 					if(cur=desttrack)then
-						reach<='1';
+						-- No step: ST_NOP ends it on the next seek tick, as a uPD765
+						-- compares NCN with PCN on its step timing. Ending in the next
+						-- cycle put the interrupt ahead of the CPU's next instructions:
+						-- Star Cruiser's own floppy driver stores 'wait for the seek'
+						-- right after the last SEEK byte, its INT 13h handler had already
+						-- cleared that state, and it waited for good.
 						state<=ST_NOP;
 						busyb(su)<='1';
 					else
@@ -431,7 +436,10 @@ begin
 				end if;
 			when ST_NOP =>
 				busyb(su)<='0';
-				state<=st_IDLE;
+				if(esft='1')then
+					reach<='1';
+					state<=st_IDLE;
+				end if;
 			when ST_CONTROL =>
 				if(intbusy='0')then
 					if(cur=desttrack)then

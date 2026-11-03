@@ -98,7 +98,9 @@ port(
     PC_X :out std_logic_vector(9 downto 0);
     ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
     -- Port 09A8h bit 0: 480-line (31 kHz class) display, 520-line frame.
-    LINE480 :in std_logic := '0'
+    LINE480 :in std_logic := '0';
+    -- Text smooth scroll {SDR, SUR, SSL}: CRTC ports 7Ah, 78h, 76h.
+    TSCROLL :in std_logic_vector(14 downto 0) := (others=>'0')
 );
 end CRTC98;
 
@@ -177,7 +179,8 @@ port(
 
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    ATRSEL :in std_logic := '0'
+    ATRSEL :in std_logic := '0';
+    TSCROLL :in std_logic_vector(14 downto 0) := (others=>'0')
 );
 end component;
 
@@ -336,6 +339,7 @@ signal tpitch_video : std_logic_vector(7 downto 0);
 signal atrsel_video, atrsel_pixel_source :std_logic;
 signal hmode_video : std_logic;
 signal vlines_video : std_logic_vector(4 downto 0);
+signal tscroll_video, tscroll_pixel_source : std_logic_vector(14 downto 0);
 signal curaddr_video : std_logic_vector(12 downto 0);
 signal cure_video : std_logic;
 signal curupper_video : integer range 0 to 19;
@@ -402,6 +406,7 @@ begin
             atrsel_video <= ATRSEL;
             pc_video<=PC_FAST & PC_PAGE & PC_SINGLE & PC_MODE & PC_B1HI & PC_B0HI;
 			vlines_video <= VLINES;
+			tscroll_video <= TSCROLL;
 			curaddr_video <= CURADDR;
 			cure_video <= CURE;
 			curupper_video <= CURUPPER;
@@ -438,6 +443,7 @@ begin
             atrsel_pixel_source <= atrsel_video;
             pc_pixel_source<=pc_video;
             vlines_pixel_source <= vlines_video;
+            tscroll_pixel_source <= tscroll_video;
             curaddr_pixel_source <= curaddr_video;
             cure_pixel_source <= cure_video;
             curupper_pixel_source <= curupper_video;
@@ -562,6 +568,7 @@ begin
 		BASEADDR=>tbaseaddr_pixel_source,
 		HMODE	=>hmode_pixel_source,
         ATRSEL=>atrsel_pixel_source,
+        TSCROLL=>tscroll_pixel_source,
 		VLINES	=>vlines_pixel_source,
 		PITCH	=>tpitch_pixel_source,
 		

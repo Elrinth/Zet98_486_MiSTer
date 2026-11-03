@@ -13,7 +13,9 @@ use std.env.all;
 
 entity font_prefetch_tb is
 generic(SEED : positive := 1; VLINES : natural := 15; FRAMES : natural := 3;
-        PITCHV : natural := 80; MAXDELAY : natural := 12; BREAK_FONT : boolean := false);
+        PITCHV : natural := 80; MAXDELAY : natural := 12; BREAK_FONT : boolean := false;
+        -- CRTC smooth scroll {SDR, SUR, SSL} for both renderers.
+        TSCROLLV : natural := 0);
 end font_prefetch_tb;
 
 architecture tb of font_prefetch_tb is
@@ -55,7 +57,8 @@ begin
         CURADDR=>(others=>'1'), CURE=>'0', CURUPPER=>0, CURLOWER=>0, CBLINK=>'0', BLINKRATE=>"01000",
         BASEADDR=>std_logic_vector(to_unsigned(160,13)), HMODE=>'1',
         VLINES=>std_logic_vector(to_unsigned(VLINES,5)), PITCH=>std_logic_vector(to_unsigned(PITCHV,8)),
-        UCOUNT=>u, HUCOUNT=>hu, VCOUNT=>v, HCOMP=>hc, VCOMP=>vc, clk=>clk, rstn=>rstn);
+        UCOUNT=>u, HUCOUNT=>hu, VCOUNT=>v, HCOMP=>hc, VCOMP=>vc, clk=>clk, rstn=>rstn,
+        TSCROLL=>std_logic_vector(to_unsigned(TSCROLLV,15)));
     dut : entity work.KNJSCR generic map(PREFETCH=>true) port map(
         TRAMADR=>ta_d, TRAMDAT=>td_d, TRAMATR=>at_d, FROMSEL=>fs_d, FROMADR=>fa_d, FROMDAT=>fd_d,
         FNTADR=>fnt_adr, FNTRD=>fnt_rd, FNTACK=>fnt_ack, FNTDAT=>fnt_dat,
@@ -63,7 +66,8 @@ begin
         CURADDR=>(others=>'1'), CURE=>'0', CURUPPER=>0, CURLOWER=>0, CBLINK=>'0', BLINKRATE=>"01000",
         BASEADDR=>std_logic_vector(to_unsigned(160,13)), HMODE=>'1',
         VLINES=>std_logic_vector(to_unsigned(VLINES,5)), PITCH=>std_logic_vector(to_unsigned(PITCHV,8)),
-        UCOUNT=>u, HUCOUNT=>hu, VCOUNT=>v, HCOMP=>hc, VCOMP=>vc, clk=>clk, rstn=>rstn);
+        UCOUNT=>u, HUCOUNT=>hu, VCOUNT=>v, HCOMP=>hc, VCOMP=>vc, clk=>clk, rstn=>rstn,
+        TSCROLL=>std_logic_vector(to_unsigned(TSCROLLV,15)));
 
     -- Synchronous RAMs: registered address, data after the edge.
     process(clk) begin

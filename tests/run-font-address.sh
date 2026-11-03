@@ -87,3 +87,20 @@ if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=e
 fi
 grep -q 'low-byte bit 7 right half wrong' "$out/negative-lr.log" || { cat "$out/negative-lr.log"; exit 1; }
 echo 'PASS: ignoring the low-byte right-half flag rejected'
+
+# The old converter borrowed second bytes below 20h from the row before.
+python3 - "$out/bad-ten.vhd" <<'PY'
+from pathlib import Path
+import sys
+s=Path('Zet98/knjaddrcnv.vhd').read_text()
+new="ten<=x\"20\" when kcode(14 downto 13)=\"00\" else '0' & kcode(14 downto 8);"
+assert s.count(new) == 1
+Path(sys.argv[1]).write_text(s.replace(new, "ten<='0' & kcode(14 downto 8);"))
+PY
+ghdl -a --std=08 -fsynopsys --workdir="$out" "$out/bad-ten.vhd" Zet98/KNJRAMCONT.vhd tests/font_address_tb.vhd
+ghdl -e --std=08 -fsynopsys --workdir="$out" font_address_tb
+if ghdl -r --std=08 -fsynopsys --workdir="$out" font_address_tb --assert-level=error > "$out/bad-ten.log" 2>&1; then
+    echo 'FAIL: borrowing second bytes below 20h passed' >&2; exit 1
+fi
+grep -q 'second byte below 20h borrowed a glyph' "$out/bad-ten.log" || { cat "$out/bad-ten.log"; exit 1; }
+echo 'PASS: borrowing second bytes below 20h rejected'

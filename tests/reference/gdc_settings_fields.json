@@ -163,5 +163,10 @@
     "LINE480",
     1,
     "pc_line480"
+  ],
+  [
+    "TSCROLL",
+    15,
+    "CRTC_SDR & CRTC_SUR & CRTC_SSL"
   ]
 ]

@@ -73,6 +73,10 @@ module z486_xms_resident_tb;
         if(dut.cpu.core.i_issue) rate_issued<=rate_issued+1;
         if(dut.cpu.core.throttle_active_cycle) rate_active<=rate_active+1;
     end
+    // Conventional-memory DWORD reads (B264) are a Zet98 line-buffer feature;
+    // this memory model answers one word per acknowledge.
+    wire bus_dword_ok = 1'b0;
+    wire [15:0] bus_readdata_high = 16'h0;
     pc98_ao486 #(.EXT_RAM_MB(RAM_MB),.EXT_RAM_READ_CACHE(READ_CACHE),.LOWMEM_CACHE(LOWMEM_CACHE),.PEGC_ENABLE(PEGC_ENABLE),.EARLY_WRITE_COMPLETE(EARLY_WRITE_COMPLETE),.EXT_RAM_EARLY_READ_HIT(EARLY_READ_HIT),.EARLY_MEMORY_GRANT(EARLY_MEMORY_GRANT),.REGISTERED_MEMORY_READY(REGISTERED_MEMORY_READY),.EXT_RAM_DWORD_READ(EXT_RAM_DWORD_READ)) dut(
         .cpu_speed_sel(tb_cpu_speed),.pegc_analog16(1'b1),.pegc_display_enable(1'b1),.pegc_gdc_5mhz(1'b1),
         .pegc_mode256(pegc_mode256),.pegc_single_page(pegc_single_page),.pegc_line480(),.pegc_pixel_clk(clk),

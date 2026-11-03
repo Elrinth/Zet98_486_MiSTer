@@ -22,6 +22,7 @@ signal	mcode	:std_logic_vector(15 downto 0);
 signal	iskanji	:std_logic;
 signal	l_rn	:std_logic;
 signal	addr	:std_logic_vector(15 downto 0);
+signal	ten		:std_logic_vector(7 downto 0);
 begin
 	
 	iskanji<='0' when kcode(15 downto 8)=x"00" and force_kanji='0' else '1';
@@ -32,7 +33,12 @@ begin
 	-- half itself (see KNJSCR).
 	l_rn<=kcode(15) or kcode(7);
 	
-	mcode<='0' & kcode(6 downto 0) & '0' & kcode(14 downto 8);
+	-- A second byte below 20h is no character: NEC's ROM and NP2kai return an
+	-- empty slot. The 96-glyph FONT.ROM stride would borrow from the row
+	-- before, so use the row's blank 20h slot instead (Bomber Quest's English
+	-- menus pad words with ASCII spaces: 2020h became 5F01h and drew 5E61h).
+	ten<=x"20" when kcode(14 downto 13)="00" else '0' & kcode(14 downto 8);
+	mcode<='0' & kcode(6 downto 0) & ten;
 	
 	process(mcode)
 	variable tmpl	:std_logic_vector(15 downto 0);

@@ -16,6 +16,69 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B277 fixes six bugs found while testing the games on the PC-98 database site:
+
+- **Floppy writes from graphics memory.** A game that writes a floppy straight
+  out of graphics VRAM got every even byte twice on the disk: the graphics
+  memory port drives both halves of the data bus, and the floppy DMA took the
+  low byte also for odd addresses. Eye of the Beholder writes its save disk
+  this way; the save disk was unreadable ("open err !b:TEXT.BIN") and the game
+  could not start. Writes from main memory and text memory were already right.
+  [`tests/hardware/fdvram98.asm`](tests/hardware/fdvram98.asm) (FDVRAM.COM)
+  writes a sector from main memory, graphics VRAM and text VRAM to drive 2 and
+  reads it back.
+- **The graphics GDC's SYNC command switches the display.** Like a uPD7220
+  (and NP2kai), SYNC 0Fh now turns the graphics display on and 0Eh off; the
+  core only obeyed START/BCTRL. Libros de Chilam Balam turns its graphics on
+  with a bare SYNC 0Fh, so the screen stayed black after loading.
+  [`tests/hardware/gdcsync98.asm`](tests/hardware/gdcsync98.asm) (GDCSYNC.COM)
+  steps through BCTRL and SYNC on and off over a white band.
+- **Text attribute memory keeps the upper byte of each word.** The attribute
+  area (A2000h-A3FFFh) stored only the even bytes, so the odd bytes read back
+  as FFh. Like NP2kai (and MAME for word reads), it now keeps every byte
+  written. Ningyou Tsukai 2 uses text memory as a picture buffer and copies it
+  with word moves, and its story scenes were covered with coloured characters.
+  [`tests/hardware/tvramw98.asm`](tests/hardware/tvramw98.asm) (TVRAMW.COM)
+  writes text memory with every store width and reads attribute words back.
+- **A seek to the cylinder the head is already on takes a seek tick.** The
+  floppy controller finished such a SEEK in the cycle after the command, so its
+  interrupt came before the CPU's next instructions. Star Cruiser's own floppy
+  driver stores "wait for the seek" right after sending SEEK; its interrupt
+  handler had already reset that state, the game waited for good, and the
+  screen stayed black after the loader. A uPD765 checks the cylinder on its
+  step timing, and the core now ends such a seek on the next step tick.
+  [`tests/headseek_zero_tb.vhd`](tests/headseek_zero_tb.vhd)
+  ([`tests/run-headseek-zero.sh`](tests/run-headseek-zero.sh)) checks both
+  kinds of seek.
+- **Text smooth scroll (CRTC ports 76h, 78h and 7Ah).** The core had none of
+  the text CRTC's scroll registers. SSL (76h) moves a scroll region of the text
+  screen up by part of a character row; SUR (78h) and SDR (7Ah) give where the
+  region starts and how many rows it spans. Tenbu Sangokushi Seishi draws its mouse
+  pointer with text characters and places it to the line with SSL, so on the
+  core the pointer showed up to 15 lines below its hot spot and clicks landed
+  above the buttons (the difficulty dialog never answered). The text renderer
+  now follows NP2kai's maketext: the region's rows move up by SSL lines, and
+  the row after the region shows its first SSL lines and then starts over.
+  [`tests/text_scroll_tb.vhd`](tests/text_scroll_tb.vhd)
+  ([`tests/run-text-scroll.sh`](tests/run-text-scroll.sh)) checks every visible
+  line against NP2kai's loop for 840 register settings.
+- **Kanji codes with a second byte below 20h.** The font address converter
+  counted such a code from the row before and drew a stray glyph; NEC's ROM
+  (and NP2kai) give an empty cell there. Bomber Quest's English menus pad words
+  with ASCII spaces in full-width codes, and every menu line ended in a row of
+  kanji. [`tests/font_address_tb.vhd`](tests/font_address_tb.vhd) covers all
+  rows.
+
+All six fixes are a new 90 MHz placement (seed 4) of B272's sources with
+these changes. On a MiSTer it passed QUALIFY, FDVRAM, GDCSYNC and TVRAMW, five
+Windows 95 boots and the floppy hot-insert check, the Star Cruiser II logo
+placement check, and Night Slave, Star Cruiser, Tenbu Sangokushi Seishi and
+Bomber Quest run.
+
+[Open BIOS 2026-11-03](https://github.com/Elrinth/PC98_Open_BIOS/releases/tag/2026-11-03),
+released with it, gets Sorcerian past its loader and boots a game's own boot
+floppy before a mounted hard disk.
+
 B272 fixes **silent music with an mt32-pi**. The mt32-pi's audio comes back to
 the core over the USER port, and the core mixed it in only after the mt32-pi had
 identified itself over I2C, which it does only with `mister = on` in
