@@ -43,7 +43,7 @@ bash tests/run-pic.sh
 ghdl -a --std=08 --workdir="$out" VIDEO/text_row_counter.vhd tests/text_row_counter_tb.vhd
 ghdl -e --std=08 --workdir="$out" text_row_counter_tb
 ghdl -r --std=08 --workdir="$out" text_row_counter_tb --assert-level=error
-ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/VTIMING.vhd tests/video_line_timing_tb.vhd
+ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/video_timing_pkg.vhd VIDEO/VTIMING.vhd tests/video_line_timing_tb.vhd
 ghdl -e --std=08 -fsynopsys --workdir="$out" video_line_timing_tb
 ghdl -r --std=08 -fsynopsys --workdir="$out" video_line_timing_tb --assert-level=error
 ghdl -a --std=08 -fsynopsys --workdir="$out" VIDEO/synccont2.vhd rtl/video_retrace_cdc.vhd tests/video_retrace_cdc_tb.vhd

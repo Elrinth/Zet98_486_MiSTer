@@ -9,6 +9,7 @@ architecture test of pc98_data_bus_tb is
     signal pMPUReadData : std_logic_vector(7 downto 0) := x"5a";
     signal pMPUOE : std_logic := '0';
     signal legacy_bus : std_logic_vector(15 downto 0);
+    signal legacy_fdc_dma : std_logic_vector(7 downto 0);
     signal enables : std_logic_vector(33 downto 0) := (others => '0');
     alias BNK89_DOE : std_logic is enables(0);
     signal BNK89_ODAT : std_logic_vector(7 downto 0) := (others => '0');
@@ -85,6 +86,11 @@ architecture test of pc98_data_bus_tb is
     signal BUF_DOE : std_logic := '0';
     signal BUF_RDAT : std_logic_vector(15 downto 0) := (others => '0');
     signal SND_STUB_WORD : std_logic_vector(15 downto 0) := (others => '0');
+    -- Also inactive: the floppy media byte port and DMA above 1 MB (DDR).
+    signal FDC_MEDIA_DATA : std_logic_vector(7 downto 0) := (others => '0');
+    signal FDC_MEDIA_OE : std_logic := '0';
+    signal DMAX_RDAT : std_logic_vector(7 downto 0) := (others => '0');
+    signal DMAX_RD : std_logic := '0';
     signal bussel : std_logic_vector(1 downto 0) := (others => '0');
     signal cpuod : std_logic_vector(15 downto 0) := (others => '0');
     alias cpuoe : std_logic is enables(29);
@@ -324,8 +330,19 @@ begin
         assert dbus = x"c3c3" severity failure;
         bussel <= "10"; DMA_L2H <= '0'; DMA_H2L <= '1'; check;
         assert dbus = x"b6b6" severity failure;
+        -- A floppy write from graphics VRAM: the GRCG/EGC port drives both
+        -- lanes, and an odd DMA address must still take the odd byte (Eye of
+        -- the Beholder's save disk got every even byte twice).
+        CB_RD1 <= '0'; GCG_DOE <= '1'; GCG_ODAT <= x"e7d4";
+        bussel <= "01"; DMA_H2L <= '0'; DMA_L2H <= '1'; check;
+        assert fdc_wdata = x"d4" report "Even DMA byte from graphics VRAM" severity failure;
+        bussel <= "10"; DMA_H2L <= '1'; DMA_L2H <= '0'; check;
+        assert fdc_wdata = x"e7" report "Odd DMA byte from graphics VRAM" severity failure;
+        GCG_DOE <= '0';
         -- Memory-to-FDC reads: preserve the old memory-device priorities with
-        -- both DMA byte addresses. Unrelated I/O read enables are inactive.
+        -- both DMA byte addresses, except that the 16-bit GRCG/EGC and DBIO
+        -- ports count only on the lane the address selects (legacy_fdc_dma).
+        -- Unrelated I/O read enables are inactive.
         for trial in 1 to 5000 loop
             data_pattern;
             enables <= (others=>'0');
@@ -339,7 +356,7 @@ begin
                     bussel<="10"; DMA_H2L<='1'; DMA_L2H<='0';
                 end if;
                 check;
-                assert fdc_wdata=legacy_bus(7 downto 0)
+                assert fdc_wdata=legacy_fdc_dma
                     report "DMA memory-to-FDC byte changed" severity failure;
             end loop;
             -- FDC-to-memory writes select just one memory byte lane.

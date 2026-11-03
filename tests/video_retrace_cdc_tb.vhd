@@ -1,15 +1,17 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use std.env.all;
+use work.VIDEO_TIMING_pkg.all;
 
+-- VTIMING and synccont2 as CRTC98 instantiates them (package timing, 400-line frames).
 entity video_retrace_cdc_tb is end;
 architecture test of video_retrace_cdc_tb is
     signal video_clk, cpu20, cpu40 : std_logic := '0';
     signal rstn : std_logic := '0';
     signal pixel, unused, hc, vc : std_logic;
-    signal vcount : integer range 0 to 524;
-    signal hcount : integer range 0 to 99;
-    signal ucount : integer range 0 to 7;
+    signal vcount : integer range 0 to VWIDTH-1;
+    signal hcount : integer range 0 to HUWIDTH-1;
+    signal ucount : integer range 0 to DOTPU-1;
     signal vraw, hraw, v20, h20, v40, h40 : std_logic;
     signal v_edges, h_edges : natural := 0;
 begin
@@ -17,7 +19,8 @@ begin
     cpu20 <= not cpu20 after 25 ns;
     cpu40 <= not cpu40 after 12500 ps;
     timing : entity work.VTIMING port map(vcount,hcount,ucount,hc,vc,unused,pixel,video_clk,rstn);
-    raster : entity work.synccont2 port map(ucount,hcount,vcount,hc,vc,open,open,open,open,hraw,vraw,pixel,rstn);
+    raster : entity work.synccont2 generic map(VWIDTH=>VWIDTH, VVIS=>VVIS, VVIS2=>VVIS2)
+        port map(ucount,hcount,vcount,hc,vc,open,open,open,open,hraw,vraw,pixel,rstn);
     slow : entity work.video_retrace_cdc port map(video_clk,rstn,cpu20,rstn,vraw,hraw,v20,h20);
     fast : entity work.video_retrace_cdc port map(video_clk,rstn,cpu40,rstn,vraw,hraw,v40,h40);
 
@@ -72,7 +75,9 @@ begin
     process begin
         wait for 177 ns; rstn <= '1';
         wait for 35 ms;
-        assert v_edges >= 4 and h_edges > 2100 report "insufficient raster coverage" severity failure;
+        -- 35 ms of HWIDTH-pixel lines at 3 video clocks per pixel: every line's two HRTC edges
+        assert v_edges >= 4 and h_edges >= 2*(35 ms / (3*13334 ps*HWIDTH)) - 2
+            report "insufficient raster coverage" severity failure;
         rstn <= '0'; wait for 1 ns;
         assert (v20 & h20 & v40 & h40) = "0000" report "reset did not clear retrace status" severity failure;
         report "PASS: retrace CDC: real raster, 20/40 MHz edge counts, bounded latency, no off-clock status changes, reset";

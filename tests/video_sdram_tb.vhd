@@ -106,7 +106,7 @@ architecture test of video_sdram_tb is
     signal hold_checks : natural := 0;
     signal uc : natural range 0 to 7 := 0;
     signal hc : natural range 0 to 107 := 0;
-    signal vc : natural range 0 to 439 := VIV;
+    signal vc : natural range 0 to VWIDTH-1 := VIV;
     signal commands : natural := 0;
 begin
     memclk<=not memclk after 5 ns;

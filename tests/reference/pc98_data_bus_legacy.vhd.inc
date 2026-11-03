@@ -2,6 +2,9 @@
 -- Updated for block-RAM graphics VRAM (single-plane reads on their own
 -- G_RD1 lane after the SDRAM lane, which CPU font reads do not drive) and
 -- FONT.ROM banks 0/1 from SDRAM (one KNJ0 lane carries FONT_BYTE).
+-- Updated for B277: text attribute memory keeps the upper byte of each word
+-- (high lane), and memory-to-FDC DMA takes the 16-bit GRCG/EGC and DBIO
+-- ports only on the lane its address selects (legacy_fdc_dma).
 	legacy_bus(15 downto 8)<=
 		LDR_WDAT				when LDR_OE='1' else
 		cpuod(15 downto 8)		when cpuoe='1' and cpusel(1)='1' and DMAen='0' else
@@ -11,6 +14,7 @@
 		CB_RDAT0(15 downto 8)	when CB_RD1='1' and FONT_CB='0' and bussel(1)='1' else
 		G_RDAT0(15 downto 8)	when G_RD1='1' and bussel(1)='1' else
 		tramdo(15 downto 8)		when tramdoe(1)='1' else
+		aramdo(15 downto 8)		when aramdoe(1)='1' else
 		BNK89_ODAT				when BNK89_DOE='1' else
 		BNKAB_ODAT				when BNKAB_DOE='1' else
 		KBod					when KBoe='1' else
@@ -54,3 +58,13 @@
 		TSTMP_ODAT(7 downto 0)	when TSTMP_DOE='1' else
 		legacy_bus(15 downto 8)		when DMA_H2L='1' else
 		x"ff";
+
+	-- Valid for the memory-to-FDC DMA trials (I/O read enables inactive,
+	-- bussel = the DMA byte): an odd address skips the GRCG/EGC and DBIO low
+	-- lane and takes the next low-lane source, else the high byte.
+	legacy_fdc_dma <=
+		legacy_bus(7 downto 0)	when LDR_OE='1' or DMA_H2L='0' or (GCG_DOE='0' and DBIO_DOE='0') else
+		tramdo(7 downto 0)		when tramdoe(0)='1' else
+		aramdo(7 downto 0)		when aramdoe(0)='1' else
+		NVR_ODAT				when NVR_DOE='1' else
+		legacy_bus(15 downto 8);
