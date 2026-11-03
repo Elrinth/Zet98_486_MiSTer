@@ -16,6 +16,30 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B278 fixes the PC-9801-86 PCM interrupt after a short refill:
+
+- **PCM interrupt after a refill that stays below the threshold.** The 86
+  board's PCM interrupt came only when the FIFO level fell from above the
+  threshold or when playback was switched on. A program that keeps playing and
+  tops the FIFO up to less than the threshold never got its next interrupt.
+  Ultima VIII starts every speech sample that way (a FIFO reset and 256 bytes
+  against a 768-byte threshold) and feeds the rest from the interrupt, so its
+  intro stopped on the Guardian's hand after the first spoken line. As in
+  NP2kai, data written to the FIFO now also arms an interrupt that comes once
+  the writing has stopped (at the next sample tick without new data), if the
+  level is at or below the threshold. Windows 95's NEC73PCM and Policenauts'
+  AVSDRV refill above the threshold and keep one interrupt per refill.
+  [`tests/pcm86_u8_tb.sv`](tests/pcm86_u8_tb.sv) replays Ultima VIII's port
+  sequence from NP2kai.
+
+A new full placement no longer fits the FPGA (4,199-4,207 LABs needed, 4,191
+available), so B278 is B277's placement with this logic added as an ECO
+([`scripts/eco-b278-pcm-refill.tcl`](scripts/eco-b278-pcm-refill.tcl), eight new
+cells). On a MiSTer it passed QUALIFY, FDVRAM, GDCSYNC and TVRAMW, five
+Windows 95 boots and the floppy hot-insert check, the Star Cruiser II logo
+placement check and Night Slave, and Ultima VIII's intro plays to the title and
+the game starts.
+
 B277 fixes six bugs found while testing the games on the PC-98 database site:
 
 - **Floppy writes from graphics memory.** A game that writes a floppy straight

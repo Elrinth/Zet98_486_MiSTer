@@ -29,12 +29,20 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     // FIFO data writes arm one interrupt, sent as a fresh edge when the level
     // falls to the threshold while playing with interrupts enabled, or when
     // playback/interrupts are enabled with the level already there (never
-    // in the middle of a refill); no further edge until more data is written. A status request that
+    // in the middle of a refill); no further edge until more data is written.
+    // A burst that leaves the level at or below the threshold while playing
+    // with interrupts enabled also interrupts once it has ended (low_fire): at
+    // a sample tick with no FIFO data written since the previous tick, as in
+    // NP2kai, where data writes arm the request and the sample clock delivers
+    // it below the threshold. Ultima VIII starts every speech sample with a
+    // FIFO reset and 256 bytes against a 768-byte threshold and feeds the rest
+    // from that interrupt (without it the intro stopped). A status request that
     // returns while the FIFO is still low (above) must not interrupt again:
     // Windows 95's NEC73PCM acknowledges, refills and re-enables, and a
     // second interrupt with the FIFO refilled finds no queued wave buffer
     // and stops playback (the startup sound ended after a few chunks).
     reg req_arm, irq_line, above;
+    reg pushed, low_arm;          // FIFO data since the last sample tick; burst left the level low
     reg [1:0] irq_gap;
     reg [15:0] threshold, count;
     reg [14:0] rdptr, wrptr;
@@ -65,6 +73,8 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
     wire stereo = format[5:4]==3;
     wire [2:0] frame_bytes = format[6] ? (stereo ? 3'd2 : 3'd1) : (stereo ? 3'd4 : 3'd2);
     assign irq = irq_line && control[5] && irq_gap==0;
+    wire fire = !push && req_arm && next_count<=threshold && ((play_irq && above) || enable_write);
+    wire low_fire = low_arm && !pushed && sample_tick && play_irq && count<=threshold;
     assign opna_extended=board_control[0];
     assign opna_muted=board_control[1];
     // Linear volume approximation; analog mixer/recording paths are not modeled.
@@ -98,7 +108,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
         if(reset) begin
             control<=0; format<=8'h32; board_control<=0; volume<=0; mute<=0;
             irq_pending<=0; write_seen<=0; threshold<=128; ack_bit<=0;
-            req_arm<=0; irq_line<=0; irq_gap<=0; above<=0;
+            req_arm<=0; irq_line<=0; irq_gap<=0; above<=0; pushed<=0; low_arm<=0;
             count<=0; rdptr<=0; wrptr<=0; phase<=0;
             state<=IDLE; bytes_left<=0; byte_index<=0; active_format<=0;
             sample_bytes<=0; sample_l<=0; sample_r<=0; sample_valid<=0;
@@ -111,11 +121,15 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
             if(irq_gap!=0) irq_gap<=irq_gap-1'b1;
             above<=next_count>threshold;
             if(push) req_arm<=1;
-            else if(req_arm && next_count<=threshold &&
-                    ((play_irq && above) || enable_write)) begin
+            else if(fire) begin
                 // Low for two clocks first: an edge even if the line was high.
                 req_arm<=0; irq_line<=1; irq_gap<=2;
             end
+            if(push) low_arm<=1;
+            else if(irq_line) low_arm<=0;     // any interrupt pending ends the arm
+            if(low_fire) irq_line<=1;
+            if(push) pushed<=1;
+            else if(sample_tick) pushed<=0;
             if(pop) rdptr<=rdptr+1'b1;
             if(sample_tick && control[7] && !control[6] && control[5] && count<=threshold)
                 irq_pending<=1;
@@ -172,7 +186,7 @@ module pcm86 #(parameter CLOCK_HZ=20000000) (
             if(reset_fifo) begin
                 count<=0; rdptr<=0; wrptr<=0; state<=IDLE;
                 sample_l<=0; sample_r<=0; sample_valid<=0; irq_pending<=0;
-                req_arm<=0; irq_line<=0;
+                req_arm<=0; irq_line<=0; low_arm<=0;
             end
         end
     end
