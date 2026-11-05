@@ -50,6 +50,8 @@ port(
 	CNTLAT	:in std_logic;
 	OPMODE	:in std_logic_vector(2 downto 0);
 	OPBCD	:in std_logic;
+	CTLWR	:in std_logic;
+	CTLMODE	:in std_logic_vector(2 downto 0);
 	
 	CNTIN	:in std_logic;
 	TRIG	:in std_logic;
@@ -60,7 +62,14 @@ port(
 );
 end component;
 
+signal	CTLWR	:std_logic_vector(2 downto 0);
 begin
+
+	-- A control word (not a counter latch) for channel n: the channel sets
+	-- OUT's initial state and holds counting until its new count is loaded.
+	CTLWR(0)<='1' when CS='1' and WR='1' and ADDR="11" and WDAT(7 downto 6)="00" and WDAT(5 downto 4)/="00" else '0';
+	CTLWR(1)<='1' when CS='1' and WR='1' and ADDR="11" and WDAT(7 downto 6)="01" and WDAT(5 downto 4)/="00" else '0';
+	CTLWR(2)<='1' when CS='1' and WR='1' and ADDR="11" and WDAT(7 downto 6)="10" and WDAT(5 downto 4)/="00" else '0';
 
 	process(clk,rstn)begin
 		if(rstn='0')then
@@ -78,28 +87,28 @@ begin
 				case WDAT(7 downto 6) is
 				when "00" =>
 					if(WDAT(5 downto 4)="00")then
-						CNTLAT(0)<='1';
+						CNTLAT(0)<='1';		-- latch only: mode and BCD stay
 					else
 						RWMODE0<=WDAT(5 downto 4);
+						OPMODE0<=WDAT(3 downto 1);
+						OPBCD(0)<=WDAT(0);
 					end if;
-					OPMODE0<=WDAT(3 downto 1);
-					OPBCD(0)<=WDAT(0);
 				when "01" =>
 					if(WDAT(5 downto 4)="00")then
-						CNTLAT(1)<='1';
+						CNTLAT(1)<='1';		-- latch only: mode and BCD stay
 					else
 						RWMODE1<=WDAT(5 downto 4);
+						OPMODE1<=WDAT(3 downto 1);
+						OPBCD(1)<=WDAT(0);
 					end if;
-					OPMODE1<=WDAT(3 downto 1);
-					OPBCD(1)<=WDAT(0);
 				when "10" =>
 					if(WDAT(5 downto 4)="00")then
-						CNTLAT(2)<='1';
+						CNTLAT(2)<='1';		-- latch only: mode and BCD stay
 					else
 						RWMODE2<=WDAT(5 downto 4);
+						OPMODE2<=WDAT(3 downto 1);
+						OPBCD(2)<=WDAT(0);
 					end if;
-					OPMODE2<=WDAT(3 downto 1);
-					OPBCD(2)<=WDAT(0);
 				when others =>
 				end case;
 			end if;
@@ -129,6 +138,8 @@ begin
 		CNTLAT	=>CNTLAT(0),
 		OPMODE	=>OPMODE0,
 		OPBCD	=>OPBCD(0),
+		CTLWR	=>CTLWR(0),
+		CTLMODE	=>WDAT(3 downto 1),
 		
 		CNTIN	=>CNTIN(0),
 		TRIG	=>TRIG(0),
@@ -149,6 +160,8 @@ begin
 		CNTLAT	=>CNTLAT(1),
 		OPMODE	=>OPMODE1,
 		OPBCD	=>OPBCD(1),
+		CTLWR	=>CTLWR(1),
+		CTLMODE	=>WDAT(3 downto 1),
 		
 		CNTIN	=>CNTIN(1),
 		TRIG	=>TRIG(1),
@@ -169,6 +182,8 @@ begin
 		CNTLAT	=>CNTLAT(2),
 		OPMODE	=>OPMODE2,
 		OPBCD	=>OPBCD(2),
+		CTLWR	=>CTLWR(2),
+		CTLMODE	=>WDAT(3 downto 1),
 		
 		CNTIN	=>CNTIN(2),
 		TRIG	=>TRIG(2),

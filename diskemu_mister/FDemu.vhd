@@ -93,6 +93,7 @@ signal	modbreak	:std_logic;
 
 signal	curpos		:std_logic_vector(13 downto 0);
 signal	lcurpos		:std_logic_vector(13 downto 0);
+signal	revpos		:integer range 0 to 16383;
 
 signal	bitlenr,bitlenw		:integer range 0 to maxbwidth;
 
@@ -357,15 +358,28 @@ begin
 		end if;
 	end process;
 	
-	process(clk,rstn)begin
+	-- tracklen is the revolution in MFM byte times. An FM byte takes two, so
+	-- wrap by elapsed time, not by entry count: a single-density track must
+	-- still turn at 360 rpm (Xanadu's FM track 0 took 2x as long per turn).
+	process(clk,rstn)
+	variable step	:integer range 1 to 2;
+	begin
 		if(rstn='0')then
 			curpos<=(others=>'0');
+			revpos<=0;
 		elsif(clk' event and clk='1')then
 			if(txwr='1' or (WRENn='0' and rxed='1'))then
-				if(curpos>=tracklenx-1)then
+				if((txwr='1' and RDMFM='1') or (txwr='0' and WRMFM='1'))then
+					step:=1;
+				else
+					step:=2;
+				end if;
+				if(revpos+step>=conv_integer(tracklenx))then
 					curpos<=(others=>'0');
+					revpos<=0;
 				else
 					curpos<=curpos+1;
+					revpos<=revpos+step;
 				end if;
 			end if;
 		end if;

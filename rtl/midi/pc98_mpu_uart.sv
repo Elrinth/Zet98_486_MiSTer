@@ -2,7 +2,12 @@
 `timescale 1ns/1ps
 // Original implementation of the MPU-PC98II UART subset, E0D0/E0D2, IRQ6.
 // FF resets; FE is returned only outside UART mode. 3F enters UART mode and
-// returns FE. Intelligent sequencing/clock-to-host commands are NOT emulated.
+// returns FE. Outside UART mode (intelligent mode) every command is ACKed (FE),
+// E0-EF take one data byte, bytes after D0-D7/DF ("want to send data") go to
+// MIDI out, and clock-to-host (95/94) sends FD every E7-set number of internal
+// clocks at tempo (E0) x relative tempo (E1) x timebase (C2-C8), as NP2kai
+// times them. KAJA's MMD (Cyber Arms) drives its music from these FD ticks and
+// waits for every ACK without a timeout. Track sequencing is NOT emulated.
 // All state is on clk; serial input alone crosses through a two-flop synchronizer.
 module pc98_mpu_uart #(
     parameter integer CLOCK_HZ = 50000000,
@@ -39,7 +44,16 @@ module pc98_mpu_uart #(
     reg [FIFO_BITS:0] tx_count, rx_count;
     wire tx_full = tx_count == FIFO_DEPTH;
     wire rx_full = rx_count == FIFO_DEPTH;
-    wire tx_push = write_start && !io_address[1] && uart_mode && !tx_full;
+    // Intelligent-mode state.
+    reg param_pending = 0;               // next data write is an E0-EF parameter
+    reg [3:0] param_cmd = 0;
+    reg send_data = 0;                   // D0-D7/DF: data writes are MIDI bytes
+    reg clk_to_host = 0;
+    reg [7:0] tempo = 100, reltempo = 8'h40, hclk_data = 240;
+    reg [3:0] timebase = 5;              // timebase / 24
+    wire data_write = write_start && !io_address[1];
+    wire tx_data = data_write && (uart_mode || (send_data && !param_pending));
+    wire tx_push = tx_data && !tx_full;
     reg [9:0] tx_shift = 10'h3ff;
     reg [3:0] tx_bits = 0;
     reg [TIMER_BITS-1:0] tx_timer = 0;
@@ -86,10 +100,64 @@ module pc98_mpu_uart #(
             ack_pending <= reset_command && enable && !reset && !uart_mode;
         end else begin
             if (data_read && ack_pending) ack_pending <= 0;
-            if (command_write && !uart_mode && io_writedata[7:0] == 8'h3f) begin
-                uart_mode <= 1;
+            if (command_write && !uart_mode) begin
                 ack_pending <= 1;
+                if (io_writedata[7:0] == 8'h3f) uart_mode <= 1;
             end
+        end
+    end
+
+    // Intelligent-mode commands, parameters and the clock-to-host generator.
+    // Internal clocks per second = tempo x reltempo/64 x timebase*24 / 60,
+    // i.e. step_rate/160 with step_rate = tempo x reltempo x timebase.
+    localparam [39:0] STEP_DIV = 40'd160 * CLOCK_HZ;
+    reg [19:0] step_rate = 20'd100 * 8'h40 * 4'd5;
+    reg [39:0] step_acc = 0;
+    reg [7:0] hclk_rem = 0;
+    reg [1:0] hclk_cnt = 0;
+    reg fd_fire = 0;
+    wire [7:0] hclk_quarter = hclk_data[7:2] == 0 ? 8'd64 : {2'b0, hclk_data[7:2]};
+    function automatic [7:0] hclk_step(input [1:0] frac, input [1:0] idx);
+        hclk_step = hclk_quarter + ((frac == 1 && idx == 0) || (frac == 2 && !idx[0]) ||
+                                    (frac == 3 && idx != 3) ? 8'd1 : 8'd0);
+    endfunction
+    always @(posedge clk) begin
+        fd_fire <= 0;
+        step_rate <= tempo * reltempo * timebase;
+        if (clear) begin
+            param_pending <= 0; send_data <= 0; clk_to_host <= 0;
+            tempo <= 100; reltempo <= 8'h40; hclk_data <= 240; timebase <= 5;
+            step_acc <= 0; hclk_rem <= 0; hclk_cnt <= 0;
+        end else begin
+            if (command_write) begin
+                param_pending <= !uart_mode && io_writedata[7:4] == 4'he;
+                param_cmd <= io_writedata[3:0];
+                send_data <= !uart_mode && (io_writedata[7:3] == 5'b11010 || io_writedata[7:0] == 8'hdf);
+                if (!uart_mode) case (io_writedata[7:0])
+                    8'h94: clk_to_host <= 0;
+                    8'h95: clk_to_host <= 1;
+                    8'hc2, 8'hc3, 8'hc4, 8'hc5, 8'hc6, 8'hc7, 8'hc8: timebase <= io_writedata[3:0];
+                    default: ;
+                endcase
+            end else if (data_write && param_pending) begin
+                param_pending <= 0;
+                case (param_cmd)
+                    4'h0: begin tempo <= io_writedata[7:0]; reltempo <= 8'h40; end
+                    4'h1: reltempo <= io_writedata[7:0];
+                    4'h7: begin hclk_data <= io_writedata[7:0]; hclk_rem <= 0; end
+                    default: ;
+                endcase
+            end
+            if (uart_mode || !clk_to_host) begin
+                step_acc <= 0;
+            end else if (step_acc + step_rate >= STEP_DIV) begin
+                // One internal clock (NP2kai midiint): reload an empty
+                // countdown from the E7 pattern, count down, FD at zero.
+                step_acc <= step_acc + step_rate - STEP_DIV;
+                if (hclk_rem == 0) hclk_cnt <= hclk_cnt + 1'b1;
+                hclk_rem <= (hclk_rem == 0 ? hclk_step(hclk_data[1:0], hclk_cnt) : hclk_rem) - 1'b1;
+                fd_fire <= (hclk_rem == 0 ? hclk_step(hclk_data[1:0], hclk_cnt) : hclk_rem) == 1;
+            end else step_acc <= step_acc + step_rate;
         end
     end
 
@@ -100,7 +168,7 @@ module pc98_mpu_uart #(
             tx_head <= 0; tx_tail <= 0; tx_count <= 0;
             tx_overrun <= 0;
         end else begin
-            if (write_start && !io_address[1] && uart_mode && tx_full)
+            if (tx_data && tx_full)
                 tx_overrun <= 1;
             if (tx_push) begin
                 tx_fifo[tx_tail] <= io_writedata[7:0];
@@ -164,18 +232,19 @@ module pc98_mpu_uart #(
     wire rx_finish = rx_state == RX_STOP && rx_timer == 0;
     wire rx_pop = data_read && !ack_pending && rx_count != 0;
     wire rx_push = rx_finish && rx_sync && uart_mode && (!rx_full || rx_pop);
+    wire fd_push = fd_fire && !uart_mode && (!rx_full || rx_pop);   // clock to host
     always @(posedge clk) begin
         if (clear) begin
             rx_state <= RX_IDLE; rx_bit <= 0; rx_timer <= 0; rx_shift <= 0;
             rx_head <= 0; rx_tail <= 0; rx_count <= 0;
             rx_overrun <= 0; rx_framing_error <= 0;
         end else begin
-            if (rx_push) begin
-                rx_fifo[rx_tail] <= rx_shift;
+            if (rx_push || fd_push) begin
+                rx_fifo[rx_tail] <= rx_push ? rx_shift : 8'hfd;
                 rx_tail <= rx_tail + 1'b1;
             end
             if (rx_pop) rx_head <= rx_head + 1'b1;
-            case ({rx_push, rx_pop})
+            case ({rx_push || fd_push, rx_pop})
                 2'b10: rx_count <= rx_count + 1'b1;
                 2'b01: rx_count <= rx_count - 1'b1;
                 default: ;

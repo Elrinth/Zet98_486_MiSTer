@@ -1490,7 +1490,9 @@ begin
 --								execstate<=es_IDLE;
 --							end if;
 --						end if;
-						if(nturns<3)then
+						-- uPD765: No Data / Missing AM after the second index pulse (was the
+						-- fourth), so a wrong-density probe fails in <= 2 turns like hardware.
+						if(nturns<1)then
 							nturns<=nturns+1;
 --							if(nturns=2 and MT='1' and H='0')then
 --								nturns<=0;
@@ -1963,7 +1965,9 @@ begin
 					when es_CRCdc =>
 						if(crcdone='1')then
 							if(crczero='1')then
-								if(R<EOT)then
+								-- uPD765 ends the track only when R equals EOT (NP2kai too): a loader
+								-- reading R=49.. with the BIOS EOT of 8 keeps going (Legend of Heroes).
+								if(R/=EOT)then
 									incR<='1';
 								elsif(MT='1')then
 									if(HD='0')then
@@ -1993,7 +1997,7 @@ begin
 									INT<='1';
 									iSE<='1';
 									end_EXEC<='1';
-								elsif(R>=EOT and (MT='0' or HD='1'))then
+								elsif(R=EOT and (MT='0' or HD='1'))then
 									sEN<='1';
 									execstate<=es_IDLE;
 									sIC<="01";
@@ -2067,7 +2071,7 @@ begin
 --								execstate<=es_IDLE;
 --							end if;
 --						end if;
-						if(nturns<3)then
+						if(nturns<1)then
 --							if(nturns=2 and MT='1' and HD='0')then
 --								nturns<=0;
 --								setH<='1';
@@ -2589,7 +2593,7 @@ begin
 							if(bytecount>0)then
 								bytecount<=bytecount-1;
 							else
-								if(R<EOT)then
+								if(R/=EOT)then
 									incR<='1';
 								elsif(MT='1')then
 									if(HD='0')then
@@ -2904,7 +2908,7 @@ begin
 --					end case;
 				when cmd_READID =>
 					if(execstate/=es_seek and lindex='1' and indexb='0')then
-						if(nturns<3)then
+						if(nturns<1)then
 --							if(nturns=2 and MT='1' and HD='0')then
 --								nturns<=0;
 --								setH<='1';
@@ -3185,7 +3189,7 @@ begin
 
 				when cmd_SCANEQUAL | cmd_SCANLOWEQUAL| cmd_SCANHIGHEQUAL =>
 					if(execstate/=es_seek and lindex='1' and indexb='0')then
-						if(nturns<3)then
+						if(nturns<1)then
 							nturns<=nturns+1;
 						else
 							sHD<=HD;
@@ -3687,7 +3691,7 @@ begin
 					when es_CRCdc =>
 						if(crcdone='1')then
 							if(crczero='1')then
-								if(R<EOT)then
+								if(R/=EOT)then
 									incR<='1';
 								elsif(MT='1')then
 									if(HD='0')then
@@ -3717,7 +3721,7 @@ begin
 									INT<='1';
 									iSE<='1';
 									end_EXEC<='1';
-								elsif(R>=EOT)then
+								elsif(R=EOT)then
 									sEN<='1';
 									execstate<=es_IDLE;
 									sIC<="01";
