@@ -34,7 +34,8 @@ port(
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	FIRSTV	:in integer range 0 to VWIDTH-1 := VIV	-- first visible line
 );
 end GRAPHSCR98;
 
@@ -150,8 +151,8 @@ begin
 			BUFWE<='0';
 			case BUFSTATE is
 			when BS_IDLE =>
-				if(HUCOUNT=0 and UCOUNT=0 and VCOUNT>=VIV)then
-					if(VCOUNT=VIV)then
+				if(HUCOUNT=0 and UCOUNT=0 and VCOUNT>=FIRSTV)then
+					if(VCOUNT=FIRSTV)then
                         GRAMADRb<=base0_pixel;
                         C0ADDR<=base0_pixel;
                         LINEEN<='1';
@@ -214,7 +215,7 @@ begin
 	Vdelay	:delayer generic map(4) port map(VCOMP,DVCOMP,clk,rstn);
 	
 	process (clk,rstn)
-	variable VVISCOUNT :integer range 0 to VVIS-1;
+	variable VVISCOUNT :integer range 0 to VWIDTH-1;
 	variable VVISCV	:std_logic_vector(8 downto 0);
 	variable BNXTDOT	:std_logic_vector(7 downto 0);
 	begin
@@ -231,15 +232,15 @@ begin
 				RADR<=(others=>'0');
 			end if;
 
-			if(VCOUNT>=VIV)then
-				VVISCOUNT:=VCOUNT-VIV;
+			if(VCOUNT>=FIRSTV)then
+				VVISCOUNT:=VCOUNT-FIRSTV;
 			else
 				VVISCOUNT:=0;
 			end if;
 			VVISCV:=conv_std_logic_vector(VVISCOUNT,9);
 
 			if(UCOUNT=4)then
-				if(VCOUNT>=VIV and HUCOUNT>=HIV)then
+				if(VCOUNT>=FIRSTV and HUCOUNT>=HIV)then
 					NXTDOT0<=RDAT0;
 					NXTDOT1<=RDAT1;
 					NXTDOT2<=RDAT2;

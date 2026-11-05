@@ -319,7 +319,8 @@ port(
     PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
     PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
     PC_X :out std_logic_vector(9 downto 0);
-    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
+    LINES480 :in std_logic := '0'
 );
 end component;
 
@@ -1018,6 +1019,7 @@ port(
 	SL3			:out std_logic_vector(9 downto 0);
 	PITCH		:out std_logic_vector(7 downto 0);
 	EAD			:out std_logic_vector(12 downto 0);
+	LINES480	:out std_logic;
 	
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -2279,6 +2281,11 @@ signal	TSTMP_WAITn	:std_logic;
 --Machine status
 signal	IN00f0_ODAT	:std_logic_vector(7 downto 0);
 signal	IN00f0_DOE	:std_logic;
+signal	tGDC_LINES480	:std_logic;
+signal	lines480_video	:std_logic;
+signal	IO09A8_ODAT	:std_logic_vector(7 downto 0);
+signal	IO09A8_DOE	:std_logic;
+signal	r_09A8	:std_logic;
 
 --Disk emulator
 signal	EMUENSW	:std_logic;
@@ -2572,6 +2579,7 @@ begin
 		'1' & gGDCod					when gGDCoe='1' else
 		'1' & GPAL_ODAT				when GPAL_DOE='1' else
 		'1' & IN00f0_ODAT				when IN00f0_DOE='1' else
+		'1' & IO09A8_ODAT				when IO09A8_DOE='1' else
 		'1' & FDC_ODAT				when FDC_DOE='1' else
 		'1' & FDCNT_ODAT				when FDCNT_DOE='1' else
 		'1' & FDCIFS_ODAT				when FDCIFS_DOE='1' else
@@ -2896,6 +2904,20 @@ begin
 	
 	IN00f0_ODAT<="11101011";
 	IN00f0_DOE<='1' when ioaddr_even=x"00f0" and iord='1' else '0';
+
+	-- 09A8h: PC-9821 31 kHz select. The core always scans at 31 kHz; keep a
+	-- readable latch so BIOSes can detect and query the 480-line support.
+	process(cpuclk,srstn)begin
+		if(srstn='0')then
+			r_09A8<='0';
+		elsif(cpuclk' event and cpuclk='1')then
+			if(ioaddr_even=x"09a8" and iowr='1')then
+				r_09A8<=io_wdata(0);
+			end if;
+		end if;
+	end process;
+	IO09A8_ODAT<="0000000" & r_09A8;
+	IO09A8_DOE<='1' when ioaddr_even=x"09a8" and iord='1' else '0';
 	
 	IO043F_CS<='1' when ioaddr_odd=x"043f" else '0';
 	
@@ -3156,8 +3178,14 @@ begin
 
 		gclk		=>grpclk,
 		clk			=>vidclk,
-		rstn		=>video_logic_rstn
+		rstn		=>video_logic_rstn,
+		LINES480	=>lines480_video
 	);
+	-- 640x480 (PC-9821 31 kHz 480-line timing): the text GDC reports SYNC
+	-- active lines above 400; resolved in the video clock (pc98-lines480.sdc).
+	lines480_sync_inst : entity work.video_lines480_sync port map(
+		video_clk=>vidclk, video_rstn=>video_logic_rstn,
+		cpu_lines480=>tGDC_LINES480, lines480=>lines480_video);
 	
 	-- Keep retrace decoding out of the CPU read mux and PIC priority path.
 	retrace_status : entity work.video_retrace_cdc port map (
@@ -3318,6 +3346,7 @@ begin
 		SL3			=>open,
 		PITCH		=>tGDC_PITCH,
 		EAD			=>tGDC_CURADDR,
+		LINES480	=>tGDC_LINES480,
 
 		clk		=>cpuclk,
 		rstn	=>srstn

@@ -550,6 +550,7 @@ set_global_assignment -name SIGNALTAP_FILE gcrtc.stp
 set_global_assignment -name VHDL_FILE ../../rtl/reset_release.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/video_settings_transfer.vhd
 set_global_assignment -name VHDL_FILE ../../rtl/display_page_address.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/video_lines480_sync.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/storage/pc98_ide_bootrom.sv
 

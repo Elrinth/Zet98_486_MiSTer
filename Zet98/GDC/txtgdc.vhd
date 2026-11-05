@@ -45,6 +45,8 @@ port(
 	SL3			:out std_logic_vector(9 downto 0);
 	PITCH		:out std_logic_vector(7 downto 0);
 	EAD			:out std_logic_vector(12 downto 0);
+	-- SYNC active display lines above 400 (PC-9821 640x480 timing)
+	LINES480	:out std_logic;
 
 	clk		:in std_logic;
 	rstn	:in std_logic
@@ -105,6 +107,8 @@ signal	DATRD		:std_logic;
 signal	RDEXIST	:std_logic;
 signal	NUMRDAT	:integer range 0 to 15;
 signal	INTER	:std_logic;
+signal	ACTLINES	:std_logic_vector(9 downto 0);
+signal	r_LINES480	:std_logic;
 
 
 begin
@@ -185,6 +189,7 @@ begin
 			SL3<=(others=>'0');
 			PITCH<=(others=>'0');
 			r_EAD<=(others=>'0');
+			ACTLINES<=(others=>'0');
 			RNUMCLR<='0';
 			NUMRDAT<=0;
 		elsif(clk' event and clk='1')then
@@ -234,10 +239,14 @@ begin
 					end case;
 				else
 					case COMMAND is
-					when x"0e" | x"0f" =>
+					when x"00" | x"0e" | x"0f" =>	-- RESET/SYNC parameters
 						case PARNUM is
 						when 0 =>
 							INTER<=FIFORDAT(3);
+						when 6 =>
+							ACTLINES(7 downto 0)<=FIFORDAT(7 downto 0);
+						when 7 =>
+							ACTLINES(9 downto 8)<=FIFORDAT(1 downto 0);
 						when others =>
 						end case;
 					when x"4b" =>
@@ -424,5 +433,21 @@ begin
 	end process;
 	
 	RDEXIST<='1' when NUMRDAT>RDNUM else '0';
+
+	-- 480-line mode: active lines (SYNC P7/P8) above 400. AL=0 after a
+	-- reset means the default 400-line timing. One registered bit feeds
+	-- the video-clock synchronizer (pc98-lines480.sdc).
+	process(clk,rstn)begin
+		if(rstn='0')then
+			r_LINES480<='0';
+		elsif(clk' event and clk='1')then
+			if(ACTLINES>"0110010000")then
+				r_LINES480<='1';
+			else
+				r_LINES480<='0';
+			end if;
+		end if;
+	end process;
+	LINES480<=r_LINES480;
 
 end rtl;

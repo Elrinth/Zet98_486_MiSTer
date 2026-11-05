@@ -24,7 +24,8 @@ entity pegc_raster is
          line_start,line_enable,active:out std_logic;
          line_address:out std_logic_vector(18 downto 3);
          pixel_x:out std_logic_vector(9 downto 0);
-         mode_pixel:out std_logic);
+         mode_pixel:out std_logic;
+         first_visible:in integer range 0 to VWIDTH-1 := VIV);
 end;
 architecture rtl of pegc_raster is
     signal mode_p,single_p,page_p,fast_p,enable_p:std_logic;
@@ -60,8 +61,8 @@ begin
             end if;
         end if;
     end process;
-    row_start<='1' when hunit=0 and dot=0 and row>=VIV else '0';
-    process(address_now,left_now,repeat_now,partition_now,row,base0_p,base1_p,length0_p,length1_p,pitch_p,repeat_p,fast_p)
+    row_start<='1' when hunit=0 and dot=0 and row>=first_visible else '0';
+    process(address_now,left_now,repeat_now,partition_now,row,first_visible,base0_p,base1_p,length0_p,length1_p,pitch_p,repeat_p,fast_p)
         variable step:unsigned(15 downto 0);
     begin
         address_next<=address_now;left_next<=left_now;repeat_next<=repeat_now;partition_next<=partition_now;
@@ -69,7 +70,7 @@ begin
         if fast_p='0' then step:=shift_left(step,1);end if;
         -- GDC pitch has word granularity even in packed mode.
         step(0):='0';
-        if row=VIV then
+        if row=first_visible then
             address_next<=base0_p & '0';left_next<=rows(length0_p)-1;
             repeat_next<=repeat_p;partition_next<='0';
         elsif repeat_now/=0 then repeat_next<=repeat_now-1;
@@ -86,6 +87,6 @@ begin
     line_enable<=mode_p and enable_p;
     mode_pixel<=mode_p;
     line_address<=std_logic_vector(address_next) when single_p='1' else page_p & std_logic_vector(address_next(14 downto 0));
-    active<='1' when row>=VIV and hunit>=HIV else '0';
+    active<='1' when row>=first_visible and hunit>=HIV else '0';
     pixel_x<=std_logic_vector(to_unsigned((hunit-HIV)*DOTPU+dot,10)) when hunit>=HIV else (others=>'0');
 end;

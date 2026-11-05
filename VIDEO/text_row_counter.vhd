@@ -15,7 +15,8 @@ port (
     char_lines : in natural range 1 to 32;
     row_index : out natural range 0 to 31;
     clk : in std_logic;
-    rstn : in std_logic
+    rstn : in std_logic;
+    first_visible : in natural range 0 to TOTAL_LINES-1 := FIRST_VISIBLE_LINE
 );
 end text_row_counter;
 
@@ -26,7 +27,7 @@ begin
         if rstn = '0' then
             row <= 0;
         elsif rising_edge(clk) then
-            if vcount <= FIRST_VISIBLE_LINE then
+            if vcount <= first_visible then
                 row <= 0;
             elsif hcomp = '1' then
                 if row = char_lines-1 then

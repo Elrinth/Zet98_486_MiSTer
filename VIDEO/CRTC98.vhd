@@ -80,7 +80,8 @@ port(
     PC_LINE_START,PC_LINE_ENABLE,PC_ACTIVE,PC_PAGE_WRAP,PC_RSTN :out std_logic;
     PC_LINE_ADDRESS :out std_logic_vector(18 downto 3);
     PC_X :out std_logic_vector(9 downto 0);
-    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0)
+    ROUT8,GOUT8,BOUT8 :out std_logic_vector(7 downto 0);
+    LINES480 :in std_logic := '0'   -- 640x480: visible lines 45-524
 );
 end CRTC98;
 
@@ -152,7 +153,8 @@ port(
 
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    ATRSEL :in std_logic := '0'
+    ATRSEL :in std_logic := '0';
+    FIRSTV :in integer range 0 to VWIDTH-1 := VIV
 );
 end component;
 
@@ -186,7 +188,8 @@ port(
 	PITCH	:in std_logic_vector(7 downto 0);
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	FIRSTV	:in integer range 0 to VWIDTH-1 := VIV
 );
 end component;
 
@@ -220,7 +223,8 @@ port(
 	VRTC	:out std_logic;
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	FIRSTV	:in integer range 0 to VWIDTH-1 := VWIDTH-VVIS
 );
 end component;
 
@@ -311,6 +315,9 @@ signal gpitch_video : std_logic_vector(7 downto 0);
 signal dotpline_video : std_logic_vector(4 downto 0);
 signal graphen_video : std_logic;
 signal lowbl_video : std_logic;
+signal lines480_video, lines480_pixel_source, lines480_frame : std_logic;
+-- First visible raster line: 125 (640x400) or 45 (640x480), per frame.
+signal FIRSTV : integer range 0 to VWIDTH-1 := VIV;
 
 signal tbaseaddr_pixel_source : std_logic_vector(12 downto 0);
 signal tpitch_pixel_source : std_logic_vector(7 downto 0);
@@ -374,6 +381,7 @@ begin
 			graphen_video <= GRAPHEN;
 			txten_video <= TXTEN;
 			lowbl_video <= LOWBL;
+			lines480_video <= LINES480;
 		end if;
 	end process;
 
@@ -402,6 +410,7 @@ begin
             dotpline_pixel_source <= dotpline_video;
             graphen_pixel_source <= graphen_video;
             lowbl_pixel_source <= lowbl_video;
+            lines480_pixel_source <= lines480_video;
         end if;
     end process;
 
@@ -414,8 +423,21 @@ begin
         pitch=>gpitch_pixel_source,repeat_lines=>dotpline_pixel_source,
         hunit=>HUCOUNT,dot=>UCOUNT,row=>VCOUNT,
         line_start=>PC_LINE_START,line_enable=>PC_LINE_ENABLE,active=>PC_ACTIVE,
-        line_address=>PC_LINE_ADDRESS,pixel_x=>PC_X,mode_pixel=>pc_mode_pixel);
+        line_address=>PC_LINE_ADDRESS,pixel_x=>PC_X,mode_pixel=>pc_mode_pixel,
+        first_visible=>FIRSTV);
     PC_RSTN<=pixel_rstn;
+    -- The line count changes only at frame start, so a frame never mixes
+    -- the 400- and 480-line windows (the HDMI scaler re-measures once).
+    process(clk3,pixel_rstn) begin
+        if pixel_rstn='0' then
+            lines480_frame<='0';
+        elsif rising_edge(clk3) then
+            if VCOMP='1' then
+                lines480_frame<=lines480_pixel_source;
+            end if;
+        end if;
+    end process;
+    FIRSTV<=VIV2 when lines480_frame='1' else VIV;
     PC_PAGE_WRAP<=not pc_single_pixel;
     process(clk3,pixel_rstn) begin
         if pixel_rstn='0' then
@@ -491,7 +513,8 @@ begin
 		VCOMP	=>VCOMP,
 
 		clk		=>clk3,
-		rstn	=>pixel_rstn
+		rstn	=>pixel_rstn,
+		FIRSTV	=>FIRSTV
 	);
 	
 	ETXT	:TEXTSCR generic map(4,20,40) port map(
@@ -557,7 +580,8 @@ begin
 		PITCH	=>gpitch_pixel_source,
 		
 		clk		=>clk3,
-		rstn	=>pixel_rstn
+		rstn	=>pixel_rstn,
+		FIRSTV	=>FIRSTV
 	);
 
 	sync:synccont2 generic map(
@@ -572,8 +596,9 @@ begin
 	HSY		=>HSY,
 	VFP		=>VFP,
 	VSY		=>VSY
-) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,open,HRTC,VRTC,clk3,pixel_rstn);
-	-- RGB is already forced black outside VISIBLE (640x400). Capturing 480
+) port map(UCOUNT,HUCOUNT,VCOUNT,HCOMP,VCOMP,HSYNC,VSYNC,VISIBLE,open,HRTC,VRTC,clk3,pixel_rstn,FIRSTV);
+	-- RGB is forced black outside VISIBLE (640x400, or 640x480 when the
+	-- text GDC is programmed for 480 active lines). Capturing 480
 	-- lines included an 80-line black border and distorted HDMI aspect/scaling.
 	-- Use the same delayed visible window for DE; HS/VS and RGB do not change.
 	VIDEOEN<=VISIBLE;

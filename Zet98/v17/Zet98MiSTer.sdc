@@ -5,6 +5,7 @@ set pegc_enabled 0
 source [file join [file dirname [info script]] pc98-pixel.sdc]
 source [file join [file dirname [info script]] pc98-graphics-transfer.sdc]
 source [file join [file dirname [info script]] pc98-display-page.sdc]
+source [file join [file dirname [info script]] pc98-lines480.sdc]
 source [file join [file dirname [info script]] pc98-palette-transfer.sdc]
 source [file join [file dirname [info script]] pc98-video-settings.sdc]
 if {$pegc_enabled} {source [file join [file dirname [info script]] pc98-pegc-transfer.sdc]}

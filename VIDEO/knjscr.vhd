@@ -40,7 +40,8 @@ port(
 
 	clk		:in std_logic;
 	rstn	:in std_logic;
-    ATRSEL :in std_logic := '0'
+    ATRSEL :in std_logic := '0';
+    FIRSTV :in integer range 0 to VWIDTH-1 := VIV  -- first visible line
 );
 end KNJSCR;
 
@@ -193,7 +194,7 @@ begin
 	-- counters advance sequentially, and character height is fixed per frame.
 	row_index : entity work.text_row_counter
 		generic map(FIRST_VISIBLE_LINE=>VIV, TOTAL_LINES=>VWIDTH)
-		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn);
+		port map(VCOUNT,HCOMP,CHRLINES,C_LIN,clk,rstn,FIRSTV);
 	C_COL<=0 when HUCOUNT<HIV else HUCOUNT-HIV;
 
 	CBLINKINT<=conv_integer(cursor_rate_pixel);
@@ -260,7 +261,7 @@ begin
 
 -- Data	section
 			if(DHCOMP='1')then
-				if(VCOUNT>VIV)then
+				if(VCOUNT>FIRSTV)then
 					if(C_LIN/=0)then
 						TRAMADRb<=C0ADDR;
 					else
@@ -277,7 +278,7 @@ begin
 			end if;
 			
 			if(UCOUNT=6)then
-				if(VCOUNT>=VIV and HUCOUNT>=HIV)then
+				if(VCOUNT>=FIRSTV and HUCOUNT>=HIV)then
 					if((TRAMATR(bit_BL)='1' and BLKF='1') or TRAMATR(bit_ST)='0')then
 						BNXTDOT:=(others=>'0');
 					else

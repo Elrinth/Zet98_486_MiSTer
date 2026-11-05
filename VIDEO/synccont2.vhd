@@ -32,7 +32,8 @@ port(
 	VRTC	:out std_logic;
 	
 	clk		:in std_logic;
-	rstn	:in std_logic
+	rstn	:in std_logic;
+	FIRSTV	:in integer range 0 to VWIDTH-1 := VWIDTH-VVIS	-- first visible line
 );
 end synccont2;
 
@@ -61,13 +62,13 @@ begin
 	VSYNCN<=	'0' when (VCOUNT<VFP) else
 				'1' when (VCOUNT<(VFP+VSY)) else
 				'0';
-	VISIBLEN<=	'0' when VCOUNT<VIV else
+	VISIBLEN<=	'0' when VCOUNT<FIRSTV else
 					'0' when HUCOUNT<HIV else
 					'1';
 	VIDENEN<=	'0' when VCOUNT<VIV2 else
 					'0' when HUCOUNT<HIV else
 					'1';
-	VRTC		<=	'1' when VCOUNT<VIV else '0';
+	VRTC		<=	'1' when VCOUNT<FIRSTV else '0';
 	HRTC		<=	'1' when HUCOUNT<HIV else '0';
 	
 	process	(clk,rstn)begin
