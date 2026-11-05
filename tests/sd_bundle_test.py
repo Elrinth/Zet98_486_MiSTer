@@ -19,6 +19,13 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.one_asset({'assets':[{'name':'a.rbf'},{'name':'b.rbf'}]},lambda n:n.endswith('.rbf'))
 
+    def test_lower_clock_build_stays_out(self):
+        r={'assets':[{'name':'PC98_Z486_75_B279_20261105.rbf'},{'name':'PC98_Z486_90_B279_20261105.rbf'},{'name':'PC98_Bundle_B279.zip'}]}
+        self.assertEqual(m.core_rbf(r)['name'],'PC98_Z486_90_B279_20261105.rbf')
+        self.assertEqual(m.core_rbf({'assets':[{'name':'core.rbf'},{'name':'x.zip'}]})['name'],'core.rbf')
+        for names in [['a.rbf','b.rbf'],['PC98_Z486_90_a.rbf','PC98_Z486_90_b.rbf'],['dir/PC98_Z486_90_a.rbf'],[]]:
+            with self.assertRaises(ValueError): m.core_rbf({'assets':[{'name':n} for n in names]})
+
     def test_unpublished_or_unsafe_release_is_rejected(self):
         import json
         base={'draft':False,'prerelease':False,'tag_name':'B245'}

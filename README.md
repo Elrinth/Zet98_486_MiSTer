@@ -16,6 +16,50 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B279 makes Genesis load from its floppy and comes as two RBFs, for MiSTers
+that fail the 90 MHz builds:
+
+- **Floppy tracks longer than one turn.** Genesis (Square, 1985) has
+  copy-protected cylinders with 26 sectors plus three protection sectors whose
+  1,024 recorded bytes run into the next sectors. Laid out from the D88, such a
+  track is 11,984 bytes long, but one turn of a 2HD disk holds 10,416. The disk
+  emulator cut every track at one turn, so sector 13 lost its end (read error
+  B0h) and sectors 26 and 245 were never found: the game stopped at "E:". The
+  track builder now marks the sectors it lays out past the end of a turn, and
+  the emulated disk turns on to the last of them before the index pulse. Other
+  tracks are unchanged. [`tests/run-fdc-d88.sh`](tests/run-fdc-d88.sh) reads a
+  track with Genesis's layout (the old logic fails it), and
+  [`tests/hardware/fdread98.asm`](tests/hardware/fdread98.asm) is the INT 1Bh
+  probe used to find the failing read on a MiSTer.
+- **`PC98_Z486_75_B279_20261105.rbf`** runs the CPU at 75 MHz, 17% slower,
+  with more timing margin than any 90 MHz build (in Quartus's timing models
+  its slowest path has 0.6-0.8 ns more slack than in the 90 MHz build and in
+  B272 at the fast corner, 1.9 ns more at the slow corner). At 90 MHz the
+  FPGA has almost no margin left, so a placement that runs on one MiSTer can
+  fail on another: B267 garbled Night Slave on a tester's board but not on
+  ours, and six of the seven B277 placements we tried failed on our own
+  MiSTer. If B277 or B278 hangs or garbles games that ran in B272 on your
+  MiSTer, try this RBF and report the result.
+- **`PC98_Z486_90_B279_20261105.rbf`** is the same logic at 90 MHz, as
+  B256-B278. The SD bundle carries this one.
+
+Quartus now fits the core for area instead of speed (as the reference PC-9821
+core measured), which frees about 1,700 ALMs, so B278's PCM change and the
+floppy fix fit a full placement again (B278 was an ECO on B277's placement).
+The 75 MHz build is fitted with clk_sys timed for 90 MHz (an SDC line after
+`derive_pll_clocks`): the fitter places to the clock it is given, so a plain
+lower-clock fit relaxes the CPU paths and gives the margin away again. Placed
+that way, none of the 81.8 MHz (B249-B255 clock) seeds we built gained margin
+over the 90 MHz build, so the safe build runs at 75 MHz.
+
+On a MiSTer both RBFs passed QUALIFY, FDVRAM, GDCSYNC and TVRAMW, five
+Windows 95 boots and the floppy hot-insert check, the Star Cruiser II logo
+placement check and Night Slave. Genesis reaches MAKE CHARACTER, Ultima VIII's
+intro plays to the name book, and the four HDIs a tester saw hang on B277 and
+B278 (Virgin Dream, Sayonara no Mukougawa, V.R. Date May Club, Wedding
+Errantry) start and play with both floppy drives empty, as do Tenbu Sangokushi
+Seishi, Bomber Quest and Star Cruiser.
+
 B278 fixes the PC-9801-86 PCM interrupt after a short refill:
 
 - **PCM interrupt after a refill that stays below the threshold.** The 86

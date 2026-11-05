@@ -7,6 +7,12 @@ fm  : Xanadu-style 2HD boot disk. Tracks 0/1 are single density (D88
       IDs say C=0 H=1 (copy protection).
 loh : Legend of Heroes-style 2HD, 8 x 1024 MFM, D88 density 01h,
       track 0 IDs R=1,49..55, track 1 R=48..55.
+long: Genesis-style 2HD (Square, 1985; NFD converted to D88). Cylinder 1
+      head 0 holds 26 x 256-byte sectors interleaved 1,14,2,15,... plus three
+      1024-byte sectors R=245..247 with data CRC errors (D88 status B0) whose
+      recorded data runs into the next sectors on the real disk. Laid out one
+      after another that track is 11,984 bytes, longer than the 10,416-byte
+      2HD revolution: R13's data and all of R26 and R245 lie past it.
 Only the first few tracks are present; the others have offset 0.
 """
 import pathlib, struct, sys
@@ -14,11 +20,12 @@ import pathlib, struct, sys
 TRACKS = 164
 
 
-def sector(c, h, r, n, nsec, density, payload):
+def sector(c, h, r, n, nsec, density, payload, status=0):
     head = bytearray(16)
     head[:4] = bytes((c, h, r, n))
     struct.pack_into('<H', head, 4, nsec)
     head[6] = density
+    head[8] = status
     struct.pack_into('<H', head, 14, len(payload))
     return bytes(head) + payload
 
@@ -29,15 +36,15 @@ def payload(track, r, size, salt):
 
 
 def image(tracks, media=0x20):
-    """tracks: {track_number: [(c,h,r,n,density,bytes)]}"""
+    """tracks: {track_number: [(c,h,r,n,density,bytes[,status])]}"""
     d = bytearray(0x2b0)
     d[:8] = b'FDCTEST\0'
     d[0x1b] = media
     for t in sorted(tracks):
         struct.pack_into('<I', d, 0x20 + 4 * t, len(d))
         secs = tracks[t]
-        for c, h, r, n, den, data in secs:
-            d += sector(c, h, r, n, len(secs), den, data)
+        for c, h, r, n, den, data, *status in secs:
+            d += sector(c, h, r, n, len(secs), den, data, *status)
     struct.pack_into('<I', d, 0x1c, len(d))
     return bytes(d)
 
@@ -64,8 +71,21 @@ def loh():
     return image(tracks)
 
 
+def long():
+    order = [x for pair in zip(range(1, 14), range(14, 27)) for x in pair]
+    track2 = [(1, 0, r, 1, 0x00, payload(2, r, 256, 5)) for r in order]
+    # Genesis cylinder 1 head 0: R=246 first, R=247 after R=19, R=245 last
+    track2.insert(0, (1, 0, 246, 3, 0x00, payload(2, 246, 1024, 5), 0xB0))
+    track2.insert(14, (1, 0, 247, 3, 0x00, payload(2, 247, 1024, 5), 0xB0))
+    track2.append((1, 0, 245, 3, 0x00, payload(2, 245, 1024, 5), 0xB0))
+    tracks = {t: [(0, t, r, 3, 0x00, payload(t, r, 1024, 5)) for r in range(1, 9)] for t in (0, 1)}
+    tracks[2] = track2
+    tracks[3] = [(1, 1, r, 1, 0x00, payload(3, r, 256, 5)) for r in order]
+    return image(tracks)
+
+
 if __name__ == '__main__':
     out = pathlib.Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
-    for name, build in (('std', std), ('fm', fm), ('loh', loh)):
+    for name, build in (('std', std), ('fm', fm), ('loh', loh), ('long', long)):
         (out / f'{name}.d88').write_bytes(build())

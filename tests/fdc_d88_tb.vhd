@@ -115,7 +115,7 @@ entity fdc_d88_tb is
     generic(
         SYSFREQ : integer := 20000;          -- kHz, as Zet98MiSTer SYSFREQ
         IMAGE   : string  := "std.d88";
-        TEST    : string  := "std";          -- std | fm | loh
+        TEST    : string  := "std";          -- std | fm | loh | long | write | writefm | scan
         LAT     : positive := 12;            -- SDRAM completion latency (clocks)
         -- NEC BIOS FD80:2188 polls 28h*65536 times for the completion
         -- interrupt. On hardware (B228) a standard disk survives the boot's
@@ -749,7 +749,7 @@ begin
         end procedure;
 
         -- time between two index pulses on head hd of the current cylinder
-        procedure index_period(hd : natural) is
+        procedure index_period(hd : natural; lo : real := 160.0; hi : real := 175.0) is
             variable ta : time;
             variable ms : real;
         begin
@@ -759,8 +759,33 @@ begin
             wait until falling_edge(FDE_INDEXn) for 1 sec;
             ms := real((now - ta) / 1 us) / 1000.0;
             report "index period " & real'image(ms) & " ms";
-            if ms < 160.0 or ms > 175.0 then
-                report "revolution is " & real'image(ms) & " ms, 2HD turns at 360 rpm (166.7 ms)" severity error;
+            if ms < lo or ms > hi then
+                report "revolution is " & real'image(ms) & " ms, expected " & real'image(lo) & " to " &
+                    real'image(hi) & " (2HD turns at 360 rpm, 166.7 ms)" severity error;
+                failures := failures + 1;
+            end if;
+        end procedure;
+
+        -- READ DATA of one sector whose D88 status is B0: the sector must be
+        -- found and end with a data error (IC=01, ST1 DE). ST2 reads 00 here,
+        -- before and after the long-track change, although on hardware Open
+        -- BIOS saw DD (status B0 for Genesis's R13), so it is only shown.
+        procedure read_data_crc_error(mf, hd, c, h, r, n, eot : natural) is
+            variable ms : real;
+        begin
+            dma_len <= 128 * 2**n;
+            dma_go <= not dma_go;
+            wait until rising_edge(clk);
+            put(16#06# + mf*64); put(hd*4); put(c); put(h); put(r); put(n);
+            put(eot); put(16#1B#); put(16#FF#);
+            t0 := now;
+            wait_int("READ DATA (CRC error)", 3 sec, ms);
+            for i in 0 to 6 loop get(res(i)); end loop;
+            show("READ DATA C/H/R/N=" & integer'image(c) & "/" & integer'image(h) & "/" &
+                 integer'image(r) & "/" & integer'image(n) & " (data CRC error)", 7);
+            check_time("READ DATA (CRC error)", ms, LIMIT_MS);
+            if not (res(0) = 16#40# + hd*4 and res(1) = 16#20# and res(5) = r) then
+                report "READ DATA of a status B0 sector did not end with a data CRC error" severity error;
                 failures := failures + 1;
             end if;
         end procedure;
@@ -884,6 +909,25 @@ begin
             read_data(1, 1, 1, 0, 1, 48, 3, 8, 4);
             seek(1, 1);
             read_data(1, 3, 1, 1, 1, 53, 3, 8, 3);
+        elsif TEST = "long" then
+            -- Genesis: cylinder 1 head 0 is 11,984 bytes as laid out from the
+            -- D88, longer than the 10,416-byte 2HD revolution. Its loader reads
+            -- R13 (ID before, data across the 10,416th byte), R26 and R245 lie
+            -- wholly past it. That track turns once over its whole length.
+            seek(0, 1);
+            index_period(0, 185.0, 199.0);           -- 11,984 / 10,416 x 166.7 ms
+            read_data(1, 2, 0, 1, 0, 13, 1, 26, 1);
+            read_data(1, 2, 0, 1, 0, 12, 1, 26, 2);
+            read_data(1, 2, 0, 1, 0, 26, 1, 26, 1);
+            read_data(1, 2, 0, 1, 0, 1, 1, 26, 1);
+            read_data_crc_error(1, 0, 1, 0, 247, 3, 26);
+            read_data_crc_error(1, 0, 1, 0, 245, 3, 26);
+            -- a track of normal length still turns at 360 rpm
+            index_period(1);
+            read_data(1, 3, 1, 1, 1, 13, 1, 26, 2);
+            seek(0, 0);
+            index_period(0);
+            read_data(1, 0, 0, 0, 0, 1, 3, 8, 2);
         elsif TEST = "write" then
             -- MFM 2HD (std image): sectors 2-3 of track 0, then track 3 R=5
             write_verify(1, 0, 0, 0, 0, 2, 3, 8, 2, 1);

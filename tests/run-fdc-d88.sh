@@ -7,6 +7,7 @@
 #         every track word in the D88 density (gap 4a was the other one),
 #         then Xanadu's own driver reads with port 94h bit 3 (motor) clear
 #   loh : Legend of Heroes-style R=1,49..55 read with the BIOS EOT of 8
+#   long: Genesis-style cylinder longer than one 2HD revolution (R13, R26, R245)
 # Optional private images (not in the repo), full load then per-cylinder scan:
 #   FDC_D88_IMAGES="/path/xan1.d88 /path/loh1.d88" tests/run-fdc-d88.sh
 # FDC_D88_RATES (kHz, default 20000) selects SYSFREQ; 90000 is ~5x slower.
@@ -51,7 +52,7 @@ expect_fail() { # name pattern workdir test image [generics...]
 
 build "$out/new" FDC/FDC.vhd diskemu_mister/FDemu.vhd diskemu_mister/diskemu_mister.vhd
 for rate in ${FDC_D88_RATES:-20000}; do
-    for t in std fm loh; do
+    for t in std fm loh long; do
         run "$out/new" "$t" "$out/$t.d88" -gSYSFREQ="$rate" --assert-level=error
     done
     run "$out/new" write "$out/std.d88" -gSYSFREQ="$rate" --assert-level=error
@@ -76,6 +77,11 @@ sed 's/step:=2;/step:=1;/' diskemu_mister/FDemu.vhd > "$out/FDemu-fm.vhd"
 ! cmp -s diskemu_mister/FDemu.vhd "$out/FDemu-fm.vhd"
 build "$out/fmrev" FDC/FDC.vhd "$out/FDemu-fm.vhd" diskemu_mister/diskemu_mister.vhd
 expect_fail "FM track at half speed" "revolution is" "$out/fmrev" fm "$out/fm.d88"
+
+sed 's/ and ramrdat(11)=.0.)/)/' diskemu_mister/FDemu.vhd > "$out/FDemu-oneturn.vhd"
+! cmp -s diskemu_mister/FDemu.vhd "$out/FDemu-oneturn.vhd"
+build "$out/oneturn" FDC/FDC.vhd "$out/FDemu-oneturn.vhd" diskemu_mister/diskemu_mister.vhd
+expect_fail "long track cut at one 2HD turn" "revolution is" "$out/oneturn" long "$out/long.d88"
 
 sed 's/if((trackno+1)<tracks)then/if(trackno<tracks)then/' diskemu_mister/diskemu_mister.vhd > "$out/diskemu-164.vhd"
 ! cmp -s diskemu_mister/diskemu_mister.vhd "$out/diskemu-164.vhd"

@@ -239,7 +239,10 @@ signal	cur_unit	:std_logic;
 
 signal	trackaddr	:std_logic_vector(22 downto 0);
 signal	trackwrdat	:std_logic_vector(15 downto 0);
+signal	trackwrdatm	:std_logic_vector(15 downto 0);
 signal	trackrddat	:std_logic_vector(15 downto 0);
+signal	turnlast	:integer range 0 to 16383;
+signal	pastturn	:std_logic;
 signal	trackwr		:std_logic;
 signal	trackrd		:std_logic;
 signal	tracksync	:std_logic;
@@ -1841,7 +1844,7 @@ begin
 		address_b		=>fec_ramaddrl,
 		clock_a			=>sclk,
 		clock_b			=>rclk,
-		data_a			=>trackwrdat,
+		data_a			=>trackwrdatm,
 		data_b			=>fec_ramwdat,
 		wren_a			=>fbwr,
 		wren_b			=>fec_ramwe,
@@ -1853,6 +1856,32 @@ begin
 					cur_unit & trackno & track_curaddr;
 
 	fbaddr<=trackaddr(7 downto 0);
+
+	-- A track laid out longer than one revolution keeps its sectors: words of
+	-- the sector area (not the gap that pads the track to its buffer) from the
+	-- last word of FDemu's revolution on carry bit 11, and FDemu turns on to
+	-- the first word without it. Genesis (Square, 1985) has three 1024-byte
+	-- sectors with data CRC errors on cylinders 1+ head 0 whose recorded data
+	-- runs into the next sectors on the disk; one after another that track is
+	-- 11,984 bytes against the 10,416-byte 2HD turn, and the loader reads R13.
+	-- turnlast is FDemu's tracklen in track words (an FM word takes two MFM
+	-- byte times) minus one. A write is made one or more clocks after the
+	-- builder issued it, with its address, data and next state still held.
+	turnlast<=	 6249 when diskmode(1)='0' and mfm='1' else
+				 3124 when diskmode(1)='0' else
+				10415 when diskmode="10" and mfm='1' else
+				 5207 when diskmode="10" else
+				12499 when mfm='1' else
+				 6249;
+	pastturn<=	'0' when track_curaddr<turnlast else
+				'1' when fdstate=fs_gap0 or fdstate=fs_synci or fdstate=fs_iam0 or fdstate=fs_iam1 or
+					fdstate=fs_iam2 or fdstate=fs_C or fdstate=fs_H or fdstate=fs_R or fdstate=fs_N or
+					fdstate=fs_crci0 or fdstate=fs_crci1 or fdstate=fs_ssizel or fdstate=fs_ssizeh or
+					fdstate=fs_gap1 or fdstate=fs_syncd or fdstate=fs_dam0 or fdstate=fs_dam1 or
+					fdstate=fs_dam2 or fdstate=fs_dat or fdstate=fs_crcd0 or fdstate=fs_crcd1 or
+					fdstate=fs_gap2 else
+				'0';
+	trackwrdatm<=trackwrdat(15 downto 12) & (trackwrdat(11) or pastturn) & trackwrdat(10 downto 0);
 
 	process(sclk,rstn)
 	variable wrote	:std_logic;

@@ -373,6 +373,9 @@ begin
 	-- tracklen is the revolution in MFM byte times. An FM byte takes two, so
 	-- wrap by elapsed time, not by entry count: a single-density track must
 	-- still turn at 360 rpm (Xanadu's FM track 0 took 2x as long per turn).
+	-- A word with bit 11 belongs to sectors the image builder laid out past
+	-- that length (diskemu_mister: Genesis's copy-protected cylinders), so
+	-- the turn goes on to the first word without it, within the buffer.
 	process(clk,rstn)
 	variable step	:integer range 1 to 2;
 	begin
@@ -386,7 +389,7 @@ begin
 				else
 					step:=2;
 				end if;
-				if(revpos+step>=conv_integer(tracklenx))then
+				if((revpos+step>=conv_integer(tracklenx) and ramrdat(11)='0') or revpos+step>=16383)then
 					curpos<=(others=>'0');
 					revpos<=0;
 				else

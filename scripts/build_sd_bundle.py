@@ -54,6 +54,16 @@ def one_asset(r, predicate):
         raise ValueError('Expected one component asset, found %d' % len(found))
     return found[0]
 
+def core_rbf(r):
+    # A release may add a lower-clock build for boards that fail the main one
+    # (B279: PC98_Z486_75_* beside PC98_Z486_90_*); bundles carry the fastest.
+    def mhz(n):
+        m = re.match(r'PC98_Z486_(\d+)_', n)
+        return int(m.group(1)) if m else -1
+    rbfs = [a['name'] for a in r['assets'] if a['name'].endswith('.rbf') and '/' not in a['name'] and '\\' not in a['name']]
+    top = max(map(mhz, rbfs), default=-1)
+    return one_asset(r, lambda n: n in rbfs and mhz(n) == top)
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--core', default='latest')
@@ -61,7 +71,7 @@ def main():
     p.add_argument('--output', default='build/sd-bundle')
     args = p.parse_args()
     core, bios = release(CORE, args.core), release(BIOS, args.bios)
-    rbf = one_asset(core, lambda n: n.endswith('.rbf') and '/' not in n and '\\' not in n)
+    rbf = core_rbf(core)
     bz = one_asset(bios, lambda n: n.startswith('PC98_Open_BIOS_') and n.endswith('.zip'))
     helpers = {n: (ROOT/'scripts'/n).read_bytes().replace(b'\r\n', b'\n') for n in HELPERS}
     midi = sha(b''.join(n.encode()+b'\0'+helpers[n]+b'\0' for n in sorted(helpers)))[:12]
