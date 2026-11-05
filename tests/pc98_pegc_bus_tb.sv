@@ -86,6 +86,12 @@ module pc98_pegc_bus_tb;
         outb(16'h6a,8'h69,0);check(single_page,"single page not snooped");
         outb(16'h9a0,8'h0a,1);cycle(1,0,32'h9a0,1,0,1,16'hff03);
         cycle(0,0,32'h9a0,3,0,0,0); // same address in memory is not I/O
+        // 09A8h 31 kHz / 480-line latch reads back (it used to read open bus)
+        outb(16'h9a8,8'h01,1);check(line480,"09A8h write");
+        cycle(1,0,32'h9a8,1,0,1,16'hff01);
+        outb(16'h9a8,8'hfe,1);check(!line480,"09A8h clear");
+        cycle(1,0,32'h9a8,1,0,1,16'hff00);
+        cycle(1,0,32'h9a8,2,0,0,0); // odd byte 09A9h is not claimed
         cycle(1,1,32'ha8,2,16'h4400,0,0); // odd I/O must not write index
         for(i=0;i<256;i++)begin
             select_palette(i);outb(16'hac,i^8'h57,1);outb(16'haa,i^8'hb3,1);outb(16'hae,i^8'hc6,1);

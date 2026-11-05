@@ -36,7 +36,11 @@ module pc98_pegc_bus (
     wire mmio_selected, vram_selected, vram_unhandled;
     wire [15:0] mmio_data, memory_data;
     wire [18:1] vram_address;
-    wire status_selected=select[0] && address[15:1]==(16'h09a0 >> 1);
+    // 09A0h status and the 09A8h 31 kHz latch read back from here. 09A8h
+    // reads used to fall through to the open legacy bus, so Open BIOS INT 18h
+    // AH=31h saw a random rate (Battle Skin Panic 9821 went to 31 kHz).
+    wire status_selected=select[0] && (address[15:1]==(16'h09a0 >> 1) ||
+                                       address[15:1]==(16'h09a8 >> 1));
     assign claimed=io ? (palette_selected || status_selected) :
                         (mmio_selected || vram_selected || vram_unhandled);
     wire memory_selected=!io && vram_selected;
