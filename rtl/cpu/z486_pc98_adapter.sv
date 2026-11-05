@@ -156,6 +156,13 @@ module z486_pc98_adapter #(
 `else
     localparam integer RECORDER_FREEZE_SECONDS = 0;
 `endif
+`ifdef ZET98_RECORDER_MATCH
+    localparam [15:0] RECORDER_MATCH = `ZET98_RECORDER_MATCH;
+    localparam [15:0] RECORDER_MATCH2 = `ZET98_RECORDER_MATCH2;
+`else
+    localparam [15:0] RECORDER_MATCH = 16'h0e62;
+    localparam [15:0] RECORDER_MATCH2 = 16'h0058;
+`endif
 `ifdef ZET98_RECORDER_DE
     localparam RECORDER_DE = 1;   // freeze on the first real-mode divide error
 `else
@@ -163,6 +170,7 @@ module z486_pc98_adapter #(
 `endif
     z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO),
                           .DE_TRIGGER(RECORDER_DE), .DE_FREEZE_CS(RECORDER_FREEZE_CS),
+                          .DE_MATCH(RECORDER_MATCH), .DE_MATCH2(RECORDER_MATCH2),
                           .DE_FREEZE_IP(RECORDER_FREEZE_IP),
                           .DE_FREEZE_VECTOR(RECORDER_FREEZE_VECTOR),
                           .DE_FREEZE_SECONDS(RECORDER_FREEZE_SECONDS)) crash_recorder (

@@ -41,6 +41,9 @@ param(
     [string]$RecorderFreezeVector,
     # With -RecorderDivide: also freeze this many seconds after the core starts.
     [int]$RecorderFreezeSeconds = 0,
+    # With -RecorderDivide: log memory writes whose data holds either of these
+    # two 16-bit values (hex, "FB5D,2F2F"; default 0E62,0058).
+    [string]$RecorderMatch,
     # CD trace debug build: CD-ROM events on the UART (replaces MIDI).
     [switch]$CdTrace,
     [ValidateRange(1, 99)]
@@ -128,6 +131,12 @@ try {
             Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_DE=1"
             if ($RecorderFreezeSeconds -gt 0) {
                 Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_SECONDS=$RecorderFreezeSeconds"
+            }
+            if ($RecorderMatch) {
+                if ($RecorderMatch -notmatch '^[0-9A-Fa-f]{1,4},[0-9A-Fa-f]{1,4}$') { throw 'RecorderMatch must be two hex words, e.g. FB5D,2F2F.' }
+                $m = $RecorderMatch.Split(',')
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_MATCH=$([Convert]::ToInt32($m[0], 16))"
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_MATCH2=$([Convert]::ToInt32($m[1], 16))"
             }
             if ($RecorderFreezeVector) {
                 if ($RecorderFreezeVector -notmatch '^[0-9A-Fa-f]{1,2}$') { throw 'RecorderFreezeVector must be 1-2 hex digits.' }

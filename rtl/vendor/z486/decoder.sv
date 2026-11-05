@@ -726,12 +726,24 @@ task automatic build_struct_work(
     // register field 0) instead of #UD. HSB.EXE flushes with them after
     // changing CR0.CD; the #UD looped forever in DOS's INT 6 handler.
     logic        cache_nop;
+    // 486 XADD (0F C0/C1) and CMPXCHG (0F B0/B1) have no 80386 PLA rows.
+    // Decode their structure as the matching one-byte ALU r/m,r form (ADD
+    // 00/01 and CMP 38/39: ModR/M with reg = source, r/m = destination, W
+    // bit, no immediate) and enter optimizer-owned microcode routines.
+    logic        instr_xadd;
+    logic        instr_cmpxchg;
+    logic        instr_mem;
     logic [7:0]  op_e;
     logic        p0f_e;
     begin
         cache_nop = prefix_0f && (opcode[7:1] == 7'b0000100);
-        op_e = cache_nop ? 8'h90 : opcode;
-        p0f_e = cache_nop ? 1'b0 : prefix_0f;
+        instr_xadd = prefix_0f && (opcode[7:1] == 7'b1100000);
+        instr_cmpxchg = prefix_0f && (opcode[7:1] == 7'b1011000);
+        instr_mem = modrm[7:6] != 2'b11;
+        op_e = cache_nop ? 8'h90 :
+               instr_xadd ? {7'b0000000, opcode[0]} :
+               instr_cmpxchg ? {7'b0011100, opcode[0]} : opcode;
+        p0f_e = (cache_nop || instr_xadd || instr_cmpxchg) ? 1'b0 : prefix_0f;
         w = '0;
         s_len = 3'd1;
         ctl_bits = pla_control_opcode_lookup(p0f_e, op_e);
@@ -768,7 +780,9 @@ task automatic build_struct_work(
             group_entry_rom[{group_code, modrm[5:3],
                              (modrm[7:6] != 2'b11)}] :
             entry_first;
-        invalid_lock = check_lock_invalid(prefix_rep_lock, p0f_e, op_e,
+        // LOCK validity follows the architectural opcode: CMPXCHG and XADD
+        // accept LOCK with a memory operand (their CMP/ADD skeletons differ).
+        invalid_lock = check_lock_invalid(prefix_rep_lock, prefix_0f, opcode,
                                           has_modrm, modrm);
         instr_bswap = p0f_e && (op_e[7:3] == 5'b11001);
         w.entry.boundary_action = invalid_lock ? BOUNDARY_ACTION_NONE :
@@ -809,15 +823,21 @@ task automatic build_struct_work(
             w.entry.rel_branch_kind = REL_BRANCH_CALL;
         w.entry.branch_rel8 = !p0f_e &&
                               ((op_e[7:4] == 4'h7) || (op_e == 8'hEB));
-        w.entry.branch_condition = op_e[3:0];
+        // CMPXCHG branches on ZF in microcode (JNcond with condition E).
+        w.entry.branch_condition = instr_cmpxchg ? 4'h4 : op_e[3:0];
         if (!p0f_e && (op_e[7:1] == 7'b1110000))
             w.entry.repeat_kind = op_e[0] ? REPEAT_KIND_LOOPE
                                              : REPEAT_KIND_LOOPNE;
         w.entry.entry_point = invalid_lock ? UADDR_INVALID_LOCK :
                               instr_bswap ? UADDR_BSWAP :
-                              cache_nop ? UADDR_NOP : entry_final[11:0];
-        w.entry.stack_op = (invalid_lock || instr_bswap || cache_nop) ? 1'b0 : entry_final[13];
-        w.entry.stack_dir = (invalid_lock || instr_bswap || cache_nop) ? 1'b0 : entry_final[12];
+                              cache_nop ? UADDR_NOP :
+                              instr_xadd ? (instr_mem ? UADDR_XADD_M : UADDR_XADD_R) :
+                              instr_cmpxchg ? (instr_mem ? UADDR_CMPXCHG_M : UADDR_CMPXCHG_R) :
+                              entry_final[11:0];
+        w.entry.stack_op = (invalid_lock || instr_bswap || cache_nop ||
+                            instr_xadd || instr_cmpxchg) ? 1'b0 : entry_final[13];
+        w.entry.stack_dir = (invalid_lock || instr_bswap || cache_nop ||
+                             instr_xadd || instr_cmpxchg) ? 1'b0 : entry_final[12];
         // BSWAP has a fixed r32 operand even in a 16-bit code segment.
         if (instr_bswap)
             w.entry.data32 = 1'b1;
