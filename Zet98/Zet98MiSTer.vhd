@@ -250,6 +250,9 @@ port(
 end component;
 
 component CRTC98 
+generic(
+	FONT_PREFETCH	:boolean	:=false
+);
 port(
 	TRAM_ADR	:out std_logic_vector(12 downto 0);
 	TRAM_DAT	:in std_logic_vector(15 downto 0);
@@ -258,6 +261,10 @@ port(
 	KNJSEL		:out std_logic_vector(1 downto 0);
 	KNJADR		:out std_logic_vector(16 downto 0);
 	KNJDAT		:in std_logic_vector(7 downto 0)	:=x"00";
+	FNTADR		:out std_logic_vector(16 downto 0);
+	FNTRD		:out std_logic;
+	FNTACK		:in std_logic	:='0';
+	FNTDAT		:in std_logic_vector(63 downto 0)	:=(others=>'0');
 	
 	
 	GRAMADR		:out std_logic_vector(13 downto 0);
@@ -2467,6 +2474,24 @@ signal FM_ROUTE_L, FM_ROUTE_R, PSG_ROUTE :std_logic_vector(15 downto 0);
 
 signal	IPCOUNT	:std_logic_vector(31 downto 0);
 
+-- Graphics VRAM in block RAM (gvram_m10k) and font banks 0/1 from SDRAM.
+signal	CB_MEM	:std_logic;
+signal	G_SEL, G_WR1, G_WR4, G_RD1, G_RD4, G_RMW1, G_RMW4, G_ACK :std_logic;
+signal	G_ADDR	:std_logic_vector(16 downto 0);
+signal	G_BSEL	:std_logic_vector(1 downto 0);
+signal	G_PSEL	:std_logic_vector(3 downto 0);
+signal	G_PRESERVE	:std_logic_vector(15 downto 0);
+signal	G_WDAT, G_RDAT, GDC_GVRAM_RDAT_IN, GV_VDAT	:std_logic_vector(63 downto 0);
+signal	G_RDAT0, G_RDAT1, G_RDAT2, G_RDAT3	:std_logic_vector(15 downto 0);
+signal	GV_VRSTN	:std_logic;
+signal	FNT_ADR	:std_logic_vector(16 downto 0);
+signal	FNT_RD, FNT_ACK	:std_logic;
+signal	FNT_DAT	:std_logic_vector(63 downto 0);
+signal	FNT_SDRADDR	:std_logic_vector(21 downto 0);
+signal	FONT_CB, FONT_VALID, FONT_HIT, FONT_WAITn	:std_logic;
+signal	FONT_RADDR, FONT_LADDR	:std_logic_vector(17 downto 0);
+signal	FONT_BYTE	:std_logic_vector(7 downto 0);
+
 begin
 	drstn<='1';
 	mrstn<=drstn and plllock;
@@ -2507,36 +2532,39 @@ begin
 		CPUACK			=>CB_ACK,
 		CPUCLK			=>cpuclk,
 		
-		SUBBNK			=>GDC_RAMBANK,
-		SUBADR			=>GDC_RAMADDR,
-		SUBRDAT0			=>GCG_GDC_RDAT0,
-		SUBRDAT1			=>GCG_GDC_RDAT1,
-		SUBRDAT2			=>GCG_GDC_RDAT2,
-		SUBRDAT3			=>GCG_GDC_RDAT3,
-		SUBWDAT0			=>GCG_GDC_WDAT0,
-		SUBWDAT1			=>GCG_GDC_WDAT1,
-		SUBWDAT2			=>GCG_GDC_WDAT2,
-		SUBWDAT3			=>GCG_GDC_WDAT3,
-        SUBPRESERVE=>GCG_GDC_WMASK,
-		SUBWR1			=>GCG_GDC_WR1,
-		SUBWR4			=>GCG_GDC_WR4,
-		SUBRD1			=>GCG_GDC_RD1,
-		SUBRD4			=>GCG_GDC_RD4,
-		SUBRMW1			=>GCG_GDC_RMW1,
-		SUBRMW4			=>GCG_GDC_RMW4,
+		-- Graphics VRAM is in block RAM (gvram below): no GDC drawing jobs.
+		SUBBNK			=>"00",
+		SUBADR			=>(others=>'0'),
+		SUBRDAT0			=>open,
+		SUBRDAT1			=>open,
+		SUBRDAT2			=>open,
+		SUBRDAT3			=>open,
+		SUBWDAT0			=>(others=>'0'),
+		SUBWDAT1			=>(others=>'0'),
+		SUBWDAT2			=>(others=>'0'),
+		SUBWDAT3			=>(others=>'0'),
+        SUBPRESERVE=>(others=>'0'),
+		SUBWR1			=>'0',
+		SUBWR4			=>'0',
+		SUBRD1			=>'0',
+		SUBRD4			=>'0',
+		SUBRMW1			=>'0',
+		SUBRMW4			=>'0',
 		SUBBSEL			=>"11",
-		SUBPSEL			=>GCG_GDC_WPSEL,
-		SUBACK			=>GDC_RAMACK,
+		SUBPSEL			=>"0000",
+		SUBACK			=>open,
 		SUBCLK			=>cpuclk,
 		
-		VIDBNK			=>RAM_VRAMF(23 downto 22),
-		VIDADR			=>GRAMADR,
-		VIDDAT0			=>GRDAT0,
-		VIDDAT1			=>GRDAT1,
-		VIDDAT2			=>GRDAT2,
-		VIDDAT3			=>GRDAT3,
-		VIDRD				=>GRAMRD,
-		VIDACK			=>GRAMACK,
+		-- Video port: text font banks 0/1 (FONT.ROM as loaded from boot.rom),
+		-- read one text row ahead by the renderer.
+		VIDBNK			=>RAM_FONT(23 downto 22),
+		VIDADR			=>FNT_SDRADDR,
+		VIDDAT0			=>FNT_DAT(15 downto 0),
+		VIDDAT1			=>FNT_DAT(31 downto 16),
+		VIDDAT2			=>FNT_DAT(47 downto 32),
+		VIDDAT3			=>FNT_DAT(63 downto 48),
+		VIDRD				=>FNT_RD,
+		VIDACK			=>FNT_ACK,
 		VIDCLK			=>grpclk,
 		
 		FDEADR			=>RAM_FDEMU0(23) & FDE_RAMADDR,
@@ -2650,7 +2678,8 @@ begin
 		'1' & x"ff"					when UMA_DOE='1' else
 		'1' & SND_STUB_WORD(15 downto 8)	when SND_DOE='1' else
 		'1' & BUF_RDAT(15 downto 8)	when BUF_DOE='1' and bussel(1)='1' else
-		'1' & CB_RDAT0(15 downto 8)	when CB_RD1='1' and bussel(1)='1' else
+		'1' & CB_RDAT0(15 downto 8)	when CB_RD1='1' and FONT_CB='0' and bussel(1)='1' else
+		'1' & G_RDAT0(15 downto 8)	when G_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8)		when tramdoe(1)='1' else
 		'1' & BNK89_ODAT				when BNK89_DOE='1' else
 		'1' & BNKAB_ODAT				when BNKAB_DOE='1' else
@@ -2661,8 +2690,7 @@ begin
 		'1' & IO439_ODAT				when IO439_DOE='1' else
 		'1' & x"04"					when ioaddr_odd=x"043b" and iord='1' else
 		'1' & CGW_ODAT(15 downto 8)	when CGW_DOE='1' else
-		'1' & KNJ0_ODAT				when KNJ0_DOE='1' else
-		'1' & KNJ1_ODAT				when KNJ1_DOE='1' else
+		'1' & FONT_BYTE				when KNJ0_DOE='1' else
 		'1' & KNJ2_ODAT				when KNJ2_DOE='1' else
 		'1' & IDE_ODAT(15 downto 8)	when IDE_DOE='1' else
 		'1' & TSTMP_ODAT(15 downto 8)	when TSTMP_DOE='1' else
@@ -2678,7 +2706,8 @@ begin
 		'1' & x"ff"					when UMA_DOE='1' else
 		'1' & SND_STUB_WORD(7 downto 0)	when SND_DOE='1' else
 		'1' & BUF_RDAT(7 downto 0)	when BUF_DOE='1' and bussel(0)='1' else
-		'1' & CB_RDAT0(7 downto 0)	when CB_RD1='1' and bussel(0)='1' else
+		'1' & CB_RDAT0(7 downto 0)	when CB_RD1='1' and FONT_CB='0' and bussel(0)='1' else
+		'1' & G_RDAT0(7 downto 0)	when G_RD1='1' and bussel(0)='1' else
 		'1' & tramdo(7 downto 0)		when tramdoe(0)='1' else
 		'1' & aramdo(7 downto 0)		when aramdoe(0)='1' else
 		'1' & NVR_ODAT				when NVR_DOE='1' else
@@ -2717,14 +2746,16 @@ begin
 		'1' & GCG_ODAT(15 downto 8) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(15 downto 8) when DBIO_DOE='1' else
 		'1' & x"ff" when UMA_DOE='1' else
-		'1' & CB_RDAT0(15 downto 8) when CB_RD1='1' and bussel(1)='1' else
+		'1' & CB_RDAT0(15 downto 8) when CB_RD1='1' and FONT_CB='0' and bussel(1)='1' else
+		'1' & G_RDAT0(15 downto 8) when G_RD1='1' and bussel(1)='1' else
 		'1' & tramdo(15 downto 8) when tramdoe(1)='1' else
 		'0' & x"ff";
 	dma_mem_low <=
 		'1' & GCG_ODAT(7 downto 0) when GCG_DOE='1' else
 		'1' & DBIO_ODAT(7 downto 0) when DBIO_DOE='1' else
 		'1' & x"ff" when UMA_DOE='1' else
-		'1' & CB_RDAT0(7 downto 0) when CB_RD1='1' and bussel(0)='1' else
+		'1' & CB_RDAT0(7 downto 0) when CB_RD1='1' and FONT_CB='0' and bussel(0)='1' else
+		'1' & G_RDAT0(7 downto 0) when G_RD1='1' and bussel(0)='1' else
 		'1' & tramdo(7 downto 0) when tramdoe(0)='1' else
 		'1' & aramdo(7 downto 0) when aramdoe(0)='1' else
 		'1' & NVR_ODAT when NVR_DOE='1' else
@@ -2735,62 +2766,84 @@ begin
 		dma_mem_high(7 downto 0);
 	-- END PC98 DATA BUS
 		
+	-- SDRAM CPU port: boot loader, main memory (and its line buffer), and
+	-- CPU reads of font banks 0/1 (port A9h, CG window). Graphics VRAM is
+	-- in block RAM (gvram).
+	-- The memory map also selects SDRAM (MSD_CS) for the VRAM windows; the
+	-- GRCG window decode (GCG_MCS) owns those accesses now, as it had
+	-- priority on this port before.
+	CB_MEM<=MSD_CS and not GCG_MCS;
 	CB_WR1<=
 		LDR_WR	when LDR_OE='1' else
-		'0'		when EGC_PATH='1' else
-		GCG_WR1	when GCG_MCS='1' else
-		MWR		when MSD_CS='1' else
+		MWR		when CB_MEM='1' else
 		'0';
 	
-	CB_WR4<=	'0' when EGC_PATH='1' else
-				GCG_WR4 when GCG_MCS='1' else
-				'0';
+	CB_WR4<=	'0';
 	
-	CB_RD1<=	'0'		when EGC_PATH='1' else
-				GCG_RD1	when GCG_MCS='1' else
-				MRD		when MSD_CS='1' and BUF_ELIG='0' else
+	CB_RD1<=	'1'		when FONT_CB='1' else
+				MRD		when CB_MEM='1' and BUF_ELIG='0' else
 				'0';
 
-	CB_RD4<=	EGC_RD4 when EGC_PATH='1' else
-				GCG_RD4 when GCG_MCS='1' else
-				BUF_RD4;
+	CB_RD4<=	BUF_RD4 when FONT_CB='0' else '0';
 	
-	CB_RMW1<=	'0' when EGC_PATH='1' else
-				GCG_RMW1 when GCG_MCS='1' else
-				'0';
+	CB_RMW1<=	'0';
 	
-	CB_RMW4<=	EGC_RMW4 when EGC_PATH='1' else
-				GCG_RMW4 when GCG_MCS='1' else
-				'0';
+	CB_RMW4<=	'0';
 
 	CB_BSEL<=
 		"01"	when LDR_OE='1' and LDR_ADDR(0)='0' else
 		"10"	when LDR_OE='1' and LDR_ADDR(0)='1' else
-		EGC_MBYTES	when EGC_PATH='1' else
+		"11"	when FONT_CB='1' else
 		bussel;
 		
-    CB_PRESERVE <= x"0000" when EGC_PATH='1' else GCG_WMASK when GCG_MCS='1' else x"0000";
-	CB_WDAT0<=	EGC_MBASE(15 downto 0)	when EGC_PATH='1' else
-				GCG_WDAT0	when GCG_MCS='1' else
-				mem_wdata;
-	CB_WDAT1<=	EGC_MBASE(31 downto 16)	when EGC_PATH='1' else
-				GCG_WDAT1	when GCG_MCS='1' else
-				(others=>'0');
-	CB_WDAT2<=	EGC_MBASE(47 downto 32)	when EGC_PATH='1' else
-				GCG_WDAT2	when GCG_MCS='1' else
-				(others=>'0');
-	CB_WDAT3<=	EGC_MBASE(63 downto 48)	when EGC_PATH='1' else
-				GCG_WDAT3	when GCG_MCS='1' else
-				(others=>'0');
+    CB_PRESERVE <= x"0000";
+	CB_WDAT0<=	mem_wdata;
+	CB_WDAT1<=	(others=>'0');
+	CB_WDAT2<=	(others=>'0');
+	CB_WDAT3<=	(others=>'0');
 				
-	CB_PSEL<=	EGC_MPLANES	when EGC_PATH='1' else
-				GCG_WPSEL	when GCG_MCS='1' else
-				"0001";
+	CB_PSEL<=	"0001";
+
+	-- Graphics VRAM requests: the EGC (when it owns the path) or the GRCG
+	-- window decode, as they reached the SDRAM CPU port before.
+	G_SEL<=GCG_MCS and not EGC_PATH and not LDR_OE;
+	G_WR1<=GCG_WR1 when G_SEL='1' else '0';
+	G_WR4<=GCG_WR4 when G_SEL='1' else '0';
+	G_RD1<=GCG_RD1 when G_SEL='1' else '0';
+	G_RD4<=EGC_RD4 when EGC_PATH='1' else GCG_RD4 when G_SEL='1' else '0';
+	G_RMW1<=GCG_RMW1 when G_SEL='1' else '0';
+	G_RMW4<=EGC_RMW4 when EGC_PATH='1' else GCG_RMW4 when G_SEL='1' else '0';
+	G_ADDR<=EGC_MADDR(16 downto 0) when EGC_PATH='1' else MADDR(16 downto 0);
+	G_BSEL<=EGC_MBYTES when EGC_PATH='1' else bussel;
+	G_PSEL<=EGC_MPLANES when EGC_PATH='1' else GCG_WPSEL;
+	G_PRESERVE<=x"0000" when EGC_PATH='1' else GCG_WMASK;
+	G_WDAT<=EGC_MBASE when EGC_PATH='1' else GCG_WDAT3 & GCG_WDAT2 & GCG_WDAT1 & GCG_WDAT0;
+	G_RDAT0<=G_RDAT(15 downto 0); G_RDAT1<=G_RDAT(31 downto 16);
+	G_RDAT2<=G_RDAT(47 downto 32); G_RDAT3<=G_RDAT(63 downto 48);
+	gvram_video_reset : entity work.reset_release port map(grpclk, srstn, GV_VRSTN);
+	gvram : entity work.gvram_m10k port map(
+		clk=>cpuclk, rstn=>mrstn,
+		c_wr1=>G_WR1, c_wr4=>G_WR4, c_rd1=>G_RD1, c_rd4=>G_RD4, c_rmw1=>G_RMW1, c_rmw4=>G_RMW4,
+		c_addr=>G_ADDR, c_bsel=>G_BSEL, c_psel=>G_PSEL, c_preserve=>G_PRESERVE,
+		c_wdat=>G_WDAT, c_affine=>EGC_RMW4, c_xormask=>EGC_MXOR,
+		c_rdat=>G_RDAT, c_ack=>G_ACK,
+		s_wr1=>GCG_GDC_WR1, s_wr4=>GCG_GDC_WR4, s_rd1=>GCG_GDC_RD1, s_rd4=>GCG_GDC_RD4,
+		s_rmw1=>GCG_GDC_RMW1, s_rmw4=>GCG_GDC_RMW4,
+		s_addr=>GDC_RAMADDR(16 downto 0), s_bsel=>"11", s_psel=>GCG_GDC_WPSEL,
+		s_preserve=>GCG_GDC_WMASK,
+		s_wdat=>GCG_GDC_WDAT3 & GCG_GDC_WDAT2 & GCG_GDC_WDAT1 & GCG_GDC_WDAT0,
+		s_rdat=>GDC_GVRAM_RDAT_IN, s_ack=>GDC_RAMACK,
+		vclk=>grpclk, vrstn=>GV_VRSTN, v_page=>gGDC_VGRAMSEL_frame,
+		v_addr=>GADDR, v_rd=>GRAMRD, v_ack=>GRAMACK, v_dat=>GV_VDAT);
+	GCG_GDC_RDAT0<=GDC_GVRAM_RDAT_IN(15 downto 0); GCG_GDC_RDAT1<=GDC_GVRAM_RDAT_IN(31 downto 16);
+	GCG_GDC_RDAT2<=GDC_GVRAM_RDAT_IN(47 downto 32); GCG_GDC_RDAT3<=GDC_GVRAM_RDAT_IN(63 downto 48);
+	GRDAT0<=GV_VDAT(15 downto 0); GRDAT1<=GV_VDAT(31 downto 16);
+	GRDAT2<=GV_VDAT(47 downto 32); GRDAT3<=GV_VDAT(63 downto 48);
 	
 	abus<=	cpuaddr when DMAen='0' else DMA_UADR & DMA_OADR(15 downto 1);
 	
 	
-	iowaitn<=TSTMP_WAITn and OPN_WAITn;
+	iowaitn<=TSTMP_WAITn and OPN_WAITn and FONT_WAITn;
 	
 	IOa	:IOack port map(tga,stb,abus(15 downto 1),cpusel,cpuoe,DMAen,cpu_iord,cpu_iowr,iowaitn,iack,cpuclk,irstn);
 	
@@ -2807,12 +2860,12 @@ begin
 	
 
 	CB_BANK<=	RAM_BIOS(23 downto 22)	when LDR_OE='1' else
-				EGC_MBANK when EGC_PATH='1' else
+				RAM_FONT(23 downto 22) when FONT_CB='1' else
 				MBANK;
 
 	
 	CB_ADDR<=	RAM_BIOS(21 downto 0) + ("000" & LDR_ADDR(19 downto 1))	when LDR_OE='1' else
-				EGC_MADDR when EGC_PATH='1' else
+				RAM_FONT(21 downto 17) & FONT_RADDR(17 downto 1) when FONT_CB='1' else
 				MADDR;
 	
 	DMA_CS<='1' when ioaddr_odd(15 downto 5)=(x"00" & "000") and ioaddr_odd(0)='1' else '0';
@@ -2983,7 +3036,7 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	MEMack<=(CB_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK or BUF_ACK;
+	MEMack<=(CB_ACK and not FONT_CB) or (G_ACK and not EGC_PATH) or EGC_ACK or tramack or aramack or NVR_ACK or CGW_ACK or BUF_ACK;
 	ack<=MEMack or iack;
 	
 --	DBIO	:diskbios port map(
@@ -3011,7 +3064,7 @@ begin
 	-- same acknowledge as the CPU: taking the EGC's CB_ACK as its own fill
 	-- froze Flame Zapper at a RET after an EGC copy (buffer in HOLD, CPU
 	-- still waiting).
-	BUF_SDRACK<=CB_ACK and not EGC_PATH;
+	BUF_SDRACK<=CB_ACK and not FONT_CB;
 	mainbuf	:entity work.mainram_linebuf generic map(AW=>22) port map(
 		elig		=>BUF_ELIG,
 		mrd			=>MRD,
@@ -3073,10 +3126,10 @@ begin
 		memwr4		=>GCG_WR4,
 		memrmw1		=>GCG_RMW1,
 		memrmw4		=>GCG_RMW4,
-		memrdat0	=>CB_RDAT0,
-		memrdat1	=>CB_RDAT1,
-		memrdat2	=>CB_RDAT2,
-		memrdat3	=>CB_RDAT3,
+		memrdat0	=>G_RDAT0,
+		memrdat1	=>G_RDAT1,
+		memrdat2	=>G_RDAT2,
+		memrdat3	=>G_RDAT3,
         memwmask=>GCG_WMASK,
 		memwdat0	=>GCG_WDAT0,
 		memwdat1	=>GCG_WDAT1,
@@ -3099,7 +3152,6 @@ begin
 	EGC_RESET<=not mrstn;
 	EGC_SOFTRESET<=not srstn;
 	EGC_IOSTB<=cpu_iowr and not DMAen;
-	CB_RDAT64<=CB_RDAT3 & CB_RDAT2 & CB_RDAT1 & CB_RDAT0;
 	GCG_ODAT<=EGC_RDAT when EGC_ACTIVE='1' else GCG_ODAT_G;
 	egc	:pc98_egc_word_engine generic map(ADDRESS_WIDTH=>22) port map(
 		clk=>cpuclk, reset=>EGC_RESET, soft_reset=>EGC_SOFTRESET, egc_enable=>EGC_EN,
@@ -3112,7 +3164,7 @@ begin
 		memory_read4=>EGC_RD4, memory_rmw4=>EGC_RMW4,
 		memory_bytes=>EGC_MBYTES, memory_planes=>EGC_MPLANES,
 		memory_base=>EGC_MBASE, memory_xor_mask=>EGC_MXOR,
-		memory_acknowledge=>CB_ACK, memory_readdata=>CB_RDAT64
+		memory_acknowledge=>G_ACK, memory_readdata=>G_RDAT
 	);
 
 	IN00f0_ODAT<="11101011";
@@ -3309,7 +3361,7 @@ begin
         port map(cpuclk,vidclk,srstn,video_settings_source,video_settings_received);
     -- End GDC settings snapshot mapping.
     pVideoDebug <= '0' & video_settings_source(127 downto 57);
-	VID	:CRTC98 port map(
+	VID	:CRTC98 generic map(FONT_PREFETCH=>true) port map(
 		TRAM_ADR	=>vaddr,
 		TRAM_DAT	=>vtdat,
 		TRAM_ATR	=>vadat,
@@ -3317,6 +3369,10 @@ begin
 		KNJSEL		=>VID_KNJSEL,
 		KNJADR		=>VID_KNJADDR,
 		KNJDAT		=>VID_FNTDAT,
+		FNTADR		=>FNT_ADR,
+		FNTRD		=>FNT_RD,
+		FNTACK		=>FNT_ACK,
+		FNTDAT		=>FNT_DAT,
 
 		ETRAM_ADR	=>open,
 		ETRAM_DAT	=>(others=>'0'),
@@ -3449,12 +3505,35 @@ begin
 		clk			=>cpuclk,
 		rstn		=>irstn
 	);
-	KNJ0_WR<=KNJ_WR when KNJ_RAMSEL="00" else '0';
-	KNJ1_WR<=KNJ_WR when KNJ_RAMSEL="01" else '0';
+	-- Banks 0/1 are FONT.ROM in SDRAM (read-only, as the real CG ROM);
+	-- bank 2 (user-defined characters) is block RAM.
 	KNJ2_WR<=KNJ_WR when KNJ_RAMSEL="10" else '0';
-	KNJ0_DOE<=	KNJ_DOE when KNJ_RAMSEL="00" else '0';
-	KNJ1_DOE<=	KNJ_DOE when KNJ_RAMSEL="01" else '0';
+	KNJ0_DOE<=	KNJ_DOE when KNJ_RAMSEL(1)='0' and FONT_HIT='1' else '0';
 	KNJ2_DOE<=	KNJ_DOE when KNJ_RAMSEL="10" else '0';
+
+	-- CPU reads of font banks 0/1 (port A9h, CG window) through the SDRAM
+	-- CPU port. The last byte read is kept; A9h holds the I/O cycle and the
+	-- CG window holds its state machine until the addressed byte is here.
+	FONT_HIT<='1' when FONT_VALID='1' and FONT_LADDR=(KNJ_RAMSEL(0) & KNJ_ADDR) else '0';
+	FONT_WAITn<='0' when KNJ_DOE='1' and KNJ_RAMSEL(1)='0' and FONT_HIT='0' else '1';
+	process(cpuclk,srstn)begin
+		if(srstn='0')then
+			FONT_CB<='0'; FONT_VALID<='0';
+			FONT_RADDR<=(others=>'0'); FONT_LADDR<=(others=>'0'); FONT_BYTE<=(others=>'0');
+		elsif(cpuclk' event and cpuclk='1')then
+			if(FONT_CB='0')then
+				if((KNJ_DOE='1' or CGW_EN='1') and KNJ_RAMSEL(1)='0' and FONT_HIT='0' and LDR_OE='0')then
+					FONT_CB<='1';
+					FONT_RADDR<=KNJ_RAMSEL(0) & KNJ_ADDR;
+				end if;
+			elsif(CB_ACK='1')then
+				if(FONT_RADDR(0)='1')then FONT_BYTE<=CB_RDAT0(15 downto 8);
+				else FONT_BYTE<=CB_RDAT0(7 downto 0); end if;
+				FONT_LADDR<=FONT_RADDR; FONT_VALID<='1';
+				FONT_CB<='0';
+			end if;
+		end if;
+	end process;
 
 	-- CG window A4000h-A4FFFh (as NP2kai cgwindow): for the code set at
 	-- A1h/A3h, even addresses read the left half and odd addresses the right
@@ -3462,8 +3541,7 @@ begin
 	-- both halves, so the left then the right half is read from the font RAM
 	-- (registered address, three clocks each). Writes go to the same RAM
 	-- (user-defined characters), as through port A9h.
-	KNJ_Q<=	KNJ0_ODAT when KNJ_RAMSEL="00" else
-			KNJ1_ODAT when KNJ_RAMSEL="01" else
+	KNJ_Q<=	FONT_BYTE when KNJ_RAMSEL(1)='0' else
 			KNJ2_ODAT;
 	CGW_DOE<=CGW_CS and MRD;
 	process(cpuclk,srstn)begin
@@ -3484,11 +3562,11 @@ begin
 					CGW_WR<='1';
 					if(CGW_ST=1)then CGW_WDAT<=CGW_WD(7 downto 0); else CGW_WDAT<=CGW_WD(15 downto 8); end if;
 				end if;
-				if(CGW_CNT=3)then
+				if(CGW_CNT=3 and (KNJ_RAMSEL(1)='1' or FONT_HIT='1'))then
 					if(CGW_ST=1)then CGW_ODAT(7 downto 0)<=KNJ_Q; CGW_RIGHT<='1';
 					else CGW_ODAT(15 downto 8)<=KNJ_Q; end if;
 					CGW_CNT<=0; CGW_ST<=CGW_ST+1;
-				else
+				elsif(CGW_CNT/=3)then
 					CGW_CNT<=CGW_CNT+1;
 				end if;
 			when 3 =>
@@ -3504,32 +3582,6 @@ begin
 
 	-- Text, attributes and font fetches use the renderer pixel clock.
 	-- CPU writes stay on the independent CPU ports of these dual-port RAMs.
-	KNJ0	:KANJI1RAMDP port map(
-		address_a		=>VID_KNJADDR,
-		address_b		=>KNJ_ADDR,
-		clock_a		=>grpclk,
-		clock_b		=>cpuclk,
-		data_a		=>(others=>'0'),
-		data_b		=>KNJ_WRDAT,
-		wren_a		=>'0',
-		wren_b		=>KNJ0_WR,
-		q_a			=>VID_KNJ0DAT,
-		q_b			=>KNJ0_ODAT
-	);
-	
-	KNJ1	:KANJI1RAMDP port map(
-		address_a		=>VID_KNJADDR,
-		address_b		=>KNJ_ADDR,
-		clock_a		=>grpclk,
-		clock_b		=>cpuclk,
-		data_a		=>(others=>'0'),
-		data_b		=>KNJ_WRDAT,
-		wren_a		=>'0',
-		wren_b		=>KNJ1_WR,
-		q_a			=>VID_KNJ1DAT,
-		q_b			=>KNJ1_ODAT
-	);
-	
 	KNJ2	:GAIJIRAMDP port map(
 		address_a		=>VID_KNJADDR,
 		address_b		=>KNJ_ADDR,
@@ -3543,10 +3595,12 @@ begin
 		q_b			=>KNJ2_ODAT
 	);
 	
-	VID_FNTDAT<=	VID_KNJ0DAT when VID_KNJSEL="00" else
-					VID_KNJ1DAT when VID_KNJSEL="01" else
-					VID_KNJ2DAT when VID_KNJSEL="10" else
+	-- Banks 0/1 reach the renderer through its SDRAM prefetch (FNT_*).
+	VID_FNTDAT<=	VID_KNJ2DAT when VID_KNJSEL="10" else
 					(others=>'0');
+	-- RAM_FONT is 128K-word aligned: the font word address is a plain
+	-- concatenation (a held register bus into SDRAMC, no adder).
+	FNT_SDRADDR<=RAM_FONT(21 downto 17) & FNT_ADR;
 	
     -- CRT vertical-retrace interrupt (IRQ2), armed by port 64h writes. Wired
     -- to VRTC directly it fired every frame, so Thexder's handler ran before
@@ -3560,10 +3614,7 @@ begin
     display_page : entity work.pc98_display_page port map(
         clk=>cpuclk, rstn=>srstn, vrtc=>VRTC, disp=>gGDC_VGRAMSEL,
         draw=>gGDC_CGRAMSEL, page=>gGDC_VGRAMSEL_frame);
-    display_address : entity work.display_page_address
-        generic map(FRONT_PAGE=>RAM_VRAMF(21 downto 16), BACK_PAGE=>RAM_VRAMB(21 downto 16))
-        port map(memory_clk=>ramclk, async_rstn=>srstn, cpu_page=>gGDC_VGRAMSEL_frame,
-                 pixel_address=>GADDR, memory_address=>GRAMADR);
+
 	
 	tmem	:tvram port map(tramcs,tramaddr,bussel,MRD,MWR,mem_wdata,tramdo,tramdoe,tramack,cpuclk,vaddr(11 downto 0),vtdat,grpclk,srstn);
 	amem	:tvram port map(aramcs,aramaddr,'0' & bussel(0),MRD,MWR,x"00" & mem_wdata(7 downto 0),aramdo,aramdoe,aramack,cpuclk,vaddr(11 downto 0),vadatw,grpclk,srstn);

@@ -23,18 +23,19 @@
 # with 0/20/40 ns transport routes, six clock phases and six CPU rates. Both
 # late arrival and a post-capture glitch must fail. See rtl/GRAPHICS_TRANSFER.md.
 # CPU-written graphics configuration registers receive no exception here.
-set graphics_address [get_registers {*|VID|GRP|GRAMADRb*}]
+# Since graphics VRAM moved to block RAM (gvram_m10k), this SDRAM video port
+# carries the text font: font_prefetch holds f_adr through FNTRD/FNTACK and
+# captures the completed words in f_dat, exactly as GRAPHSCR did with
+# GRAMADRb/WDAT (tests/run-font-prefetch.sh covers the handshake).
+set graphics_address [get_registers {*|VID|TXT|*|f_adr*}]
 set sdram_address [get_registers {*|ram|MEMADR*}]
 set graphics_data [get_registers {*|ram|VIDDAT*}]
-set graphics_capture [get_registers {*|VID|GRP|WDAT*}]
-# The completed-read capture added ahead of the RAM is now the end of the
-# bundled crossing. Targeting the old RAM input would miss this path and
-# incorrectly include a second, ordinary pixel-clock register transfer.
+set graphics_capture [get_registers {*|VID|TXT|*|f_dat*}]
 if {[get_collection_size $graphics_address] < 14 ||
     [get_collection_size $sdram_address] < 13 ||
     [get_collection_size $graphics_data] < 64 ||
     [get_collection_size $graphics_capture] < 64} {
-    error "Expected the complete SDRAMC/GRAPHSCR bundled address and data buses"
+    error "Expected the complete SDRAMC/font prefetch bundled address and data buses"
 }
 set_max_delay -from $graphics_address -to $sdram_address 20.000
 set_max_delay -from $graphics_data -to $graphics_capture 20.000

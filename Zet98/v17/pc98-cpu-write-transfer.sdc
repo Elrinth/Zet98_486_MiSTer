@@ -17,9 +17,11 @@
 # Its deliberately late 80 ns bundle must fail. Normal hold checks remain.
 set cpu_write_source [get_registers {*|ram|cpu_write_source*}]
 set cpu_write_memory [get_registers {*|ram|cpu_write_memory*}]
-if {[get_collection_size $cpu_write_source] < 80 ||
-    [get_collection_size $cpu_write_memory] < 80} {
-    error "Expected CPU request bundle endpoints (at least 80 data bits; constant address/mask bits may be optimized)"
+# Since graphics VRAM moved to block RAM, the CPU port carries main memory,
+# loader and font reads only: one data word, so about 42 live bundle bits.
+if {[get_collection_size $cpu_write_source] < 40 ||
+    [get_collection_size $cpu_write_memory] < 40} {
+    error "Expected CPU request bundle endpoints (at least 40 address/data bits; constant bits may be optimized)"
 }
 set_max_delay -from $cpu_write_source -to $cpu_write_memory 15.000
 
@@ -27,13 +29,12 @@ set_max_delay -from $cpu_write_source -to $cpu_write_memory 15.000
 # Address, bank, byte/plane enables and set/preserve data travel together.
 # Its source is captured with SUBREQ and admitted with SUBJOB, never on a
 # live GRCG read result. tests/run-sub-write-bundle.sh checks both deadlines.
-set sub_write_source [get_registers {*|ram|sub_write_source*}]
-set sub_write_memory [get_registers {*|ram|sub_write_memory*}]
-if {[get_collection_size $sub_write_source] < 80 ||
-    [get_collection_size $sub_write_memory] < 80} {
-    error "Expected GDC request bundle endpoints (at least 80 data bits; constant address/mask bits may be optimized)"
+# Unused since graphics VRAM moved to block RAM (tied off; partly optimized away).
+set sub_write_source [get_registers -nowarn {*|ram|sub_write_source*}]
+set sub_write_memory [get_registers -nowarn {*|ram|sub_write_memory*}]
+if {[get_collection_size $sub_write_source] > 0} {
+    set_max_delay -from $sub_write_source -to $sub_write_memory 15.000
 }
-set_max_delay -from $sub_write_source -to $sub_write_memory 15.000
 
 # Floppy buffer address/data use independent source and admission registers.
 # Their 40-bit payloads (22-bit word address, bank, data) share the same

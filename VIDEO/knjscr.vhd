@@ -6,7 +6,10 @@ use work.VIDEO_TIMING_pkg.all;
 
 entity KNJSCR is
 generic(
-	BLINKINT :integer	:=40
+	BLINKINT :integer	:=40;
+	-- Font banks 0/1 from SDRAM through a row-ahead prefetch (font_prefetch);
+	-- FROMDAT then serves only bank 2 (user-defined characters, live).
+	PREFETCH :boolean	:=false
 );
 port(
 	TRAMADR	:out std_logic_vector(12 downto 0);
@@ -16,6 +19,11 @@ port(
 	FROMSEL	:out std_logic_vector(1 downto 0);
 	FROMADR:out std_logic_vector(16 downto 0);
 	FROMDAT:in std_logic_vector(7 downto 0)	:=x"00";
+
+	FNTADR	:out std_logic_vector(16 downto 0);
+	FNTRD	:out std_logic;
+	FNTACK	:in std_logic	:='0';
+	FNTDAT	:in std_logic_vector(63 downto 0)	:=(others=>'0');
 	
 	BITOUT	:out std_logic;
 	COLOR	:out std_logic_vector(2 downto 0);
@@ -103,6 +111,12 @@ constant bit_CLR2:integer	:=7;
 signal	tramdatm	:std_logic_vector(15 downto 0);
 signal	tramdatl	:std_logic_vector(15 downto 0);
 signal	isgaiji	:std_logic;
+signal	pf_tramadr	:std_logic_vector(12 downto 0);
+signal	pf_tramdrv	:std_logic;
+signal	pf_byte	:std_logic_vector(7 downto 0);
+signal	pf_cell	:std_logic_vector(6 downto 0);
+signal	pf_line	:std_logic_vector(3 downto 0);
+signal	fromsel_i	:std_logic_vector(1 downto 0);
 signal	gaiji_r	:std_logic;
 
 begin
@@ -192,12 +206,41 @@ begin
 		force_kanji	=>isgaiji,
 		mon		=>open,
 		
-		romsel	=>FROMSEL,
+		romsel	=>fromsel_i,
 		romaddr	=>FROMADR
 	);
 	
 	
-	FONTBYTE<=	FROMDAT;
+	FROMSEL<=fromsel_i;
+	pf_line<=conv_std_logic_vector(C_LIN mod 16,4);
+	FONTBYTE<=	FROMDAT when not PREFETCH or fromsel_i(1)='1' else pf_byte;
+
+	prefetch_font : if PREFETCH generate
+		pf : entity work.font_prefetch port map(
+			clk=>clk, rstn=>rstn,
+			HUCOUNT=>HUCOUNT, VCOUNT=>VCOUNT, HCOMP=>HCOMP, DHCOMP=>DHCOMP, DVCOMP=>DVCOMP,
+			C_LIN=>C_LIN, BASEADDR=>base_addr_pixel, PITCH=>wPITCH,
+			TRAMADR=>pf_tramadr, TRAMDRV=>pf_tramdrv, TRAMDAT=>TRAMDAT,
+			RD_CELL=>pf_cell, RD_LINE=>pf_line, RD_BYTE=>pf_byte,
+			FNTADR=>FNTADR, FNTRD=>FNTRD, FNTACK=>FNTACK, FNTDAT=>FNTDAT);
+		-- Cell of the row, advanced with TRAMADRb.
+		process(clk,rstn)begin
+			if(rstn='0')then
+				pf_cell<=(others=>'0');
+			elsif(clk' event and clk='1')then
+				if(DHCOMP='1')then
+					pf_cell<=(others=>'0');
+				elsif(UCOUNT=6 and VCOUNT>=VIV and HUCOUNT>=HIV and pf_cell/="1111111")then
+					pf_cell<=pf_cell+1;
+				end if;
+			end if;
+		end process;
+	end generate;
+	no_prefetch_font : if not PREFETCH generate
+		pf_tramadr<=(others=>'0'); pf_tramdrv<='0'; pf_byte<=(others=>'0');
+		pf_cell<=(others=>'0');
+		FNTADR<=(others=>'0'); FNTRD<='0';
+	end generate;
 
 	-- Avoid a variable integer modulo in the font-address path. The video
 	-- counters advance sequentially, and character height is fixed per frame.
@@ -279,7 +322,7 @@ begin
 					if(C_LIN/=0)then
 						TRAMADRb<=C0ADDR;
 					else
-						C_LOW<=C_LOW+1;
+						C_LOW<=(C_LOW+1) mod 32;
 						TRAMADRb<=C0ADDR+wPITCH;
 						C0ADDR<=C0ADDR+wPITCH;
 					end if;
@@ -346,7 +389,7 @@ begin
 		end if;
 	end process;
 
-	TRAMADR<=TRAMADRb;
+	TRAMADR<=pf_tramadr when pf_tramdrv='1' else TRAMADRb;
 
 -- Display driver section
 	process(clk,rstn)begin

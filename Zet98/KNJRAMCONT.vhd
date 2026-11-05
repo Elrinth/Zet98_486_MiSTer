@@ -61,6 +61,7 @@ port(
 );
 end component;
 
+signal	CGWRITE, GAIJI_ZERO	:std_logic;
 begin
 	-- The 0x46800-byte FONT.ROM spans two full banks and a third tail.
 	LDR_EXTADDR(23 downto LDR_AWIDTH)<=(others=>'0');
@@ -89,10 +90,16 @@ begin
 	
 	-- ANK characters have no left/right half. Keep their high byte zero.
 	CLINE<=cgw_line when cgw_en='1' else CPOS(3 downto 0);
-	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" else
+	-- A write (port A9h or the CG window) to code 56h/57h with a zero high
+	-- byte is a user-defined character, as NP2kai cgrom_oa9 ((code & 7Eh) =
+	-- 56h, high byte ignored); only reads treat it as ANK 'V'/'W'. Touhou's
+	-- ZUN -G defines its characters this way and used to overwrite V and W.
+	CGWRITE<='1' when (iowr='1' and ioaddr=x"00a9") or (cgw_en='1' and cgw_wr='1') else '0';
+	GAIJI_ZERO<='1' when JISCODE(15 downto 8)=x"00" and JISCODE(6 downto 1)="101011" and CGWRITE='1' else '0';
+	CGCODE<=JISCODE when JISCODE(15 downto 8)=x"00" and GAIJI_ZERO='0' else
 			cgw_right & JISCODE(14 downto 0) when cgw_en='1' else     -- odd address: right half
 			not CPOS(5) & JISCODE(14 downto 0);
-	CGKANJI<='0' when JISCODE(15 downto 8)=x"00" else '1';
+	CGKANJI<='0' when JISCODE(15 downto 8)=x"00" and GAIJI_ZERO='0' else '1';
 	-- Port A1h bit 7 is dropped like NP2kai's code & 7F7Fh, so user character
 	-- 7680h shares a slot with 7600h. It must stay a Kanji-ROM access even
 	-- when the half flag leaves the high byte zero, or its left half would

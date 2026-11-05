@@ -943,7 +943,10 @@ set_global_assignment -name VHDL_FILE ../../VIDEO/font/fontrom.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/textscr.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/VTIMING.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/synccont2.vhd
+set_global_assignment -name VHDL_FILE ../../VIDEO/font_prefetch.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/knjscr.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/graphics/gvram_m10k_lanes.vhd
+set_global_assignment -name VHDL_FILE ../../rtl/graphics/gvram_m10k.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/video_timing_pkg.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/CRTC98.vhd
 set_global_assignment -name VHDL_FILE ../../VIDEO/GRAPHSCR98.vhd

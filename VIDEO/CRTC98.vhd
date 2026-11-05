@@ -4,6 +4,9 @@ USE	IEEE.STD_LOGIC_UNSIGNED.ALL;
 use work.VIDEO_TIMING_pkg.all;
 
 entity CRTC98 is
+generic(
+	FONT_PREFETCH	:boolean	:=false
+);
 port(
 	TRAM_ADR	:out std_logic_vector(12 downto 0);
 	TRAM_DAT	:in std_logic_vector(15 downto 0);
@@ -12,6 +15,12 @@ port(
 	KNJSEL		:out std_logic_vector(1 downto 0);
 	KNJADR		:out std_logic_vector(16 downto 0);
 	KNJDAT		:in std_logic_vector(7 downto 0)	:=x"00";
+	-- Font banks 0/1 from SDRAM (FONT_PREFETCH): FONT.ROM word address,
+	-- held 4-word read with level acknowledge.
+	FNTADR		:out std_logic_vector(16 downto 0);
+	FNTRD		:out std_logic;
+	FNTACK		:in std_logic	:='0';
+	FNTDAT		:in std_logic_vector(63 downto 0)	:=(others=>'0');
 	
 	GRAMADR		:out std_logic_vector(13 downto 0);
 	GRAMRD		:out std_logic;
@@ -125,7 +134,8 @@ end component;
 
 component KNJSCR
 generic(
-	BLINKINT :integer	:=40
+	BLINKINT :integer	:=40;
+	PREFETCH :boolean	:=false
 );
 port(
 	TRAMADR	:out std_logic_vector(12 downto 0);
@@ -135,6 +145,11 @@ port(
 	FROMSEL	:out std_logic_vector(1 downto 0);
 	FROMADR:out std_logic_vector(16 downto 0);
 	FROMDAT:in std_logic_vector(7 downto 0)	:=x"00";
+
+	FNTADR	:out std_logic_vector(16 downto 0);
+	FNTRD	:out std_logic;
+	FNTACK	:in std_logic	:='0';
+	FNTDAT	:in std_logic_vector(63 downto 0)	:=(others=>'0');
 	
 	BITOUT	:out std_logic;
 	COLOR	:out std_logic_vector(2 downto 0);
@@ -513,7 +528,7 @@ begin
 	
 	pixel_reset : entity work.reset_release port map(clk3,rstn,pixel_rstn);
 
-	TXT	:knjscr port map(
+	TXT	:knjscr generic map(PREFETCH=>FONT_PREFETCH) port map(
 		TRAMADR	=>TRAM_ADR,
 		TRAMDAT	=>TRAM_DAT,
 		TRAMATR	=>TRAM_ATR,
@@ -521,6 +536,11 @@ begin
 		FROMSEL	=>KNJFNT_SEL,
 		FROMADR	=>KNJFNT_ADDR,
 		FROMDAT	=>KNJDAT,
+
+		FNTADR	=>FNTADR,
+		FNTRD	=>FNTRD,
+		FNTACK	=>FNTACK,
+		FNTDAT	=>FNTDAT,
 		
 		BITOUT	=>T_BIT,
 		COLOR	=>TCOLOR,

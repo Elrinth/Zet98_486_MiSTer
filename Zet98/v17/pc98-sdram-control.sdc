@@ -4,6 +4,12 @@
 # returned words are consumed only after the two return synchronizer stages.
 # Keep every inter-stage path and every destination consumer normally timed.
 foreach port {CPU SUB FDE FEC} {
+    # The GDC drawing port (SUB) is unused since graphics VRAM moved to
+    # block RAM; its tied-off logic is partly optimized away.
+    if {$port eq "SUB"} {
+        post_message "SDRAM SUB port unused (graphics VRAM in block RAM)"
+        continue
+    }
     foreach suffix [list "l${port}REQ\[0\]" "${port}done_sync\[0\]"] {
         set first [get_registers "*|ram|$suffix"]
         if {[get_collection_size $first] != 1} {
