@@ -23,6 +23,9 @@ param(
     # Controlled fitter experiment for hold-repair routing congestion.
     # This does not relax any setup, hold, or CDC constraints.
     [switch]$NoBeneficialSkew,
+    # Opt-in area tradeoff for near-capacity designs. Keep timing constraints;
+    # disable physical/router register duplication and measure the result.
+    [switch]$NoRegisterDuplication,
     [switch]$LowMemoryCache,
     [switch]$UpperRamICache,
     [ValidateSet(8, 32, 64)]
@@ -65,6 +68,8 @@ param(
     # With -RecorderDivide: also freeze on the first real-mode read of this
     # interrupt vector (hex, e.g. 6 for invalid opcode).
     [string]$RecorderFreezeVector,
+    # Protected #GP at this last-issued 16-bit IP, with descriptor snapshots.
+    [string]$RecorderFreezeGpIp,
     # With -RecorderDivide: also freeze this many seconds after the core starts.
     [int]$RecorderFreezeSeconds = 0,
     # With -RecorderDivide: log memory writes whose data holds either of these
@@ -172,6 +177,7 @@ try {
     [bool]$PackedGraphics | Set-Content -LiteralPath (Join-Path $buildRoot 'packed-graphics.txt')
     [bool]$NativeDdr | Set-Content -LiteralPath (Join-Path $buildRoot 'native-ddr.txt')
     $RegisterPacking | Set-Content -LiteralPath (Join-Path $buildRoot 'register-packing.txt')
+    [bool]$NoRegisterDuplication | Set-Content -LiteralPath (Join-Path $buildRoot 'no-register-duplication.txt')
     (-not [bool]$NoBeneficialSkew) | Set-Content -LiteralPath (Join-Path $buildRoot 'beneficial-skew.txt')
     'OSD Full/33/8/3 MHz' | Set-Content -LiteralPath (Join-Path $buildRoot 'cpu-execution-rate.txt')
     $Seed | Set-Content -LiteralPath (Join-Path $buildRoot 'fitter-seed.txt')
@@ -211,6 +217,9 @@ try {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_NATIVE_DDR_FB_ONLY=1"
     }
     if ($RecorderDivide -and -not $Z486DebugUart) { throw 'RecorderDivide needs -Z486DebugUart.' }
+    if ($RecorderFreezeGpIp -and (-not $Z486DebugUart -or -not $RecorderDivide -or $RecorderITrace)) {
+        throw 'RecorderFreezeGpIp needs -Z486DebugUart -RecorderDivide without RecorderITrace.'
+    }
     if ($RecorderPostOnly -and (-not $RecorderDivide -or $RecorderITrace -or $RecorderITraceBranches -or $RecorderMatch -or $RecorderStack -or $RecorderWatchAddr -or $RecorderLogData -or $RecorderFreezeData)) {
         throw 'RecorderPostOnly needs -RecorderDivide and cannot use instruction/memory watch options.'
     }
@@ -221,6 +230,10 @@ try {
     if ($Z486DebugUart) {
         Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value 'set_global_assignment -name VERILOG_MACRO ZET98_Z486_DEBUG=1'
         if ($RecorderDivide) {
+            if ($RecorderFreezeGpIp) {
+                if ($RecorderFreezeGpIp -notmatch '^[0-9A-Fa-f]{1,4}$') { throw 'RecorderFreezeGpIp must be 1-4 hex digits.' }
+                Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_GP_IP=$([Convert]::ToInt32($RecorderFreezeGpIp, 16))"
+            }
             Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_DE=1"
             if ($RecorderFreezeSeconds -gt 0) {
                 Add-Content -LiteralPath (Join-Path $sourceRoot 'Zet98/v17/release-Zet98MiSTer.qsf') -Value "`nset_global_assignment -name VERILOG_MACRO ZET98_RECORDER_FREEZE_SECONDS=$RecorderFreezeSeconds"
@@ -374,6 +387,12 @@ try {
             'set_global_assignment -name OPTIMIZE_POWER_DURING_SYNTHESIS OFF',
             'set_global_assignment -name ROUTER_REGISTER_DUPLICATION ON',
             'set_global_assignment -name FITTER_AGGRESSIVE_ROUTABILITY_OPTIMIZATION ALWAYS'
+        )
+    }
+    if ($NoRegisterDuplication) {
+        Add-Content -LiteralPath $projectSettings -Value @(
+            'set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF',
+            'set_global_assignment -name ROUTER_REGISTER_DUPLICATION OFF'
         )
     }
     if ($PrepareOnly) {

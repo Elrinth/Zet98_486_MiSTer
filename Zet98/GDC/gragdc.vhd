@@ -140,6 +140,9 @@ signal	D_CURADDR	:std_logic_vector(17 downto 0);
 signal	D_CURDOT	:integer range 0 to 15;
 signal	D_NUM		:std_logic_vector(13 downto 0);
 signal	D_NUM1		:std_logic_vector(13 downto 0);
+-- Rectangle sides share one acknowledged pixel transaction.
+signal D_RECT_SIDE :integer range 0 to 3;
+signal D_RECT_DIR :std_logic_vector(2 downto 0);
 signal	ADDRWR		:std_logic;
 type D_STATE_T is(
 	DS_IDLE,
@@ -687,6 +690,8 @@ begin
 			GDC_RD<='0';
 			GDC_WR<='0';
 			D_NUM<=(others=>'0');
+			D_RECT_SIDE<=0;
+			D_RECT_DIR<=(others=>'0');
 			D_SUMCLR<='0';
 			D_SUMADD<='0';
 			circlecalc<='0';
@@ -861,259 +866,94 @@ begin
 						when others =>
 							D_STATE<=DS_IDLE;
 						end case;
-					when DM_RECT =>
-						case D_STATE is
-						when DS_IDLE =>
-							if(DRAW_BEGIN='1')then
-								GDC_ADDR<=D_CURADDR;
-								case D_DIR is
-								when "000" =>
-									D_STATE<=DS_READ;
-								when "010" =>
-									D_STATE<=DS_READ2;
-								when "100" =>
-									D_STATE<=DS_READ3;
-								when "110" =>
-									D_STATE<=DS_READ4;
-								when others =>
-									D_STATE<=DS_READ;
-								end case;
-								GDC_RD<='1';
-								D_NUM<=D_D;
-								mwait:=1;
-							end if;
-						when DS_READ =>
-							if(GDC_MACK='1')then
-								GDC_RD<='0';
-								for i in 0 to 15 loop
-									if(i=D_CURDOT)then
-										case D_WRMODE is
-										when DW_SET =>
-											GDC_WDATx(i)<=D_PTN(i);
-										when DW_XOR =>
-											GDC_WDATx(i)<=D_PTN(i) xor GDC_RDATx(i);
-										when DW_NAND =>
-											GDC_WDATx(i)<=GDC_RDATx(i) and (not D_PTN(i));
-										when DW_OR =>
-											GDC_WDATx(i)<=GDC_RDATx(i) or D_PTN(i);
-										when others =>
-										end case;
-									else
-										GDC_WDATx(i)<=GDC_RDATx(i);
-									end if;
-								end loop;
-								D_STATE<=DS_READW;
-							end if;
-						when DS_READW =>
-							if(GDC_MACK='0')then
-								GDC_WR<='1';
-								mwait:=1;
-								D_STATE<=DS_WRITE;
-							end if;
-						when DS_WRITE =>
-							if(GDC_MACK='1')then
-								GDC_WR<='0';
-								if(D_NUM=D_NUM1)then
-									if(D_DIR="010" or D_DIR="011")then
-										D_STATE<=DS_IDLE;
-									else
-										if(D_CURDOT=15)then
-											D_CURADDR<=D_CURADDR+1;
-											D_CURDOT<=0;
-										else
-											D_CURDOT<=D_CURDOT+1;
-										end if;
-										if(D_DIR(1)='0')then
-											D_NUM<=D_D2;
-										else
-											D_NUM<=D_D;
-										end if;
-										D_STATE<=DS_WRITE2W;
-									end if;
-								else
-									D_CURADDR<=D_CURADDR+r_PITCH(6 downto 0);
-									D_STATE<=DS_WRITEW;
-								end if;
-							end if;
-						when DS_WRITEW =>
-							if(GDC_MACK='0')then
-								GDC_RD<='1';
-								D_STATE<=DS_READ;
-							end if;
-						when DS_READ2 =>
-							if(GDC_MACK='1')then
-								GDC_RD<='0';
-								for i in 0 to 15 loop
-									if(i=D_CURDOT)then
-										case D_WRMODE is
-										when DW_SET =>
-											GDC_WDATx(i)<=D_PTN(i);
-										when DW_XOR =>
-											GDC_WDATx(i)<=D_PTN(i) xor GDC_RDATx(i);
-										when DW_NAND =>
-											GDC_WDATx(i)<=GDC_RDATx(i) and (not D_PTN(i));
-										when DW_OR =>
-											GDC_WDATx(i)<=GDC_RDATx(i) or D_PTN(i);
-										when others =>
-										end case;
-									else
-										GDC_WDATx(i)<=GDC_RDATx(i);
-									end if;
-								end loop;
-								D_STATE<=DS_READ2W;
-							end if;
-						when DS_READ2W =>
-							if(GDC_MACK='0')then
-								GDC_WR<='1';
-								D_STATE<=DS_WRITE2;
-							end if;
-						when DS_WRITE2 =>
-							if(GDC_MACK='1')then
-								GDC_WR<='0';
-								if(D_NUM=D_NUM1)then
-									if(D_DIR="100" or D_DIR="101")then
-										D_STATE<=DS_IDLE;
-									else
-										D_CURADDR<=D_CURADDR-r_PITCH(6 downto 0);
-										if(D_DIR(1)='1')then
-											D_NUM<=D_D2;
-										else
-											D_NUM<=D_D;
-										end if;
-										D_STATE<=DS_WRITE3W;
-									end if;
-								else
-									if(D_CURDOT=15)then
-										D_CURADDR<=D_CURADDR+1;
-										D_CURDOT<=0;
-									else
-										D_CURDOT<=D_CURDOT+1;
-									end if;
-									D_STATE<=DS_WRITE2W;
-								end if;
-							end if;
-						when DS_WRITE2W =>
-							if(GDC_MACK='0')then
-								GDC_RD<='1';
-								D_STATE<=DS_READ2;
-							end if;
-						when DS_READ3 =>
-							if(GDC_MACK='1')then
-								GDC_RD<='0';
-								for i in 0 to 15 loop
-									if(i=D_CURDOT)then
-										case D_WRMODE is
-										when DW_SET =>
-											GDC_WDATx(i)<=D_PTN(i);
-										when DW_XOR =>
-											GDC_WDATx(i)<=D_PTN(i) xor GDC_RDATx(i);
-										when DW_NAND =>
-											GDC_WDATx(i)<=GDC_RDATx(i) and (not D_PTN(i));
-										when DW_OR =>
-											GDC_WDATx(i)<=GDC_RDATx(i) or D_PTN(i);
-										when others =>
-										end case;
-									else
-										GDC_WDATx(i)<=GDC_RDATx(i);
-									end if;
-								end loop;
-								D_STATE<=DS_READ3W;
-							end if;
-						when DS_READ3W =>
-							if(GDC_MACK='0')then
-								GDC_WR<='1';
-								D_STATE<=DS_WRITE3;
-							end if;
-						when DS_WRITE3 =>
-							if(GDC_MACK='1')then
-								GDC_WR<='0';
-								if(D_NUM=D_NUM1)then
-									if(D_DIR="110" or D_DIR="111")then
-										D_STATE<=DS_IDLE;
-									else
-										if(D_CURDOT=0)then
-											D_CURADDR<=D_CURADDR-1;
-											D_CURDOT<=15;
-										else
-											D_CURDOT<=D_CURDOT-1;
-										end if;
-										if(D_DIR(1)='0')then
-											D_NUM<=D_D2;
-										else
-											D_NUM<=D_D;
-										end if;
-										D_STATE<=DS_WRITE4W;
-									end if;
-								else
-									D_CURADDR<=D_CURADDR-r_PITCH(6 downto 0);
-									D_STATE<=DS_WRITE3W;
-								end if;
-							end if;
-						when DS_WRITE3W =>
-							if(GDC_MACK='0')then
-								GDC_RD<='1';
-								D_STATE<=DS_READ3;
-							end if;
-						when DS_READ4 =>
-							if(GDC_MACK='1')then
-								GDC_RD<='0';
-								for i in 0 to 15 loop
-									if(i=D_CURDOT)then
-										case D_WRMODE is
-										when DW_SET =>
-											GDC_WDATx(i)<=D_PTN(i);
-										when DW_XOR =>
-											GDC_WDATx(i)<=D_PTN(i) xor GDC_RDATx(i);
-										when DW_NAND =>
-											GDC_WDATx(i)<=GDC_RDATx(i) and (not D_PTN(i));
-										when DW_OR =>
-											GDC_WDATx(i)<=GDC_RDATx(i) or D_PTN(i);
-										when others =>
-										end case;
-									else
-										GDC_WDATx(i)<=GDC_RDATx(i);
-									end if;
-								end loop;
-								D_STATE<=DS_READ4W;
-							end if;
-						when DS_READ4W =>
-							if(GDC_MACK='0')then
-								GDC_WR<='1';
-								D_STATE<=DS_WRITE4;
-							end if;
-						when DS_WRITE4 =>
-							if(GDC_MACK='1')then
-								GDC_WR<='0';
-								if(D_NUM=D_NUM1)then
-									if(D_DIR="000" or D_DIR="001")then
-										D_STATE<=DS_IDLE;
-									else
-										D_CURADDR<=D_CURADDR+r_PITCH(6 downto 0);
-										if(D_DIR(1)='1')then
-											D_NUM<=D_D2;
-										else
-											D_NUM<=D_D;
-										end if;
-										D_STATE<=DS_WRITE4W;
-									end if;
-								else
-									if(D_CURDOT=0)then
-										D_CURADDR<=D_CURADDR-1;
-										D_CURDOT<=15;
-									else
-										D_CURDOT<=D_CURDOT-1;
-									end if;
-									D_STATE<=DS_WRITE4W;
-								end if;
-							end if;
-						when DS_WRITE4W =>
-							if(GDC_MACK='0')then
-								GDC_RD<='1';
-								D_STATE<=DS_READ4;
-							end if;
-						when others =>
-						end case;
-					
+                    when DM_RECT =>
+                        case D_STATE is
+                        when DS_IDLE =>
+                            if DRAW_BEGIN='1' then
+                                D_RECT_SIDE<=0;
+                                D_RECT_DIR<=D_DIR;
+                                D_NUM<=D_D;
+                                D_STATE<=DS_NEXT;
+                            end if;
+                        when DS_NEXT =>
+                            -- D and D2 are pixel counts, not terminal indices.
+                            -- A zero-length side turns without touching VRAM.
+                            if D_NUM=0 then
+                                if D_RECT_SIDE=3 then
+                                    D_STATE<=DS_IDLE;
+                                else
+                                    D_RECT_SIDE<=D_RECT_SIDE+1;
+                                    D_RECT_DIR<=D_RECT_DIR+2;
+                                    if D_RECT_SIDE=0 or D_RECT_SIDE=2 then
+                                        D_NUM<=D_D2;
+                                    else
+                                        D_NUM<=D_D;
+                                    end if;
+                                end if;
+                            else
+                                GDC_ADDR<=D_CURADDR;
+                                GDC_RD<='1';
+                                D_STATE<=DS_READ;
+                            end if;
+                        when DS_READ =>
+                            if GDC_MACK='1' then
+                                GDC_RD<='0';
+                                for i in 0 to 15 loop
+                                    if i=D_CURDOT then
+                                        case D_WRMODE is
+                                        when DW_SET => GDC_WDATx(i)<=D_PTN(i);
+                                        when DW_XOR => GDC_WDATx(i)<=D_PTN(i) xor GDC_RDATx(i);
+                                        when DW_NAND => GDC_WDATx(i)<=GDC_RDATx(i) and not D_PTN(i);
+                                        when DW_OR => GDC_WDATx(i)<=GDC_RDATx(i) or D_PTN(i);
+                                        when others => null;
+                                        end case;
+                                    else
+                                        GDC_WDATx(i)<=GDC_RDATx(i);
+                                    end if;
+                                end loop;
+                                D_STATE<=DS_READW;
+                            end if;
+                        when DS_READW =>
+                            if GDC_MACK='0' then
+                                GDC_WR<='1';
+                                D_STATE<=DS_WRITE;
+                            end if;
+                        when DS_WRITE =>
+                            if GDC_MACK='1' then
+                                GDC_WR<='0';
+                                D_NUM<=D_NUM-1;
+                                -- Advance after every pixel, including corners.
+                                -- Rotating DIR by two selects the next side and
+                                -- handles diagonal rectangles without another FSM.
+                                vaddr:=D_CURADDR;
+                                case D_RECT_DIR is
+                                when "000" | "001" | "111" => vaddr:=vaddr+r_PITCH;
+                                when "011" | "100" | "101" => vaddr:=vaddr-r_PITCH;
+                                when others => null;
+                                end case;
+                                case D_RECT_DIR is
+                                when "001" | "010" | "011" =>
+                                    if D_CURDOT=15 then
+                                        vaddr:=vaddr+1;D_CURDOT<=0;
+                                    else
+                                        D_CURDOT<=D_CURDOT+1;
+                                    end if;
+                                when "101" | "110" | "111" =>
+                                    if D_CURDOT=0 then
+                                        vaddr:=vaddr-1;D_CURDOT<=15;
+                                    else
+                                        D_CURDOT<=D_CURDOT-1;
+                                    end if;
+                                when others => null;
+                                end case;
+                                D_CURADDR<=vaddr;
+                                D_STATE<=DS_WRITEW;
+                            end if;
+                        when DS_WRITEW =>
+                            if GDC_MACK='0' then D_STATE<=DS_NEXT;end if;
+                        when others => D_STATE<=DS_IDLE;
+                        end case;
+
 					when DM_CIRCLE =>
 						case D_STATE is
 						when DS_IDLE =>

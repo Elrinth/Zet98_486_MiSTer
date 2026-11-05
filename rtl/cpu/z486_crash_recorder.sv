@@ -48,6 +48,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                              parameter [19:0] WATCH_PAGE = 20'h00120,
                              parameter IO_MODE = 0,
                              parameter DE_TRIGGER = 0,
+                             // Protected #GP at this last-issued IP; bit 16 enables.
+                             parameter [16:0] GP_FREEZE_IP = 17'h00000,
                              parameter [15:0] DE_MATCH = 16'h0e62,
                              parameter [15:0] DE_MATCH2 = 16'h0058,
                              parameter [23:0] DE_STACK = 24'h000351,
@@ -83,6 +85,8 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     input wire clk,
     input wire gate_read,
     input wire [31:0] gate_addr,
+    input wire [7:0] gate_vector,
+    input wire [127:0] fault_context, fault_operand,
     input wire [15:0] cs,
     input wire [31:0] eip,
     input wire [31:0] eflags,
@@ -194,6 +198,11 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                          ev_type == 4'd7 ? {ev_type, 15'd0, a20, walk_pde, ev_payload, pf_code, pf_addr, vm, pe, seq} :
                          ev_type >= 4'd8 ? {ev_type, 12'd0, mem_be, mem_addr, ev_payload, pf_code, pf_addr, vm, pe, seq}
                                          : {ev_type, cs, eip, ev_payload, pf_code, pf_addr, vm, pe, seq};
+    wire gp_freeze = GP_FREEZE_IP[16] && pe && !vm && gate_read &&
+                     gate_vector == 8'd13 && !gate_addr[2] &&
+                     prev_issue_eip[15:0] == GP_FREEZE_IP[15:0];
+    reg [127:0] frozen_fault_context, frozen_fault_operand;
+    reg gp_captured = 0;
     (* ramstyle = "M10K" *) reg [127:0] ring[0:255];
     reg [127:0] ring_q, newest;
     reg [7:0] raddr;
@@ -243,6 +252,12 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
                               DE_FREEZE_VECTOR[8] && ev_type == 4'd1 && !pe &&
                               gate_addr == {22'd0, DE_FREEZE_VECTOR[7:0], 2'b00})
                            : (ev_type >= 4'd3 && ev_type <= 4'd5)) frozen <= 1'b1;
+            if (gp_freeze) begin
+                frozen <= 1'b1;
+                gp_captured <= 1'b1;
+                frozen_fault_context <= fault_context;
+                frozen_fault_operand <= fault_operand;
+            end
             if (DE_TRIGGER && DE_FREEZE_CS != 0 && ev_type == 4'd12 && cs == DE_FREEZE_CS &&
                 (!DE_FREEZE_IP[16] || de_at_ip)) begin
                 if (DE_POST == 0) frozen <= 1'b1;
@@ -274,7 +289,7 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
     reg [127:0] held;
     wire [3:0] nib = held[127:124];
     wire [7:0] hex = nib < 10 ? 8'h30 + nib : 8'h41 + nib - 10;
-    wire has_hex = kind == "H" || kind == "E";
+    wire has_hex = kind == "H" || kind == "E" || kind == "C" || kind == "D";
     wire [5:0] last_pos = has_hex ? 6'd33 : 6'd1;
     wire [7:0] ch = pos == 0 ? kind : pos == last_pos ? 8'h0a : hex;
     assign tx = shift[0];
@@ -284,13 +299,22 @@ module z486_crash_recorder #(parameter integer CLOCK_HZ = 90000000,
             else baud <= baud - 1'b1;
         end else case (st)
             S_IDLE: if (timer != 0) timer <= timer - 1'b1;
-                    else if (frozen || IO_MODE) begin line_no <= 0; kind <= "B"; pos <= 0; st <= S_LINE; pause <= 1'b1; end
+                    else if (frozen || IO_MODE) begin
+                        line_no <= 0; pos <= 0; st <= S_LINE; pause <= 1'b1;
+                        if (gp_captured) begin
+                            kind <= "C"; held <= frozen_fault_context;
+                        end else kind <= "B";
+                    end
                     else begin held <= newest; kind <= "H"; pos <= 0; st <= S_LINE; end
             S_LOAD: begin held <= ring_q; kind <= "E"; pos <= 0; st <= S_LINE; end   // ring_q valid (raddr set 2+ clocks ago)
             default: begin
                 shift <= {1'b1, ch, 1'b0}; bits <= 10; baud <= DIV - 1;
                 if (pos != 0 && pos != last_pos) held <= {held[123:0], 4'b0};
                 if (pos != last_pos) pos <= pos + 1'b1;
+                else if (kind == "C") begin
+                    kind <= "D"; held <= frozen_fault_operand; pos <= 0;
+                end
+                else if (kind == "D") begin kind <= "B"; pos <= 0; end
                 else if (kind == "H" || kind == "Z") begin
                     st <= S_IDLE; pause <= 1'b0;
                     timer <= IO_MODE ? SECOND * 10 - 1 : SECOND - 1;

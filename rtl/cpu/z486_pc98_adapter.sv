@@ -51,6 +51,8 @@ module z486_pc98_adapter #(
     wire [15:0] dbg_cs, dbg_sp;
     wire dbg_vm, dbg_gate_read;
     wire [31:0] dbg_gate_addr, dbg_pf_addr, dbg_eflags;
+    wire [7:0] dbg_gate_vector;
+    wire [127:0] dbg_fault_context, dbg_fault_operand;
     wire [2:0] dbg_pf_code;
     wire dbg_page_fault;
     wire [31:0] dbg_walk_pde, dbg_walk_pte, dbg_cr3;
@@ -167,6 +169,8 @@ module z486_pc98_adapter #(
         .win0_unmapped(1'b0), .a20_enable(a20_enable), .cpu_speed_sel(cpu_speed_sel), .single_step(1'b0),
         .dbg_CS(dbg_cs), .dbg_EIP(eip), .dbg_CS_base(), .dbg_pe(protected_mode), .dbg_vm(dbg_vm), .dbg_x87_state(),
         .dbg_gate_read(dbg_gate_read), .dbg_gate_addr(dbg_gate_addr), .dbg_pf_code(dbg_pf_code),
+        .dbg_gate_vector(dbg_gate_vector), .dbg_fault_context(dbg_fault_context),
+        .dbg_fault_operand(dbg_fault_operand),
         .dbg_pf_addr(dbg_pf_addr), .dbg_eflags(dbg_eflags), .dbg_page_fault(dbg_page_fault),
         .dbg_walk_pde(dbg_walk_pde), .dbg_walk_pte(dbg_walk_pte), .dbg_cr3(dbg_cr3), .dbg_SP(dbg_sp),
         .dbg_issue(dbg_issue), .dbg_issue_eip(dbg_issue_eip),
@@ -254,6 +258,9 @@ module z486_pc98_adapter #(
     localparam RECORDER_DE = 0;
 `endif
     z486_crash_recorder #(.CLOCK_HZ(CLOCK_RATE_MHZ * 1000000), .IO_MODE(RECORDER_IO),
+`ifdef ZET98_RECORDER_GP_IP
+                          .GP_FREEZE_IP({1'b1, 16'(`ZET98_RECORDER_GP_IP)}),
+`endif
                           .DE_TRIGGER(RECORDER_DE), .DE_FREEZE_CS(RECORDER_FREEZE_CS),
                           .DE_MATCH(RECORDER_MATCH), .DE_MATCH2(RECORDER_MATCH2),
                           .DE_FREEZE_IP(RECORDER_FREEZE_IP),
@@ -266,6 +273,8 @@ module z486_pc98_adapter #(
                           .DE_LOG_DATA(RECORDER_LOG_DATA),
                           .DE_FREEZE_DATA(RECORDER_FREEZE_DATA)) crash_recorder (
         .clk(clk), .gate_read(dbg_gate_read), .gate_addr(dbg_gate_addr), .cs(dbg_cs), .eip(eip),
+        .gate_vector(dbg_gate_vector), .fault_context(dbg_fault_context),
+        .fault_operand(dbg_fault_operand),
         .eflags(dbg_eflags), .pe(protected_mode), .vm(dbg_vm),
         .triple_fault(triple_fault), .port_f0_write(io_write_do && io_write_address == 16'h00f0),
         .port_f0_data(io_write_data[7:0]), .a20(a20_enable), .sp(dbg_sp),

@@ -1,5 +1,53 @@
 # Experimental MPU-PC98II UART interface
 
+## Local FluidSynth timing investigation (2026-10-06)
+
+The original PC98 B244/GeneralUser-GS setup showed intermittent note clumping,
+USB-upload crackling, and repeated ALSA underruns during Nightslave's opening
+jingle. IRQ isolation and MIDI priorities improved gameplay, but did not fix
+startup. Disabling effects sounded better but still produced measured underruns.
+The owner requested retaining reverb and chorus, and authorized unattended tests.
+
+A private UART capture of the exact `CD GAMES`, `CD NS`, `NS`, Enter startup
+was replayed directly into ALSA. This reproduced underruns without live core
+MIDI delivery. Lower interpolation, 128 voices, a shorter RT budget period,
+and moving only the audio thread did not eliminate the problem. No FPGA RTL
+change is justified by this result. Captures remain private and ignored.
+
+The successful stress-test candidate uses FluidSynth's two-CPU renderer, pinned
+main audio/MIDI on CPU0 and `mixer0` on CPU1, at 48 kHz / period256 / periods16.
+Three replay runs including uploads had zero observed underruns or stream
+restarts. Reverb, chorus, 256 voices and default interpolation remain enabled.
+The 4097-frame ALSA buffer is about 85 ms, adding about 64 ms versus the previous
+configuration. Kernel RT budget settings were restored to 1000000/950000 us.
+Two actual core-reset/DOS/game startups through normal MidiLink each completed
+a 75-second capture with zero underruns or stream restarts. A live installer
+upgrade preserved the synth PID and audio trigger timestamp. The public guide
+and bundle were deployed and verified byte-for-byte over HTTPS.
+
+`scripts/mister_midi_install.py` installs the startup hook and runtime executable
+bind mount without modifying linux.img. `mister_fluidsynth_wrapper.sh` selects
+both CPUs and launch options for PC98 only. `mister_midi_irq_guard.py` handles
+USB IRQ affinity, thread priorities and placement, restoring settings it owns
+on core exit. It tolerates vanished processes and guards against reused PIDs
+and later administrator changes. Twelve lifecycle tests plus four installer
+tests pass. The updated uninstaller detaches the private original-executable
+bind mount even when a running synth still holds its inode.
+
+A prior version's startup hook survived a full MiSTer reboot. The new launch
+configuration is checked on core reload; do not equate this with a new full
+system reboot. Reinstall the new bundle to upgrade, or run the deployed
+installer with `--uninstall` and reboot to undo. Neither helper modifies the
+soundfont selection or game data.
+
+Guide and source bundle: https://pc98.thefirstboss.com/guides/midi-timing/
+
+An unrelated MidiLink parser reset bug was reproduced, but a prior 90-second
+Nightslave capture had no running-status messages, so it did not explain that
+passage. No binary parser patch is deployed.
+
+The older prototype history follows.
+
 Build with `scripts/build.ps1 -MidiUart` and select **MPU MIDI: UART** in
 the core menu. The option is off by default. This prototype has passed
 simulation, guest IRQ tests and exact HPS serial capture on a fitted 50 MHz

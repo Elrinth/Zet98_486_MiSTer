@@ -115,6 +115,9 @@ module z486
     // with the linear address, and the latched page-fault code and CR2.
     output             dbg_gate_read,
     output     [31:0]  dbg_gate_addr,
+    output      [7:0]  dbg_gate_vector,
+    output reg [127:0] dbg_fault_context,
+    output reg [127:0] dbg_fault_operand,
     output      [2:0]  dbg_pf_code,
     output     [31:0]  dbg_pf_addr,
     output     [31:0]  dbg_eflags,
@@ -3648,6 +3651,40 @@ end
 // PC98 crash recorder taps (see the dbg_gate_read port).
 assign dbg_gate_read = mem_req_to_paging && mem_accepted && (mem_seg_sel == SEG_IDT);
 assign dbg_gate_addr = paging_linear_addr;
+assign dbg_gate_vector = pe && !vm ? IND[10:3] : IND[9:2];
+`ifdef ZET98_Z486_DEBUG
+// Preserve the descriptor/operand state on entry to the fault microcode,
+// before IDT accesses reuse its scratch registers. No architectural state
+// depends on this diagnostic snapshot.
+wire dbg_fault_window = uc_addr >= 12'h859 && uc_addr <= 12'h877;
+reg dbg_fault_window_prev;
+reg dbg_fault_snapshot_valid;
+always @(posedge clk) begin
+    if (!reset_n) begin
+        dbg_fault_window_prev <= 0;
+        dbg_fault_snapshot_valid <= 0;
+        dbg_fault_context <= 0;
+        dbg_fault_operand <= 0;
+    end else begin
+        if (uc_exec) dbg_fault_window_prev <= dbg_fault_window;
+        if (i_issue) dbg_fault_snapshot_valid <= 0;
+        if (!dbg_fault_snapshot_valid && (gp_fault_trigger ||
+                 (uc_exec && dbg_fault_window && !dbg_fault_window_prev))) begin
+            dbg_fault_snapshot_valid <= 1;
+            dbg_fault_context <= {4'd0, ES, SLCTR[15:0], TMPC, desc_raw_hi,
+                              uc_addr, prot_jump_addr,
+                              gp_fault_trigger, ss_segment_fault, pe, vm};
+            dbg_fault_operand <= {desc_cache[SEG_ES].base,
+                              seg_effective_limit(desc_cache[SEG_ES]), IND, OPR_R};
+        end
+    end
+end
+`else
+always_comb begin
+    dbg_fault_context = 0;
+    dbg_fault_operand = 0;
+end
+`endif
 assign dbg_pf_code   = latched_pf_code;
 assign dbg_pf_addr   = latched_pf_addr;
 assign dbg_eflags    = EFLAGS;
