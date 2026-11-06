@@ -2428,7 +2428,10 @@ signal	startup_muted :std_logic;
 signal	COM_CS		:std_logic;
 signal	COM_ODAT	:std_logic_vector(7 downto 0);
 signal	COM_DOE		:std_logic;
-signal	COM_INTn	:std_logic;
+signal	COM_TXRDY	:std_logic;
+signal	COM_TXEMP	:std_logic;
+signal	COM_RXRDY	:std_logic;
+signal	COM_IRQ		:std_logic;
 
 --IO439
 signal	IO439_ODAT	:std_logic_vector(7 downto 0);
@@ -3394,7 +3397,7 @@ begin
 		IR1		=>KBINT,
 		IR2		=>VSINT,
 		IR3		=>'0',
-		IR4		=>not COM_INTn,
+		IR4		=>COM_IRQ,
 		IR5		=>'0',
 		IR6		=>pMPUIRQ,
 		IR7		=>INTS,
@@ -4518,7 +4521,7 @@ begin
 		DATIN	=>io_wdata(7 downto 0),
 		DATOUT	=>COM_ODAT,
 		DATOE	=>COM_DOE,
-		INTn	=>COM_INTn,
+		INTn	=>open,
 		
 		TXD		=>open,
 		RxD		=>'1',
@@ -4526,18 +4529,24 @@ begin
 		DSRn	=>'1',
 		DTRn	=>open,
 		RTSn	=>open,
-		CTSn	=>'1',
+		CTSn	=>'0',
 		
-		TxRDY	=>open,
-		TxEMP	=>open,
-		RxRDY	=>open,
+		TxRDY	=>COM_TXRDY,
+		TxEMP	=>COM_TXEMP,
+		RxRDY	=>COM_RXRDY,
 		
-		TxCn	=>'1',
-		RxCn	=>'1',
+		TxCn	=>PTC_CNTOUT(2),
+		RxCn	=>PTC_CNTOUT(2),
 		
 		clk		=>cpuclk,
 		rstn	=>srstn
 	);
+	-- RS-232C as on the PC-98: PIT channel 2 is the 8251's baud clock, so a byte
+	-- leaves at the programmed rate even with no cable (Yuugiri's HMM MIDI driver
+	-- falls back to the RS-232C without an MPU and waits for TxRDY after every
+	-- byte; with the clocks tied off it waited forever). The interrupt is RxRDY,
+	-- TxEMPTY and TxRDY gated by system port C (35h) bits 0-2 (RXRE, TXEE, TXRE).
+	COM_IRQ<=(COM_RXRDY and SYSP_PCO(0)) or (COM_TXEMP and SYSP_PCO(1)) or (COM_TXRDY and SYSP_PCO(2));
 
 	PTC_CS<='1' when ioaddr_odd(15 downto 3)=(x"007" & '0') and ioaddr_odd(0)='1' else
 			'1' when ioaddr_odd(15 downto 3)=(x"3fd" & '1') and ioaddr_odd(0)='1' else

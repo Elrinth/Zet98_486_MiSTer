@@ -16,6 +16,45 @@ reports) and the [HDI converter](https://pc98.thefirstboss.com/converter/).
 
 ## Features
 
+B280 fixes a game that hung at startup with MPU MIDI off, and reads of the
+PC-9821 31 kHz latch:
+
+- **RS-232C transmitter.** The 8251 serial controller had its transmit and
+  receive clocks tied off, so the first byte a program wrote never left and
+  the controller never reported "ready" again. On a PC-98 the 8251 is clocked
+  by channel 2 of the interval timer, which sets the baud rate. Yuugiri's
+  MIDI driver (HMM) uses the RS-232C when it finds no MPU board, and waits for
+  the controller after every byte: with MPU MIDI off (the default), the game
+  hung right after the sound driver's messages. The 8251 now runs from timer
+  channel 2 and sends with nothing attached, and its interrupt (IR4) is the
+  receive, transmit-empty and transmit-ready signals, each enabled by system
+  port C bits 0-2 as on NEC machines.
+  [`tests/run-usart-tx.sh`](tests/run-usart-tx.sh) sends bytes the way HMM
+  does and checks the frames and the interrupt; with the clocks tied off, as
+  before, it fails.
+- **Port 09A8h reads back.** The PC-9821 31 kHz latch at 09A8h is now
+  readable; reads used to come from the open bus. Open BIOS releases before
+  2026-10-31 read it for INT 18h AH=31h, and Battle Skin Panic 9821 then
+  switched to 31 kHz (black screen after its logo).
+  [`tests/run-pegc-bus.sh`](tests/run-pegc-bus.sh) checks it in simulation,
+  [`tests/hardware/p9a8_98.asm`](tests/hardware/p9a8_98.asm) on a MiSTer.
+
+Open BIOS 2026-11-05 comes with it: interrupts that arrive while the disk BIOS
+waits for the floppy controller run on the program's own stack again, as
+under NEC's BIOS (Diable de Laplace filled the screen with a dither pattern
+after its title), and POST leaves the RS-232C transmit interrupts off, as
+NEC's BIOS does.
+
+On a MiSTer, B280 passed QUALIFY, FDVRAM, GDCSYNC and TVRAMW, five Windows 95
+boots and the floppy hot-insert check, the Star Cruiser II logo placement
+check and Night Slave with Open BIOS 2026-11-03.1, and QUALIFY, Windows 95,
+the floppy check and Night Slave again with 2026-11-05. With all-default
+settings (MPU MIDI off) Yuugiri plays into its story, and with Open BIOS
+2026-11-05 Diable de Laplace reaches its main menu. Genesis, Metal Orange,
+Ultima VIII, Tenbu Sangokushi Seishi, Bomber Quest, Star Cruiser and the four
+HDIs from B279's tests start and play. P9A8.COM reads the latch back on B280
+and fails on B279.
+
 B279 makes Genesis load from its floppy and comes as two RBFs, for MiSTers
 that fail the 90 MHz builds:
 
