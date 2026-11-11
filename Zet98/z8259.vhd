@@ -42,6 +42,8 @@ port(
 --	
 	INT		:out std_logic;
 	INTA	:in std_logic;
+	-- One clock when a latched request is acknowledged (INTA accepted it).
+	ACK		:out std_logic_vector(7 downto 0);
 	
 	CASI	:in std_logic_vector(2 downto 0);
 	CASO	:out std_logic_vector(2 downto 0);
@@ -342,6 +344,9 @@ begin
 		end if;
 	end process;
 	INT<=INTb;
+	ackgen: for i in 0 to 7 generate
+		ACK(i)<='1' when INTAm='1' and lINTA='0' and INTnum=i and INTvalid='1' else '0';
+	end generate;
 	
 	process(clk,rstn)
 	variable selx	:integer range 0 to 15;

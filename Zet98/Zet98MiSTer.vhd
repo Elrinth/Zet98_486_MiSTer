@@ -758,7 +758,8 @@ port(
 	IR7		:in std_logic;
 	
 	INT		:out std_logic;
-	INTA	:in std_logic;
+	INTA	:in std_logic;
+	ACK		:out std_logic_vector(7 downto 0);
 	
 	CASI	:in std_logic_vector(2 downto 0);
 	CASO	:out std_logic_vector(2 downto 0);
@@ -2195,6 +2196,7 @@ signal	gGDC_VGRAMSEL	:std_logic;
 -- Display page as used for the frame on screen (see display_address).
 signal	gGDC_VGRAMSEL_frame	:std_logic;
 signal	VSINT_ARM, VSINT	:std_logic;
+signal	INTM_ACK	:std_logic_vector(7 downto 0);
 signal	gGDC_CGRAMSEL	:std_logic;
 signal tGDC_ATRSEL :std_logic;
 signal	tGDC_VIDEN		:std_logic;
@@ -3384,7 +3386,10 @@ begin
 	-- MPU deasserts its level request when software polls the last byte.
 	-- Other legacy producers include one-clock pulses and keep their latch.
 	-- IR0 is the 8253 OUT level: IRR read-back follows it (timer polling loops).
-	INT_M	:z8259 generic map(RETRACTABLE_IRQS => x"40", LEVEL_IRQS => x"01") port map(
+	-- IR2 (VSYNC) is withdrawn when its retrace ends unacknowledged, as in
+	-- NP2kai: a retrace while IRQ2 was masked must not fire the moment a game
+	-- unmasks it (Yesterday unmasks and arms before setting its vector).
+	INT_M	:z8259 generic map(RETRACTABLE_IRQS => x"44", LEVEL_IRQS => x"01") port map(
 		CS		=>INTM_CS,
 		ADDR	=>ioaddr(1),
 		DIN		=>io_wdata(7 downto 0),
@@ -3404,6 +3409,7 @@ begin
 		
 		INT		=>INTM,
 		INTA	=>tgca,
+		ACK		=>INTM_ACK,
 		
 		CASI	=>(others=>'0'),
 		CASO	=>INTCAS,
@@ -3749,7 +3755,7 @@ begin
     -- to VRTC directly it fired every frame, so Thexder's handler ran before
     -- the game armed it and jumped through an unset pointer.
     vsync_irq : entity work.pc98_vsync_irq port map(
-        clk=>cpuclk, rstn=>srstn, arm=>VSINT_ARM, vrtc=>VRTC, irq=>VSINT);
+        clk=>cpuclk, rstn=>srstn, arm=>VSINT_ARM, vrtc=>VRTC, ack=>INTM_ACK(2), irq=>VSINT);
     VSINT_ARM<='1' when ioaddr_even=x"0064" and iowr='1' else '0';
 
     -- Display page (A4h) as scanned out: applied when retrace ends, or at once
