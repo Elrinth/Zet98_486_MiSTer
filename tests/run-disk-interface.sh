@@ -22,7 +22,7 @@ iverilog -g2012 -DZET98_DISK_ACTIVITY -DZET98_RAW_IDE -I "$out" -s mister_ide_in
 vvp "$out/hdi.vvp"
 iverilog -g2012 -DZET98_DISK_ACTIVITY -Wall -DZET98_RAW_IDE -DZET98_MPU_UART -I "$out" -s mister_mpu_interface_tb -o "$out/mpu.vvp" \
     "$out/hps_io.sv" MiSTer/sys/math.sv MiSTer/sys/video_freak.sv rtl/video_output.sv rtl/boot_media_control.sv rtl/video_config_snapshot.sv rtl/pc98_video_scale.sv rtl/storage_activity.sv rtl/lcd_mono.sv rtl/audio_decimator.sv rtl/snac_psx_pad.sv rtl/stick_mouse.sv rtl/pc98_artic.sv \
-    rtl/storage/pc98_ide.sv rtl/storage/pc98_atapi.sv rtl/midi/pc98_mpu_uart.sv \
+    rtl/storage/pc98_ide.sv rtl/storage/pc98_atapi.sv rtl/midi/pc98_mpu_uart.sv MiSTer/sys/mt32pi.sv \
     rtl/storage/pc98_image_bridge.sv rtl/storage/pc98_floppy_images.sv rtl/storage/pc98_hdi_image.sv "$wrapper" tests/mister_disk_interface_tb.sv tests/mister_mpu_interface_tb.sv
 vvp "$out/mpu.vvp"
 

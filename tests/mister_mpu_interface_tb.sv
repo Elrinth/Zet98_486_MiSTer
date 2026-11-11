@@ -21,8 +21,11 @@ module mister_mpu_interface_tb;
         @(negedge clk);strobe=0;
         repeat(4) @(negedge clk);
     endtask
+    // Main sends all four status words. Since B260 (84922b6) the MIDI output
+    // also depends on status[51] (USER port = MT32-pi), which stays X in
+    // simulation unless written: 0 keeps MIDI on the UART (MidiLink).
     task option_midi(input bit enabled);
-        word_io('h1e);word_io(0);word_io(enabled ? 'h0400 : 0);
+        word_io('h1e);word_io(0);word_io(enabled ? 'h0400 : 0);word_io(0);word_io(0);
         @(negedge clk);enable=0;strobe=0;
         repeat(5) @(negedge clk);
     endtask

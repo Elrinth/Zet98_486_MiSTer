@@ -20,6 +20,14 @@ module mister_disk_interface_tb;
     defparam dut.video_out.BOOT_FONT_FILE="rtl/assets/boot-font.mem";
     defparam dut.disk_activity.ROM_FILE="rtl/assets/activity.mem";
     defparam dut.audio_decimator.COEF_FILE="rtl/assets/audio-decimator-coeffs.mem";
+    // Image slots whose mounts reach the machine: the floppies (0, 1) and the
+    // hard disk (2) unless the wrapper's IDE serves it (RAW_IDE). Slot 3 held
+    // the NVRAM image, removed in B266 (503965a), and is never passed on.
+`ifdef ZET98_RAW_IDE
+    localparam [3:0] MACHINE_SLOTS = 4'b0011;
+`else
+    localparam [3:0] MACHINE_SLOTS = 4'b0111;
+`endif
     integer received = 0;
     integer active_slot = 0;
     reg check_receive = 0;
@@ -116,14 +124,14 @@ module mister_disk_interface_tb;
             for (integer ro = 0; ro < 2; ro = ro + 1) begin
                 word_io(16'h1c);
                 word_io((1 << slot) | (ro << 7));
-                if (dut.Zet98_top.mist_mounted !== (4'b1 << slot))
-                    $fatal(1, "Wrong mounted image slot");
+                if (dut.Zet98_top.mist_mounted !== ((4'b1 << slot) & MACHINE_SLOTS))
+                    $fatal(1, "Wrong mounted image slot %0d: %b", slot, dut.Zet98_top.mist_mounted);
                 if (dut.Zet98_top.mist_readonly !== {4{ro[0]}})
                     $fatal(1, "Read-only metadata was narrowed");
                 finish_command;
             end
         end
-        $display("PASS: real MiSTer wrapper/HPS disk interface, all 4 slots, 4096 transferred bytes, ACK lifetime, LBA, block count, mount metadata");
+        $display("PASS: real MiSTer wrapper/HPS disk interface, all 4 slots, 4096 transferred bytes, ACK lifetime, LBA, block count, mount metadata (slot 3 not passed to the machine)");
         $finish;
     end
     initial begin #1000000; $fatal(1, "Disk interface test timed out"); end
