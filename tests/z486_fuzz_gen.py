@@ -193,7 +193,12 @@ def gen(seed, blocks, block_len):
         if k == 11: return pre + [f'{rnd.choice(["inc","dec","neg","not"])} {m}']
         if k == 12: return [f'{rnd.choice(["inc","dec","neg","not"])} {a}']
         if k in (13, 14): return [f'{rnd.choice(["shl","shr","sar","rol","ror"])} {a},{rnd.randrange(1,32)}']
-        if k == 15: return [f'mov ecx,{rnd.randrange(32)}', f'{rnd.choice(["shl","shr","sar"])} {a if a != "ecx" else "eax"},cl']
+        if k == 15:
+            # Word and byte forms reach counts >= the operand width (result 0 or the sign);
+            # the shifter's overflow state from those once leaked into a later IMUL.
+            t = a if a != 'ecx' else 'eax'
+            dst = rnd.choice([t, R16[t]] + ([R8[t]] if t in R8 else []))
+            return [f'mov ecx,{rnd.randrange(32)}', f'{rnd.choice(["shl","shr","sar"])} {dst},cl']
         if k == 16: return pre + [f'{rnd.choice(["shl","shr","sar"])} {m},{rnd.randrange(1,32)}']
         if k == 17: return [f'imul {a},{b}']
         if k == 18: return pre + [f'imul {a},{m}']

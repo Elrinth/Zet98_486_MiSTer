@@ -276,9 +276,13 @@ always_ff @(posedge clk) begin
                 end
             end
 
+            // Every count load starts a new barrel operation. LDBSRM kept the
+            // overflow bit of the last SHL/SHR/SAR with a count >= width, so
+            // the IMUL product SHIFT behind it returned 0 (or the SAR sign).
             ALUJMP_LDBSRM: begin
                 swap <= 1'b0;
                 count <= alu_src[4:0] & (width - 1'b1);
+                overflow <= 1'b0;
             end
             ALUJMP_LDBSRU: begin
                 swap <= 1'b0;
